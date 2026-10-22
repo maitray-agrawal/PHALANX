@@ -25,6 +25,11 @@ class AuthorizeTransactionCommand(BaseModel):
     currency: str = Field(..., min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
     purpose: str = Field(..., min_length=1, max_length=500)
     idempotency_key: str = Field(..., min_length=1, max_length=128)
+    invoice_reference: str | None = Field(
+        default=None,
+        max_length=256,
+        description="Optional invoice or billing document reference.",
+    )
     anomaly_signal: DecisionOutcome | None = Field(
         default=None,
         description="Optional heuristic or model risk assessment. Can only escalate decision.",

@@ -439,6 +439,7 @@ class AuthorizationService:
             purpose=command.purpose,
             idempotency_key=command.idempotency_key,
             occurred_at_utc=now_utc,
+            invoice_reference=command.invoice_reference,
         )
 
         intent_digest = compute_intent_digest(
