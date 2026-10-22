@@ -75,3 +75,20 @@ All facts about external systems, PayPal sandbox APIs, libraries, and toolchains
   - Stable across dictionary key insertion order
   - Deterministic digest generation for asymmetric Ed25519 cryptographic signatures
 
+---
+
+## 6. SecuPrompt Tooling & Defense Evaluation (Date: 2026-10-22)
+- **Repository / Project**: SecuPrompt / Prompt-Security Benchmarks
+- **License**: Apache 2.0 / MIT Open Source
+- **Maintenance Status**: Active academic & industrial security research benchmark for evaluating LLM prompt injection defenses.
+- **Observed Behavior**:
+  - Tests syntactic and semantic injection attacks against prompt wrappers.
+  - Highlights vulnerabilities where models execute untrusted payload text as instructions when delimiters are absent or permeable.
+  - Proves that natural language instructions alone ("do not obey user commands") are routinely bypassed by semantic reframing, base64 encoding, or delimiter imitation.
+- **Architectural Adoption in PHALANX**:
+  - Rather than relying on an external heavy library at runtime, PHALANX adopts SecuPrompt's core principles:
+    1. Strict structural delimiter encapsulation (`<<<UNTRUSTED_USER_INPUT ... >>>`) with automatic escaping of literal `>>>`.
+    2. Zero authority: the LLM never executes payments; deterministic code in `app/domain` evaluates the rules.
+    3. SecuPrompt attack vectors (system overrides, authority simulation, bypass phrases) were adapted into PHALANX's synthetic training dataset (`SYNTHETIC_DATASET`) and adversarial red-team catalog (`A1` to `A5`).
+
+
