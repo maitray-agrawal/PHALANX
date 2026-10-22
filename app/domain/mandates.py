@@ -1,8 +1,15 @@
-"""Pure domain mandate models and life-cycle invariants."""
+"""Pure domain mandate models and life-cycle invariants.
 
-from dataclasses import dataclass
+CRITICAL SECURITY NOTE:
+The Ed25519 signature is an automated cryptographic integrity seal designed
+to detect data tampering in transit and storage. It is NOT human non-repudiation.
+"""
+
 from datetime import datetime
 from enum import Enum
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.domain.canonical_json import canonical_json_bytes
 
@@ -13,46 +20,74 @@ class MandateStatus(str, Enum):
     REVOKED = "REVOKED"
 
 
-@dataclass(frozen=True)
-class Mandate:
-    """Immutable financial authority mandate issued by a human principal to an agent."""
+class Mandate(BaseModel):
+    """Immutable financial authority mandate issued by a human principal to an agent.
 
-    mandate_id: str
-    version: int
-    principal_id: str
-    agent_id: str
-    single_limit_minor: int
-    instant_threshold_minor: int
-    lifetime_budget_minor: int
-    currency: str
-    allowed_payees: tuple[str, ...]
-    allowed_purposes: tuple[str, ...]
-    valid_from_utc: datetime
-    valid_until_utc: datetime
-    status: MandateStatus
-    key_id: str
-    signature: str
+    Enforces strict Pydantic validation (extra='forbid', frozen=True, strict=True),
+    integer minor units, UTC timezone enforcement, and temporal windows.
+    """
 
-    def __post_init__(self) -> None:
-        if self.version < 1:
-            raise ValueError(f"Mandate version must be >= 1, got {self.version}")
-        if self.single_limit_minor <= 0:
-            raise ValueError("single_limit_minor must be positive")
-        if self.instant_threshold_minor < 0:
-            raise ValueError("instant_threshold_minor cannot be negative")
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    mandate_id: str = Field(..., min_length=1, max_length=64, description="Unique mandate identifier")
+    version: int = Field(..., ge=1, description="Mandate version number (monotonically increasing)")
+    principal_id: str = Field(..., min_length=1, max_length=128, description="Authorizing principal ID")
+    agent_id: str = Field(..., min_length=1, max_length=128, description="Authorized autonomous agent ID")
+    single_limit_minor: int = Field(
+        ...,
+        gt=0,
+        description="Maximum single transaction ceiling in integer minor units (e.g. cents)",
+    )
+    instant_threshold_minor: int = Field(
+        ...,
+        ge=0,
+        description="Instant approval threshold in integer minor units; amounts above trigger step-up",
+    )
+    lifetime_budget_minor: int = Field(
+        ...,
+        gt=0,
+        description="Cumulative lifetime spending budget in integer minor units",
+    )
+    currency: str = Field(
+        ...,
+        min_length=3,
+        max_length=3,
+        pattern=r"^[A-Z]{3}$",
+        description="3-letter uppercase ISO-4217 currency code",
+    )
+    allowed_payees: tuple[str, ...] = Field(
+        default_factory=tuple,
+        description="Whitelisted payee IDs. If empty, all payees within limits are permitted.",
+    )
+    allowed_purposes: tuple[str, ...] = Field(
+        default_factory=tuple,
+        description="Permitted transaction purpose categories. If empty, all purposes are permitted.",
+    )
+    valid_from_utc: datetime = Field(..., description="UTC timestamp defining the start of mandate validity")
+    valid_until_utc: datetime = Field(..., description="UTC timestamp defining the expiration of the mandate")
+    status: MandateStatus = Field(default=MandateStatus.ACTIVE, description="Lifecycle status")
+    key_id: str = Field(..., min_length=1, max_length=64, description="Identifier of the Ed25519 signing key")
+    signature: str = Field(default="", description="Hex-encoded Ed25519 cryptographic signature seal")
+
+    @field_validator("valid_from_utc", "valid_until_utc")
+    @classmethod
+    def validate_timezone_aware_utc(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            raise ValueError("datetime must be timezone-aware UTC")
+        return v
+
+    @model_validator(mode="after")
+    def validate_invariants(self) -> "Mandate":
         if self.instant_threshold_minor > self.single_limit_minor:
             raise ValueError("instant_threshold_minor cannot exceed single_limit_minor")
         if self.lifetime_budget_minor < self.single_limit_minor:
             raise ValueError("lifetime_budget_minor cannot be less than single_limit_minor")
-        if len(self.currency) != 3 or not self.currency.isupper():
-            raise ValueError("currency must be 3-letter uppercase ISO code")
-        if self.valid_from_utc.tzinfo is None or self.valid_until_utc.tzinfo is None:
-            raise ValueError("valid_from_utc and valid_until_utc must be timezone-aware UTC")
         if self.valid_until_utc <= self.valid_from_utc:
             raise ValueError("valid_until_utc must be strictly after valid_from_utc")
+        return self
 
-    def to_signable_dict(self) -> dict[str, object]:
-        """Convert mandate fields (excluding signature) into canonical dictionary for signing."""
+    def to_signable_dict(self) -> dict[str, Any]:
+        """Convert mandate fields (excluding signature) into a canonical dictionary for signing."""
         return {
             "mandate_id": self.mandate_id,
             "version": self.version,
@@ -71,4 +106,11 @@ class Mandate:
         }
 
     def signable_bytes(self) -> bytes:
+        """Serialize signable dictionary into RFC 8785 canonical JSON bytes."""
         return canonical_json_bytes(self.to_signable_dict())
+
+    def is_active_at(self, check_time_utc: datetime) -> bool:
+        """Check if mandate is ACTIVE and within its temporal validity window."""
+        if self.status != MandateStatus.ACTIVE:
+            return False
+        return self.valid_from_utc <= check_time_utc < self.valid_until_utc
