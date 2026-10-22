@@ -65,11 +65,11 @@ def test_api_unauthenticated_call_returns_401(client: TestClient) -> None:
 def test_api_authorize_endpoint(client: TestClient) -> None:
     token = create_role_token(
         role=Role.AGENT,
-        principal_id="corp-1",
-        agent_id="finance-bot-42",
+        principal_id="principal_astra_treasury",
+        agent_id="agent-auto-1",
     )
     payload = {
-        "agent_id": "finance-bot-42",
+        "agent_id": "agent-auto-1",
         "recipient_id": "vendor-99",
         "amount_minor": 1500,
         "currency": "USD",

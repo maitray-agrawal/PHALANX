@@ -116,9 +116,13 @@ def create_demo_token(request: DemoTokenRequestDTO) -> DemoTokenResponseDTO:
             detail=f"Invalid role: {request.role}. Must be principal, agent, approver, or auditor.",
         ) from exc
 
+    req_principal = request.principal_id
+    if req_principal in ("demo-principal", None, ""):
+        req_principal = "principal_astra_treasury"
+
     token = create_role_token(
         role=role,
-        principal_id=request.principal_id,
+        principal_id=req_principal,
         agent_id=request.agent_id or ("agent-auto-1" if role == Role.AGENT else None),
         expires_in_seconds=900,
     )
@@ -336,7 +340,6 @@ def submit_approval(
     payload: dict[str, Any],
     identity: Annotated[Identity, Depends(get_current_identity)],
     service: Annotated[AuthorizationService, Depends(get_authorization_service)],
-    mandate_service: Annotated[MandateService, Depends(get_mandate_service)],
 ) -> AuthorizationResponseDTO:
     """Human supervisor approves or rejects a step-up pending request.
 
@@ -358,11 +361,11 @@ def submit_approval(
         )
 
     # Object-level authorization: Verify approver belongs to the mandate's principal
-    existing_request = service.get_payment_request(request_id)
-    if existing_request:
-        mandate = mandate_service.get_active_mandate_for_agent("agent-auto-1")
-        if mandate:
-            check_approver_object_authorization(identity, mandate.principal_id)
+    pending_data = service.get_pending_step_up(request_id)
+    if pending_data:
+        pending_mandate = pending_data.get("mandate")
+        if pending_mandate:
+            check_approver_object_authorization(identity, pending_mandate.principal_id)
 
     try:
         cmd = ApprovalCommand(
@@ -473,7 +476,11 @@ def tamper_ledger(
     service: Annotated[LedgerService, Depends(get_ledger_service)],
 ) -> dict[str, str]:
     """Testing hook to simulate illicit SQL modification of ledger event amount."""
-    _ = identity
+    if identity.role not in (Role.AUDITOR, Role.PRINCIPAL):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Forbidden: Role '{identity.role.value}' cannot simulate ledger tamper.",
+        )
     service.tamper_chain(index=1, new_amount=99999999)
     return {
         "status": "tampered",
@@ -487,7 +494,11 @@ def restore_ledger(
     service: Annotated[LedgerService, Depends(get_ledger_service)],
 ) -> dict[str, str]:
     """Restore authentic ledger blocks."""
-    _ = identity
+    if identity.role not in (Role.AUDITOR, Role.PRINCIPAL):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Forbidden: Role '{identity.role.value}' cannot restore ledger.",
+        )
     service.restore_chain()
     return {
         "status": "restored",

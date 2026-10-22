@@ -112,7 +112,7 @@ def verify_role_token(token_str: str) -> Identity:
         return Identity(
             subject=f"demo:{role_name}",
             role=role,
-            principal_id="demo-principal",
+            principal_id="principal_astra_treasury",
             agent_id="agent-auto-1" if role == Role.AGENT else None,
             expires_at_utc=datetime.now(UTC) + timedelta(hours=1),
         )

@@ -13,7 +13,7 @@
 | Assessment Dimension | Rating / Status | Detail |
 |---|---|---|
 | **Release Status** | **QUALIFIED_FOR_SUBMISSION** | Verified production-grade sandbox architecture with mathematical policy purity, cryptographic seals, and zero unbacked claims. |
-| **Assessment Confidence** | **HIGH** | 224/224 automated backend tests passed; 61/61 red-team adversarial tests passed; 0 security vulnerabilities in Bandit AST audit; 0 console logs in frontend. |
+| **Assessment Confidence** | **HIGH** | 230/230 automated backend tests passed; 67/67 red-team adversarial tests passed; 0 security vulnerabilities in Bandit AST audit; 0 console logs in frontend. |
 | **Purity & Safety Boundary** | **VERIFIED** | Pure domain core has zero I/O, zero clock, zero randomness, and zero non-domain imports enforced by AST test. LLM is isolated from authorization path. |
 | **Cryptographic Integrity** | **VERIFIED** | Ed25519 mandates, RFC 8785 canonical JSON, and SHA-256 hash-chained ledger are mathematically locked and tamper-evident. |
 
@@ -69,8 +69,8 @@ The installation procedure documented in `README.md` was followed strictly from 
    - **Pre-Audit Finding**: `requirements.txt` and `requirements-dev.txt` were absent because dependencies were specified in `pyproject.toml`. A user executing the exact README text would have failed.
    - **Resolution**: Created pinned `requirements.txt` and `requirements-dev.txt` matching `pyproject.toml` (DECISIONS.md D-009, D-011, D-013, D-014, D-015) and updated `README.md` to document both commands.
 3. `python -m pip check`: **Passed** (No broken requirements found).
-4. `uv run pytest -q`: **Passed** (224/224 passed in 11.50s).
-5. `uv run pytest -q -m redteam`: **Passed** (61/61 passed in 2.53s).
+4. `uv run pytest -q`: **Passed** (230/230 passed in 22.66s).
+5. `uv run pytest -q -m redteam`: **Passed** (67/67 passed in 4.18s).
 6. `uv run ruff check . && uv run ruff format --check . && uv run mypy app`: **Passed** (All checks passed, 75 files formatted, 0 type errors in 38 source files).
 7. `cd web && npm run lint && npx tsc --noEmit && npm test -- --run && npm run build`:
    - **Lint**: **Passed** (0 ESLint errors).
@@ -110,15 +110,22 @@ In accordance with hackathon rules and truthfulness requirements, the 'Built wit
 
 ### Changed in Review
 - Created `requirements.txt` and `requirements-dev.txt` with exact pinned dependencies.
-- Updated `README.md` and `docs/DEVPOST.md` to reflect true test count (224 automated tests, 61 red-team tests) and exact install commands.
-- Authored `docs/FINAL_REPORT.md` (this report).
+- Updated `README.md` and `docs/DEVPOST.md` to reflect true test count (230 automated tests, 67 red-team tests) and exact install commands.
+- Remediated hostile security audit findings:
+  - F-01 (P0): Removed unmandated agent fallback to default mandate in `MandateService`; unmandated agents now strictly return None and evaluate to DENY (`MANDATE_INACTIVE`).
+  - F-02 (P0): Enforced live mandate status (`ACTIVE`) and expiration check in `AuthorizationService.execute_approval()`. Approving after mandate expiry or revocation now evaluates to DENY and halts payment dispatch.
+  - F-03 (P1): Removed cross-tenant demo bypass in `check_approver_object_authorization()` and aligned demo principal identifiers to `principal_astra_treasury`.
+  - F-04 (P2): Eliminated MCP agent impersonation exemption for `agent-auto-1`.
+  - F-05 (P2): Restricted `/v1/ledger/tamper` and `/restore` to `AUDITOR` and `PRINCIPAL` roles.
+  - Added 6 redteam regression tests in `tests/redteam/test_redteam.py`.
+- Authored and updated `docs/FINAL_REPORT.md` (this report).
 
 ### Tested
-- `uv run pytest -q`: 224/224 tests passing.
-- `uv run pytest -q -m redteam`: 61/61 red-team tests passing.
+- `uv run pytest -q`: 230/230 tests passing.
+- `uv run pytest -q -m redteam`: 67/67 red-team tests passing.
 - `uv run ruff check . && uv run ruff format --check .`: Clean.
 - `uv run mypy app`: Clean across 38 source files.
-- `uv run bandit -r app`: Clean (0 findings).
+- `uv run bandit -r app`: Clean (0 findings across 4,936 lines of code).
 - `cd web && npm run lint && npx tsc --noEmit && npm test -- --run && npm run build`: Clean (6/6 tests passing, bundle built).
 - `python -m pip check`: 0 conflicts.
 

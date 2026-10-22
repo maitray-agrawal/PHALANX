@@ -145,8 +145,7 @@ class MandateService:
             for mandate in self._mandates.values():
                 if mandate.agent_id == agent_id and mandate.status == MandateStatus.ACTIVE:
                     return mandate
-            # Fallback to default mandate if agent matches or general
-            return self._mandates.get("mandate_default_astra")
+            return None
 
     def get_mandate(self, mandate_id: str) -> Mandate | None:
         with self._lock:
@@ -429,6 +428,10 @@ class AuthorizationService:
                 )
             return items
 
+    def get_pending_step_up(self, request_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            return self._pending_step_ups.get(request_id)
+
     def get_lifetime_spent(self) -> int:
         with self._lock:
             return self._lifetime_spent
@@ -586,19 +589,46 @@ class AuthorizationService:
             payout_id: str | None = None
 
             if command.decision == DecisionOutcome.ALLOW:
-                # Re-verify budget on current state
-                if (
-                    self._lifetime_spent + intent.money.amount_minor
-                ) > mandate.lifetime_budget_minor:
+                # 1. Re-verify mandate status from mandate service
+                current_mandate = self._mandate_service.get_mandate(mandate.mandate_id)
+                if current_mandate is None or current_mandate.status != MandateStatus.ACTIVE:
                     final_decision = DecisionOutcome.DENY
-                    reasons.append("Lifetime budget exceeded on execution re-check")
-                    codes.append(PolicyReasonCode.LIFETIME_BUDGET_EXCEEDED)
+                    status_str = current_mandate.status.value if current_mandate else "MISSING"
+                    reasons.append(f"Mandate is no longer active (status: {status_str})")
+                    codes.append(PolicyReasonCode.MANDATE_INACTIVE)
+                elif now_utc > current_mandate.valid_until_utc:
+                    final_decision = DecisionOutcome.DENY
+                    reasons.append("Mandate expired before human approval execution")
+                    codes.append(PolicyReasonCode.MANDATE_EXPIRED)
+                elif now_utc < current_mandate.valid_from_utc:
+                    final_decision = DecisionOutcome.DENY
+                    reasons.append("Mandate is not yet valid")
+                    codes.append(PolicyReasonCode.MANDATE_NOT_YET_VALID)
                 else:
-                    final_decision = DecisionOutcome.ALLOW
-                    self._lifetime_spent += intent.money.amount_minor
-                    self._rolling_spent += intent.money.amount_minor
-                    rail_res = self._payment_rail.pay(intent)
-                    payout_id = rail_res.transaction_id
+                    # 2. Re-evaluate policy against current state and current mandate
+                    state = PolicyState(
+                        lifetime_spent_minor=self._lifetime_spent,
+                        rolling_24h_spent_minor=self._rolling_spent,
+                        idempotency_records=dict(self._idempotency_records),
+                    )
+                    eval_res = evaluate_policy(
+                        intent=intent,
+                        mandate=current_mandate,
+                        state=state,
+                        now_utc=now_utc,
+                        advisory_signal=None,
+                        intent_digest=stored_digest,
+                    )
+                    if eval_res.outcome == DecisionOutcome.DENY:
+                        final_decision = DecisionOutcome.DENY
+                        reasons.extend(eval_res.reasons)
+                        codes.extend(eval_res.reason_codes)
+                    else:
+                        final_decision = DecisionOutcome.ALLOW
+                        self._lifetime_spent += intent.money.amount_minor
+                        self._rolling_spent += intent.money.amount_minor
+                        rail_res = self._payment_rail.pay(intent)
+                        payout_id = rail_res.transaction_id
             else:
                 final_decision = DecisionOutcome.DENY
 

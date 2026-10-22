@@ -63,12 +63,7 @@ def authenticate_agent_identity(
         )
 
     # Object-level authorization: An agent cannot act on behalf of another agent ID
-    if (
-        target_agent_id
-        and identity.agent_id
-        and identity.agent_id != "agent-auto-1"
-        and identity.agent_id != target_agent_id
-    ):
+    if target_agent_id and identity.agent_id and identity.agent_id != target_agent_id:
         raise PermissionError(
             f"Forbidden: Identity agent_id '{identity.agent_id}' cannot act as '{target_agent_id}'."
         )

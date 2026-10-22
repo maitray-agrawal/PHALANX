@@ -1010,3 +1010,264 @@ def test_h2_ledger_row_mutation_fails_verification() -> None:
     assert valid is False
     assert broken_idx == 0
     assert "mismatch" in msg.lower() or "tampered" in msg.lower()
+
+
+@pytest.mark.redteam
+def test_f01_unmandated_rogue_agent_cannot_drain_default_mandate(client: TestClient) -> None:
+    """Security Fix F-01: An unmandated rogue agent must receive DENY with MANDATE_INACTIVE."""
+    token = create_role_token(
+        role=Role.AGENT,
+        principal_id="rogue-corp",
+        agent_id="rogue-agent-999",
+    )
+    payload = {
+        "agent_id": "rogue-agent-999",
+        "recipient_id": "attacker-payout@darknet.org",
+        "amount_minor": 2500,
+        "currency": "USD",
+        "purpose": "Attempted drain of default mandate",
+        "idempotency_key": "siphon-attack-001",
+    }
+    resp = client.post(
+        "/v1/payment-requests",
+        json=payload,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == status.HTTP_200_OK
+    data = resp.json()
+    assert data["decision"] == "DENY"
+    assert "MANDATE_INACTIVE" in data["reason_codes"]
+    assert data["payout_id"] is None
+
+
+@pytest.mark.redteam
+def test_f02_approval_rejected_if_mandate_revoked() -> None:
+    """Security Fix F-02: Approving a pending request on a revoked mandate must DENY."""
+    from app.application.dtos import (
+        ApprovalCommand,
+        AuthorizeTransactionCommand,
+        CreateMandateCommand,
+    )
+    from app.application.services import AuthorizationService, MandateService
+    from app.domain.ports import ClockPort
+    from app.infrastructure.paypal import FakePaymentRail
+
+    class LocalClock(ClockPort):
+        def __init__(self) -> None:
+            self.t = datetime(2026, 10, 22, 12, 0, 0, tzinfo=UTC)
+
+        def now_utc(self) -> datetime:
+            return self.t
+
+    clock = LocalClock()
+    rail = FakePaymentRail(should_succeed=True)
+    mandates = MandateService(clock=clock)
+    authz = AuthorizationService(
+        mandate_service=mandates,
+        payment_rail=rail,
+        ledger=InMemoryLedgerAdapter(),
+        clock=clock,
+    )
+
+    mandates.create_mandate(
+        CreateMandateCommand(
+            mandate_id="m-rev-test",
+            principal_id="p-corp",
+            agent_id="agent-rev-test",
+            single_limit_minor=500000,
+            instant_threshold_minor=5000,
+            lifetime_budget_minor=500000,
+            valid_days=1,
+        )
+    )
+
+    req_res = authz.authorize(
+        AuthorizeTransactionCommand(
+            agent_id="agent-rev-test",
+            recipient_id="vendor-saas",
+            amount_minor=12000,
+            currency="USD",
+            purpose="Server renewal",
+            idempotency_key="k-rev-step-1",
+        )
+    )
+    assert req_res.decision == DecisionOutcome.STEP_UP
+
+    # Revoke mandate
+    mandates.revoke_mandate("m-rev-test")
+
+    # Supervisor attempts approval
+    appr_res = authz.execute_approval(
+        ApprovalCommand(
+            request_id=req_res.request_id,
+            expected_digest=req_res.intent_digest,
+            decision=DecisionOutcome.ALLOW,
+            reason="Approved by supervisor",
+        )
+    )
+    assert appr_res.decision == DecisionOutcome.DENY
+    assert "MANDATE_INACTIVE" in [c.value for c in appr_res.reason_codes]
+    assert len(rail.dispatched_payments) == 0
+
+
+@pytest.mark.redteam
+def test_f02_approval_rejected_if_mandate_expired() -> None:
+    """Security Fix F-02: Approving a pending request after mandate expiry must DENY."""
+    from datetime import timedelta
+
+    from app.application.dtos import (
+        ApprovalCommand,
+        AuthorizeTransactionCommand,
+        CreateMandateCommand,
+    )
+    from app.application.services import AuthorizationService, MandateService
+    from app.domain.ports import ClockPort
+    from app.infrastructure.paypal import FakePaymentRail
+
+    class StepClock(ClockPort):
+        def __init__(self) -> None:
+            self.t = datetime(2026, 10, 22, 12, 0, 0, tzinfo=UTC)
+
+        def now_utc(self) -> datetime:
+            return self.t
+
+    clock = StepClock()
+    rail = FakePaymentRail(should_succeed=True)
+    mandates = MandateService(clock=clock)
+    authz = AuthorizationService(
+        mandate_service=mandates,
+        payment_rail=rail,
+        ledger=InMemoryLedgerAdapter(),
+        clock=clock,
+    )
+
+    mandates.create_mandate(
+        CreateMandateCommand(
+            mandate_id="m-exp-test",
+            principal_id="p-corp",
+            agent_id="agent-exp-test",
+            single_limit_minor=500000,
+            instant_threshold_minor=5000,
+            lifetime_budget_minor=500000,
+            valid_days=1,
+        )
+    )
+
+    # Advance clock to 23 hours after mandate creation (mandate valid for 24h)
+    clock.t += timedelta(hours=23)
+
+    req_res = authz.authorize(
+        AuthorizeTransactionCommand(
+            agent_id="agent-exp-test",
+            recipient_id="vendor-saas",
+            amount_minor=12000,
+            currency="USD",
+            purpose="Server renewal",
+            idempotency_key="k-exp-step-1",
+        )
+    )
+    assert req_res.decision == DecisionOutcome.STEP_UP
+
+    # Advance clock to 25 hours after mandate creation
+    # Approval request age is 2 hours (< 24h approval timeout),
+    # but mandate has expired (age 25h > 24h validity)
+    clock.t += timedelta(hours=2)
+
+    appr_res = authz.execute_approval(
+        ApprovalCommand(
+            request_id=req_res.request_id,
+            expected_digest=req_res.intent_digest,
+            decision=DecisionOutcome.ALLOW,
+            reason="Approved",
+        )
+    )
+    assert appr_res.decision == DecisionOutcome.DENY
+    assert "MANDATE_EXPIRED" in [c.value for c in appr_res.reason_codes]
+    assert len(rail.dispatched_payments) == 0
+
+
+@pytest.mark.redteam
+def test_f03_cross_tenant_approver_cannot_approve(client: TestClient) -> None:
+    """Security Fix F-03: Approver belonging to Tenant A cannot approve Tenant B's transaction."""
+    from app.api.dependencies import get_mandate_service
+    from app.application.dtos import CreateMandateCommand
+
+    mandate_svc = client.app.dependency_overrides.get(get_mandate_service, get_mandate_service)()
+    mandate_svc.create_mandate(
+        CreateMandateCommand(
+            mandate_id="m-tenant-b",
+            principal_id="tenant-b",
+            agent_id="agent-b",
+            single_limit_minor=500000,
+            instant_threshold_minor=5000,
+            lifetime_budget_minor=500000,
+            valid_days=90,
+        )
+    )
+
+    agent_b_token = create_role_token(
+        role=Role.AGENT,
+        principal_id="tenant-b",
+        agent_id="agent-b",
+    )
+    req = client.post(
+        "/v1/payment-requests",
+        json={
+            "agent_id": "agent-b",
+            "recipient_id": "vendor@b.com",
+            "amount_minor": 15000,  # $150 (exceeds $50 instant -> STEP_UP)
+            "currency": "USD",
+            "purpose": "Tenant B operational",
+            "idempotency_key": "step-up-b-1",
+        },
+        headers={"Authorization": f"Bearer {agent_b_token}"},
+    ).json()
+
+    assert req["decision"] == "STEP_UP"
+
+    # Approver from Tenant A attempts approval
+    approver_a_token = create_role_token(
+        role=Role.APPROVER,
+        principal_id="tenant-a",
+        agent_id=None,
+    )
+    resp = client.post(
+        f"/v1/approvals/{req['request_id']}",
+        json={
+            "expected_digest": req["intent_digest"],
+            "decision": "ALLOW",
+            "reason": "Tenant A approver unauthorized attack",
+        },
+        headers={"Authorization": f"Bearer {approver_a_token}"},
+    )
+    assert resp.status_code == status.HTTP_403_FORBIDDEN
+    assert "Forbidden" in resp.json()["detail"]
+
+
+@pytest.mark.redteam
+def test_f04_mcp_agent_cannot_impersonate_another_agent() -> None:
+    """Security Fix F-04: FastMCP agent-auto-1 cannot impersonate another agent identity."""
+    from app.mcp.server import authenticate_agent_identity
+
+    token = create_role_token(
+        role=Role.AGENT,
+        principal_id="corp",
+        agent_id="agent-auto-1",
+    )
+    with pytest.raises(PermissionError):
+        authenticate_agent_identity(auth_token=token, target_agent_id="victim-agent-99")
+
+
+@pytest.mark.redteam
+def test_f05_agent_cannot_simulate_ledger_tamper(client: TestClient) -> None:
+    """Security Fix F-05: Agent role cannot trigger /v1/ledger/tamper."""
+    agent_token = create_role_token(
+        role=Role.AGENT,
+        principal_id="corp",
+        agent_id="agent-1",
+    )
+    resp = client.post(
+        "/v1/ledger/tamper",
+        headers={"Authorization": f"Bearer {agent_token}"},
+    )
+    assert resp.status_code == status.HTTP_403_FORBIDDEN

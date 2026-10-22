@@ -95,8 +95,6 @@ def check_approver_object_authorization(identity: Identity, mandate_principal_id
         and identity.principal_id
         and mandate_principal_id
         and identity.principal_id != mandate_principal_id
-        and identity.principal_id != "demo-principal"
-        and mandate_principal_id != "demo-principal"
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
