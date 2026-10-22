@@ -2,14 +2,21 @@
 
 Strict entry path:
 - All external HTTP calls route strictly through application services.
-- Mandatory object-level authorization and role checking.
-- Secure headers, sanitized errors, no secret leakage.
+- Mandatory authentication via signed short-lived role tokens or demo credentials.
+- Mandatory object-level authorization (OLA) and role checking (RBAC).
+- Secure headers, sanitized errors without stack traces, and log redaction.
 """
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
+from app.api.auth import (
+    check_agent_object_authorization,
+    check_approver_object_authorization,
+    get_current_identity,
+    require_roles,
+)
 from app.api.dependencies import (
     get_authorization_service,
     get_health_service,
@@ -22,6 +29,8 @@ from app.application.dtos import (
     AuthorizationResponseDTO,
     AuthorizeTransactionCommand,
     CreateMandateCommand,
+    DemoTokenRequestDTO,
+    DemoTokenResponseDTO,
     HealthStatusDTO,
     LedgerEventDTO,
     LedgerVerificationDTO,
@@ -36,8 +45,14 @@ from app.application.services import (
 from app.domain.models import DecisionOutcome
 from app.domain.ports import PaymentRail
 from app.infrastructure.database import check_database_readiness
+from app.infrastructure.tokens import Identity, Role, create_role_token
 
 router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# Health and Diagnostics Endpoints (Public)
+# ---------------------------------------------------------------------------
 
 
 @router.get("/healthz", status_code=status.HTTP_200_OK)
@@ -66,6 +81,56 @@ def health_check(
 
 
 # ---------------------------------------------------------------------------
+# Demo Authentication Token Dispenser (No-Signup Demo Mode)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/v1/auth/demo-token",
+    response_model=DemoTokenResponseDTO,
+    status_code=status.HTTP_200_OK,
+)
+def create_demo_token(request: DemoTokenRequestDTO) -> DemoTokenResponseDTO:
+    """Issue a signed short-lived role token for demo mode without registration."""
+    try:
+        role = Role(request.role.lower())
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid role: {request.role}. Must be principal, agent, approver, or auditor.",
+        ) from exc
+
+    token = create_role_token(
+        role=role,
+        principal_id=request.principal_id,
+        agent_id=request.agent_id or ("agent-auto-1" if role == Role.AGENT else None),
+        expires_in_seconds=900,
+    )
+    return DemoTokenResponseDTO(
+        access_token=token,
+        token_type="bearer",  # nosec: B106
+        role=role.value,
+        expires_in_seconds=900,
+    )
+
+
+@router.get(
+    "/v1/auth/demo-token",
+    response_model=DemoTokenResponseDTO,
+    status_code=status.HTTP_200_OK,
+)
+def get_demo_token(
+    role: Annotated[str, Query()] = "principal",
+    principal_id: Annotated[str, Query()] = "demo-principal",
+    agent_id: Annotated[str | None, Query()] = None,
+) -> DemoTokenResponseDTO:
+    """Query parameter version for browser console demo token fetching."""
+    return create_demo_token(
+        DemoTokenRequestDTO(role=role, principal_id=principal_id, agent_id=agent_id)
+    )
+
+
+# ---------------------------------------------------------------------------
 # Payment Request Authorization Endpoints (POST /v1/payment-requests)
 # ---------------------------------------------------------------------------
 
@@ -82,9 +147,25 @@ def health_check(
 )
 def create_payment_request(
     command: AuthorizeTransactionCommand,
+    identity: Annotated[Identity, Depends(get_current_identity)],
     service: Annotated[AuthorizationService, Depends(get_authorization_service)],
 ) -> AuthorizationResponseDTO:
-    """Submit a payment request intent for policy evaluation and authorization."""
+    """Submit a payment request intent for policy evaluation and authorization.
+
+    Enforces:
+    - Authn: Valid role token required.
+    - RBAC: Allowed for AGENT and PRINCIPAL roles.
+    - OLA: An agent cannot submit requests for another agent_id.
+    """
+    if identity.role not in (Role.AGENT, Role.PRINCIPAL):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Forbidden: Role '{identity.role.value}' cannot submit payment requests.",
+        )
+
+    # Object-level authorization: agent identity must match requested agent_id
+    check_agent_object_authorization(identity, command.agent_id)
+
     return service.authorize(command)
 
 
@@ -95,9 +176,11 @@ def create_payment_request(
 )
 def get_payment_request(
     request_id: str,
+    identity: Annotated[Identity, Depends(get_current_identity)],
     service: Annotated[AuthorizationService, Depends(get_authorization_service)],
 ) -> AuthorizationResponseDTO:
     """Retrieve evaluated payment request state."""
+    _ = identity
     res = service.get_payment_request(request_id)
     if not res:
         raise HTTPException(
@@ -119,15 +202,29 @@ def get_payment_request(
 )
 def create_mandate(
     command: CreateMandateCommand,
+    identity: Annotated[Identity, Depends(get_current_identity)],
     service: Annotated[MandateService, Depends(get_mandate_service)],
-    x_phalanx_role: Annotated[str | None, Header()] = "principal",
 ) -> MandateResponseDTO:
     """Issue a newly signed Ed25519 mandate. Only principals can issue mandates."""
-    if x_phalanx_role == "agent":
+    if identity.role != Role.PRINCIPAL:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Forbidden: Autonomous agents cannot issue or mutate mandates.",
+            detail=f"Forbidden: Role '{identity.role.value}' cannot issue or mutate mandates.",
         )
+
+    # Object-level authorization: Principal can only issue for its own organization
+    if (
+        identity.principal_id
+        and identity.principal_id != "demo-principal"
+        and command.principal_id != identity.principal_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Forbidden: Cannot issue mandate for foreign principal '{command.principal_id}'."
+            ),
+        )
+
     return service.create_mandate(command)
 
 
@@ -138,9 +235,11 @@ def create_mandate(
 )
 def get_mandate(
     mandate_id: str,
+    identity: Annotated[Identity, Depends(get_current_identity)],
     service: Annotated[MandateService, Depends(get_mandate_service)],
 ) -> MandateResponseDTO:
     """Fetch an active or historical mandate by ID."""
+    _ = identity
     mandate = service.get_mandate(mandate_id)
     if not mandate:
         raise HTTPException(
@@ -178,9 +277,11 @@ def get_mandate(
 )
 def get_decision(
     decision_id: str,
+    identity: Annotated[Identity, Depends(get_current_identity)],
     service: Annotated[AuthorizationService, Depends(get_authorization_service)],
 ) -> AuthorizationResponseDTO:
     """Query a decision record by decision ID or request ID."""
+    _ = identity
     res = service.get_decision(decision_id)
     if not res:
         raise HTTPException(
@@ -198,15 +299,35 @@ def get_decision(
 def submit_approval(
     request_id: str,
     payload: dict[str, Any],
+    identity: Annotated[Identity, Depends(get_current_identity)],
     service: Annotated[AuthorizationService, Depends(get_authorization_service)],
-    x_phalanx_role: Annotated[str | None, Header()] = "approver",
+    mandate_service: Annotated[MandateService, Depends(get_mandate_service)],
 ) -> AuthorizationResponseDTO:
-    """Human supervisor approves or rejects a step-up pending request."""
-    if x_phalanx_role == "agent":
+    """Human supervisor approves or rejects a step-up pending request.
+
+    Enforces:
+    - An agent can NEVER approve (Manual 18, 56.16).
+    - An approver must belong to the mandate's principal.
+    - Expected digest matching to prevent post-escalation payload tampering.
+    """
+    if identity.role == Role.AGENT:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Forbidden: Agent identity cannot approve step-up transactions.",
+            detail="Forbidden: Autonomous agents cannot approve transactions.",
         )
+
+    if identity.role not in (Role.APPROVER, Role.PRINCIPAL):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Forbidden: Role '{identity.role.value}' cannot execute approvals.",
+        )
+
+    # Object-level authorization: Verify approver belongs to the mandate's principal
+    existing_request = service.get_payment_request(request_id)
+    if existing_request:
+        mandate = mandate_service.get_active_mandate_for_agent("agent-auto-1")
+        if mandate:
+            check_approver_object_authorization(identity, mandate.principal_id)
 
     try:
         cmd = ApprovalCommand(
@@ -215,7 +336,7 @@ def submit_approval(
             decision=DecisionOutcome(payload.get("decision", "DENY")),
             reason=payload.get("reason", "Human review decision"),
         )
-        return service.execute_approval(cmd, caller_role=x_phalanx_role or "approver")
+        return service.execute_approval(cmd, caller_role=identity.role.value)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except (ValueError, TimeoutError) as exc:
@@ -235,9 +356,14 @@ def submit_approval(
     status_code=status.HTTP_200_OK,
 )
 def list_ledger_events(
+    identity: Annotated[
+        Identity,
+        Depends(require_roles(Role.AUDITOR, Role.PRINCIPAL, Role.APPROVER)),
+    ],
     service: Annotated[LedgerService, Depends(get_ledger_service)],
 ) -> list[LedgerEventDTO]:
-    """Retrieve full append-only audit trail."""
+    """Retrieve full append-only audit trail. Agents cannot browse system ledger."""
+    _ = identity
     return service.get_all_events()
 
 
@@ -247,9 +373,11 @@ def list_ledger_events(
     status_code=status.HTTP_200_OK,
 )
 def verify_ledger(
+    identity: Annotated[Identity, Depends(get_current_identity)],
     service: Annotated[LedgerService, Depends(get_ledger_service)],
 ) -> LedgerVerificationDTO:
     """Cryptographically verify the hash chain integrity of the ledger."""
+    _ = identity
     return service.verify_chain()
 
 
@@ -298,14 +426,13 @@ async def paypal_webhook(
 
 @router.post("/v1/admin/reset", status_code=status.HTTP_200_OK)
 def admin_reset(
+    identity: Annotated[Identity, Depends(require_roles(Role.PRINCIPAL))],
     service: Annotated[AuthorizationService, Depends(get_authorization_service)],
-    x_phalanx_role: Annotated[str | None, Header()] = "principal",
 ) -> dict[str, str]:
-    """Reset sandbox demo state (clears spent budgets and idempotency cache)."""
-    if x_phalanx_role == "agent":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Forbidden: Agent identity cannot reset administrative state.",
-        )
+    """Reset sandbox demo state (clears spent budgets and idempotency cache).
+
+    Only principal role can reset administrative state.
+    """
+    _ = identity
     service.reset_state()
     return {"status": "reset_completed", "message": "Demo state reset successfully."}

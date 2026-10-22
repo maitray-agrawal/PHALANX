@@ -133,3 +133,24 @@ class HealthStatusDTO(BaseModel):
     status: str = Field(default="ok")
     version: str = Field(default="0.1.0")
     timestamp_utc: datetime
+
+
+class DemoTokenRequestDTO(BaseModel):
+    """Request to generate a signed role token in demo mode."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    role: str = Field(default="principal", description="principal, agent, approver, or auditor")
+    principal_id: str = Field(default="demo-principal", min_length=1, max_length=128)
+    agent_id: str | None = Field(default=None, max_length=128)
+
+
+class DemoTokenResponseDTO(BaseModel):
+    """Signed role token response."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    access_token: str
+    token_type: str = "bearer"
+    role: str
+    expires_in_seconds: int

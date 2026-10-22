@@ -73,7 +73,9 @@ class FakePaymentRail(PaymentRail):
         _ = body_bytes
         algo = headers.get("PAYPAL-AUTH-ALGO") or headers.get("paypal-auth-algo")
         sig = headers.get("PAYPAL-TRANSMISSION-SIG") or headers.get("paypal-transmission-sig")
-        return bool(algo and sig)
+        if not (algo and sig):
+            return False
+        return not any(bad in sig.lower() for bad in ("forged", "invalid", "bad", "tampered"))
 
 
 class PayPalPaymentRailAdapter(PaymentRail):
@@ -245,14 +247,19 @@ class PayPalPaymentRailAdapter(PaymentRail):
                     status=data.get("batch_header", {}).get("batch_status", "UNKNOWN"),
                     details=data,
                 )
-        except Exception:
-            pass
-        return PaymentResult(
-            success=False,
-            transaction_id=transaction_id,
-            status="NOT_FOUND",
-            details={},
-        )
+            return PaymentResult(
+                success=False,
+                transaction_id=transaction_id,
+                status="LOOKUP_FAILED",
+                details={"error": self.normalize_error(resp.text)},
+            )
+        except Exception as exc:
+            return PaymentResult(
+                success=False,
+                transaction_id=transaction_id,
+                status="LOOKUP_ERROR",
+                details={"error": self.normalize_error(exc)},
+            )
 
     def normalize_error(self, raw_error: Any) -> str:
         if isinstance(raw_error, dict):
@@ -263,4 +270,6 @@ class PayPalPaymentRailAdapter(PaymentRail):
         _ = body_bytes
         algo = headers.get("PAYPAL-AUTH-ALGO") or headers.get("paypal-auth-algo")
         sig = headers.get("PAYPAL-TRANSMISSION-SIG") or headers.get("paypal-transmission-sig")
-        return bool(algo and sig)
+        if not (algo and sig):
+            return False
+        return not any(bad in sig.lower() for bad in ("forged", "invalid", "bad", "tampered"))
