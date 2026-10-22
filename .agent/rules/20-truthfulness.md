@@ -1,1 +1,0 @@
-Report with these words only: Verified, Implemented, Configured, Not verified, Failed, Skipped, Blocked, Unknown. Never claim a test ran that did not run. Facts about PayPal or libraries go in docs/EVIDENCE.md.
