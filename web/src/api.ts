@@ -239,4 +239,27 @@ export const api = {
 
   getMandate: (mandateId = "mandate_default_astra", token?: string, role = "principal") =>
     request<MandateResponse>(`/v1/mandates/${mandateId}`, { method: "GET" }, token, role),
+
+  getReconcileItems: (token?: string, role = "approver") =>
+    request<
+      Array<{
+        request_id: string;
+        agent_id: string;
+        amount_minor: number;
+        currency: string;
+        payout_id?: string | null;
+        state: string;
+      }>
+    >("/v1/reconcile", { method: "GET" }, token, role),
+
+  resolveReconcile: (requestId: string, status: string, token?: string, role = "approver") =>
+    request<{ request_id: string; state: string }>(
+      `/v1/reconcile/${requestId}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ status }),
+      },
+      token,
+      role
+    ),
 };

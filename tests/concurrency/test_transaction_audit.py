@@ -27,11 +27,13 @@ from app.domain.state_machine import RequestState, can_transition
 from app.infrastructure.db_budget_repo import (
     BudgetRepository,
     IdempotencyReplayError,
+    InsufficientBudgetError,
     InvalidApprovalStateError,
 )
 from app.infrastructure.db_schema import create_schema
 from app.infrastructure.models import (
     AgentBudgetModel,
+    ReservationStatus,
 )
 
 
@@ -76,6 +78,32 @@ class MockPaymentRail(PaymentRail):
             status="COMPLETED",
             details={},
         )
+
+    def normalize_error(self, raw_error: Any) -> str:
+        return str(raw_error)
+
+    def verify_webhook(self, headers: dict[str, str], body_bytes: bytes) -> bool:
+        _ = (headers, body_bytes)
+        return True
+
+
+class ConfigurableRail(PaymentRail):
+    def __init__(
+        self,
+        pay_result: PaymentResult,
+        lookup_result: PaymentResult | None = None,
+    ) -> None:
+        self.pay_result = pay_result
+        self.lookup_result = lookup_result or pay_result
+        self.dispatched: list[TransactionIntent] = []
+
+    def pay(self, intent: TransactionIntent) -> PaymentResult:
+        self.dispatched.append(intent)
+        return self.pay_result
+
+    def lookup(self, transaction_id: str) -> PaymentResult:
+        _ = transaction_id
+        return self.lookup_result
 
     def normalize_error(self, raw_error: Any) -> str:
         return str(raw_error)
@@ -434,3 +462,616 @@ def test_finding_7_missing_row_lock_on_step_up_approval() -> None:
         "BudgetRepository.approve_step_up performs a naked SELECT without row-level lock, "
         "allowing concurrent approval races."
     )
+
+
+# -------------------------------------------------------------------------
+# F6 Ambiguous Rail Outcome & Reconciliation Lifecycle Tests (10a - 10f)
+# -------------------------------------------------------------------------
+def test_f6_timeout_transitions_to_reconcile() -> None:
+    """10a: Payment rail timeout must transition authorization lifecycle to RECONCILE."""
+    rail = ConfigurableRail(
+        pay_result=PaymentResult(
+            success=False,
+            transaction_id="",
+            status="PAYOUT_EXCEPTION",
+            details={"error": "ReadTimeout: connection to PayPal timed out"},
+        )
+    )
+    clock = MockClock()
+    mandates = MandateService(clock=clock)
+    mandates.create_mandate(
+        CreateMandateCommand(
+            mandate_id="mandate-timeout",
+            principal_id="principal-corp",
+            agent_id="agent-timeout",
+            single_limit_minor=100_000,
+            instant_threshold_minor=50_000,
+            lifetime_budget_minor=500_000,
+            valid_days=7,
+        )
+    )
+    authz = AuthorizationService(
+        clock=clock,
+        ledger=MemoryLedger(),
+        mandate_service=mandates,
+        payment_rail=rail,
+    )
+
+    res = authz.authorize(
+        AuthorizeTransactionCommand(
+            agent_id="agent-timeout",
+            recipient_id="vendor-timeout",
+            amount_minor=10_000,
+            currency="USD",
+            purpose="Software subscription",
+            idempotency_key="tx-timeout-1",
+        )
+    )
+
+    assert res.decision == DecisionOutcome.ALLOW
+    assert res.request_state == RequestState.RECONCILE
+    assert authz.get_request_state(res.request_id) == RequestState.RECONCILE
+
+
+def test_f6_5xx_ambiguous_outcome_transitions_to_reconcile() -> None:
+    """10b: 5xx server error / gateway timeout must transition lifecycle to RECONCILE."""
+    rail = ConfigurableRail(
+        pay_result=PaymentResult(
+            success=False,
+            transaction_id="",
+            status="PAYOUT_REJECTED",
+            details={
+                "error": "503 Service Unavailable: Downstream PayPal gateway timeout",
+                "http_status": 503,
+            },
+        )
+    )
+    clock = MockClock()
+    mandates = MandateService(clock=clock)
+    mandates.create_mandate(
+        CreateMandateCommand(
+            mandate_id="mandate-5xx",
+            principal_id="principal-corp",
+            agent_id="agent-5xx",
+            single_limit_minor=100_000,
+            instant_threshold_minor=50_000,
+            lifetime_budget_minor=500_000,
+            valid_days=7,
+        )
+    )
+    authz = AuthorizationService(
+        clock=clock,
+        ledger=MemoryLedger(),
+        mandate_service=mandates,
+        payment_rail=rail,
+    )
+
+    res = authz.authorize(
+        AuthorizeTransactionCommand(
+            agent_id="agent-5xx",
+            recipient_id="vendor-5xx",
+            amount_minor=15_000,
+            currency="USD",
+            purpose="Hosting fee",
+            idempotency_key="tx-5xx-1",
+        )
+    )
+
+    assert res.decision == DecisionOutcome.ALLOW
+    assert res.request_state == RequestState.RECONCILE
+    assert authz.get_request_state(res.request_id) == RequestState.RECONCILE
+
+
+def test_f6_reconcile_confirmed_success_transitions_to_confirmed(db_session_factory: Any) -> None:
+    """10c: RECONCILE + confirmed success transitions reservation to CONFIRMED."""
+    # 1. DatabaseBudgetRepository level
+    with db_session_factory() as session, session.begin():
+        session.add(
+            AgentBudgetModel(
+                agent_id="agent-recon-succ",
+                mandate_id="man-succ",
+                currency="USD",
+                allocated_minor=100_000,
+                spent_minor=0,
+                reserved_minor=0,
+            )
+        )
+        repo = BudgetRepository(session)
+        res = repo.reserve_budget(
+            agent_id="agent-recon-succ",
+            amount_minor=20_000,
+            currency="USD",
+            idempotency_key="idemp-succ",
+            intent_digest="digest-succ",
+        )
+        # Transition to RECONCILE (ambiguous outcome)
+        res_reconcile = repo.release_reservation(res.reservation_id, confirmed_failure=False)
+        assert res_reconcile.status == ReservationStatus.RECONCILE.value
+
+        # Reconcile with confirmed success
+        res_confirmed = repo.reconcile_reservation(res.reservation_id, rail_status="SUCCESS")
+        assert res_confirmed.status == ReservationStatus.CONFIRMED.value
+
+    with db_session_factory() as session:
+        budget = session.query(AgentBudgetModel).filter_by(agent_id="agent-recon-succ").one()
+        assert budget.spent_minor == 20_000
+        assert budget.reserved_minor == 0
+
+    # 2. AuthorizationService level
+    clock = MockClock()
+    mandates = MandateService(clock=clock)
+    mandates.create_mandate(
+        CreateMandateCommand(
+            mandate_id="m-recon-succ-svc",
+            principal_id="p-corp",
+            agent_id="agent-succ-svc",
+            single_limit_minor=100_000,
+            instant_threshold_minor=50_000,
+            lifetime_budget_minor=500_000,
+            valid_days=7,
+        )
+    )
+    rail = ConfigurableRail(
+        pay_result=PaymentResult(
+            success=False,
+            transaction_id="tx_succ_01",
+            status="PAYOUT_EXCEPTION",
+            details={"error": "Connection reset by peer"},
+        ),
+        lookup_result=PaymentResult(
+            success=True,
+            transaction_id="tx_succ_01",
+            status="SUCCESS",
+            details={"batch_status": "SUCCESS"},
+        ),
+    )
+    authz = AuthorizationService(
+        clock=clock,
+        ledger=MemoryLedger(),
+        mandate_service=mandates,
+        payment_rail=rail,
+    )
+    resp = authz.authorize(
+        AuthorizeTransactionCommand(
+            agent_id="agent-succ-svc",
+            recipient_id="vendor-1",
+            amount_minor=25_000,
+            currency="USD",
+            purpose="Reconcile success test",
+            idempotency_key="k-succ-svc-1",
+        )
+    )
+    assert resp.request_state == RequestState.RECONCILE
+    reconciled_state = authz.reconcile(resp.request_id, rail_status="SUCCESS")
+    assert reconciled_state == RequestState.SETTLED
+    assert authz.get_request_state(resp.request_id) == RequestState.SETTLED
+
+
+def test_f6_reconcile_confirmed_failure_transitions_to_released(db_session_factory: Any) -> None:
+    """10d: RECONCILE + confirmed failure transitions reservation to RELEASED."""
+    # 1. DatabaseBudgetRepository level
+    with db_session_factory() as session, session.begin():
+        session.add(
+            AgentBudgetModel(
+                agent_id="agent-recon-fail",
+                mandate_id="man-fail",
+                currency="USD",
+                allocated_minor=100_000,
+                spent_minor=0,
+                reserved_minor=0,
+            )
+        )
+        repo = BudgetRepository(session)
+        res = repo.reserve_budget(
+            agent_id="agent-recon-fail",
+            amount_minor=30_000,
+            currency="USD",
+            idempotency_key="idemp-fail",
+            intent_digest="digest-fail",
+        )
+        repo.release_reservation(res.reservation_id, confirmed_failure=False)
+
+        # Reconcile with confirmed failure
+        res_released = repo.reconcile_reservation(res.reservation_id, rail_status="FAILED")
+        assert res_released.status == ReservationStatus.RELEASED.value
+
+    with db_session_factory() as session:
+        budget = session.query(AgentBudgetModel).filter_by(agent_id="agent-recon-fail").one()
+        assert budget.spent_minor == 0
+        assert budget.reserved_minor == 0
+
+    # 2. AuthorizationService level
+    clock = MockClock()
+    mandates = MandateService(clock=clock)
+    mandates.create_mandate(
+        CreateMandateCommand(
+            mandate_id="m-recon-fail-svc",
+            principal_id="p-corp",
+            agent_id="agent-fail-svc",
+            single_limit_minor=100_000,
+            instant_threshold_minor=50_000,
+            lifetime_budget_minor=500_000,
+            valid_days=7,
+        )
+    )
+    rail = ConfigurableRail(
+        pay_result=PaymentResult(
+            success=False,
+            transaction_id="tx_fail_01",
+            status="PAYOUT_EXCEPTION",
+            details={"error": "Network timeout"},
+        )
+    )
+    authz = AuthorizationService(
+        clock=clock,
+        ledger=MemoryLedger(),
+        mandate_service=mandates,
+        payment_rail=rail,
+    )
+    resp = authz.authorize(
+        AuthorizeTransactionCommand(
+            agent_id="agent-fail-svc",
+            recipient_id="vendor-1",
+            amount_minor=35_000,
+            currency="USD",
+            purpose="Reconcile failure test",
+            idempotency_key="k-fail-svc-1",
+        )
+    )
+    assert resp.request_state == RequestState.RECONCILE
+    assert authz.get_lifetime_spent("agent-fail-svc") == 35_000
+
+    reconciled_state = authz.reconcile(resp.request_id, rail_status="FAILED")
+    assert reconciled_state == RequestState.FAILED
+    assert authz.get_request_state(resp.request_id) == RequestState.FAILED
+    # Released: lifetime spent deducted back to 0
+    assert authz.get_lifetime_spent("agent-fail-svc") == 0
+
+
+def test_f6_reconcile_still_unknown_remains_reconcile(db_session_factory: Any) -> None:
+    """10e: RECONCILE + still unknown remains RECONCILE and holds reservation."""
+    # 1. DatabaseBudgetRepository level
+    with db_session_factory() as session, session.begin():
+        session.add(
+            AgentBudgetModel(
+                agent_id="agent-recon-unknown",
+                mandate_id="man-unknown",
+                currency="USD",
+                allocated_minor=100_000,
+                spent_minor=0,
+                reserved_minor=0,
+            )
+        )
+        repo = BudgetRepository(session)
+        res = repo.reserve_budget(
+            agent_id="agent-recon-unknown",
+            amount_minor=18_000,
+            currency="USD",
+            idempotency_key="idemp-unknown",
+            intent_digest="digest-unknown",
+        )
+        repo.release_reservation(res.reservation_id, confirmed_failure=False)
+
+        # Reconcile with still unknown status
+        res_still = repo.reconcile_reservation(res.reservation_id, rail_status="PROCESSING")
+        assert res_still.status == ReservationStatus.RECONCILE.value
+
+    with db_session_factory() as session:
+        budget = session.query(AgentBudgetModel).filter_by(agent_id="agent-recon-unknown").one()
+        # Budget remains held in reserved_minor
+        assert budget.reserved_minor == 18_000
+        assert budget.spent_minor == 0
+
+    # 2. AuthorizationService level
+    clock = MockClock()
+    mandates = MandateService(clock=clock)
+    mandates.create_mandate(
+        CreateMandateCommand(
+            mandate_id="m-recon-unk-svc",
+            principal_id="p-corp",
+            agent_id="agent-unk-svc",
+            single_limit_minor=100_000,
+            instant_threshold_minor=50_000,
+            lifetime_budget_minor=500_000,
+            valid_days=7,
+        )
+    )
+    rail = ConfigurableRail(
+        pay_result=PaymentResult(
+            success=False,
+            transaction_id="tx_unk_01",
+            status="PAYOUT_EXCEPTION",
+            details={"error": "Gateway timeout"},
+        )
+    )
+    authz = AuthorizationService(
+        clock=clock,
+        ledger=MemoryLedger(),
+        mandate_service=mandates,
+        payment_rail=rail,
+    )
+    resp = authz.authorize(
+        AuthorizeTransactionCommand(
+            agent_id="agent-unk-svc",
+            recipient_id="vendor-1",
+            amount_minor=20_000,
+            currency="USD",
+            purpose="Reconcile still unknown test",
+            idempotency_key="k-unk-svc-1",
+        )
+    )
+    assert resp.request_state == RequestState.RECONCILE
+    reconciled_state = authz.reconcile(resp.request_id, rail_status="UNKNOWN")
+    assert reconciled_state == RequestState.RECONCILE
+    assert authz.get_request_state(resp.request_id) == RequestState.RECONCILE
+    assert authz.get_lifetime_spent("agent-unk-svc") == 20_000
+
+
+def test_f6_ambiguous_outcome_does_not_release_budget(db_session_factory: Any) -> None:
+    """10f: Ambiguous outcome must NOT release budget reservation, blocking double-spend."""
+    # 1. DatabaseBudgetRepository level
+    with db_session_factory() as session, session.begin():
+        session.add(
+            AgentBudgetModel(
+                agent_id="agent-budget-hold",
+                mandate_id="man-hold",
+                currency="USD",
+                allocated_minor=50_000,
+                spent_minor=0,
+                reserved_minor=0,
+            )
+        )
+        repo = BudgetRepository(session)
+        res = repo.reserve_budget(
+            agent_id="agent-budget-hold",
+            amount_minor=40_000,
+            currency="USD",
+            idempotency_key="idemp-hold-1",
+            intent_digest="digest-hold-1",
+        )
+        # Release on ambiguous outcome (confirmed_failure=False)
+        repo.release_reservation(res.reservation_id, confirmed_failure=False)
+
+    with db_session_factory() as session, session.begin():
+        repo = BudgetRepository(session)
+        # Budget is 50,000; 40,000 is HELD in RECONCILE.
+        # An attempt to reserve 20,000 MUST fail with InsufficientBudgetError!
+        with pytest.raises(InsufficientBudgetError):
+            repo.reserve_budget(
+                agent_id="agent-budget-hold",
+                amount_minor=20_000,
+                currency="USD",
+                idempotency_key="idemp-hold-2",
+                intent_digest="digest-hold-2",
+            )
+
+    # 2. AuthorizationService level
+    clock = MockClock()
+    mandates = MandateService(clock=clock)
+    mandates.create_mandate(
+        CreateMandateCommand(
+            mandate_id="m-hold-svc",
+            principal_id="p-corp",
+            agent_id="agent-hold-svc",
+            single_limit_minor=50_000,
+            instant_threshold_minor=50_000,
+            lifetime_budget_minor=60_000,  # 60,000 budget cap
+            valid_days=7,
+        )
+    )
+    rail = ConfigurableRail(
+        pay_result=PaymentResult(
+            success=False,
+            transaction_id="tx_hold_01",
+            status="PAYOUT_EXCEPTION",
+            details={"error": "504 Gateway Timeout"},
+        )
+    )
+    authz = AuthorizationService(
+        clock=clock,
+        ledger=MemoryLedger(),
+        mandate_service=mandates,
+        payment_rail=rail,
+    )
+    res1 = authz.authorize(
+        AuthorizeTransactionCommand(
+            agent_id="agent-hold-svc",
+            recipient_id="vendor-1",
+            amount_minor=45_000,
+            currency="USD",
+            purpose="First tx hitting ambiguous outcome",
+            idempotency_key="k-hold-1",
+        )
+    )
+    assert res1.decision == DecisionOutcome.ALLOW
+    assert res1.request_state == RequestState.RECONCILE
+    # 45,000 spent out of 60,000 budget
+    assert authz.get_lifetime_spent("agent-hold-svc") == 45_000
+
+    # Second request of 30,000 exceeds 60,000 cap because 45,000 is still held!
+    res2 = authz.authorize(
+        AuthorizeTransactionCommand(
+            agent_id="agent-hold-svc",
+            recipient_id="vendor-2",
+            amount_minor=30_000,
+            currency="USD",
+            purpose="Second tx should exceed held budget",
+            idempotency_key="k-hold-2",
+        )
+    )
+    assert res2.decision == DecisionOutcome.DENY
+    assert "Lifetime budget cap exceeded" in res2.reasons[0]
+
+
+# -------------------------------------------------------------------------
+# R2.2 & R2.3: Concurrent Duplicate Idempotency & Database Budget Tests
+# -------------------------------------------------------------------------
+def test_r2_2_concurrent_duplicate_idempotency(db_session_factory: Any) -> None:
+    """R2.2: Two concurrent identical requests must result in exactly one reservation,
+    one payment rail dispatch, and the second receiving replay without raw IntegrityError.
+    """
+    import threading
+
+    from app.domain.policy import PolicyReasonCode
+
+    clock = MockClock()
+    mandates = MandateService(clock=clock)
+    mandates.create_mandate(
+        CreateMandateCommand(
+            mandate_id="mandate-r22",
+            principal_id="principal-r22",
+            agent_id="agent-r22",
+            single_limit_minor=100_000,
+            instant_threshold_minor=50_000,
+            lifetime_budget_minor=200_000,
+            valid_days=7,
+        )
+    )
+    rail = MockPaymentRail()
+    authz = AuthorizationService(
+        clock=clock,
+        ledger=MemoryLedger(),
+        mandate_service=mandates,
+        payment_rail=rail,
+        db_session_factory=db_session_factory,
+    )
+
+    barrier = threading.Barrier(2)
+    responses: list[Any] = []
+    exceptions: list[Exception] = []
+
+    def worker() -> None:
+        try:
+            barrier.wait()
+            cmd = AuthorizeTransactionCommand(
+                agent_id="agent-r22",
+                recipient_id="vendor-r22",
+                amount_minor=30_000,
+                currency="USD",
+                purpose="Procurement batch",
+                idempotency_key="key-r22-concurrent-1",
+            )
+            res = authz.authorize(cmd)
+            responses.append(res)
+        except Exception as e:
+            exceptions.append(e)
+
+    t1 = threading.Thread(target=worker)
+    t2 = threading.Thread(target=worker)
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    # 1. No raw IntegrityError or uncaught DB exceptions
+    assert len(exceptions) == 0, f"Unexpected exceptions during concurrent execution: {exceptions}"
+    assert len(responses) == 2
+
+    # 2. Both callers receive an ALLOW decision
+    assert all(r.decision == DecisionOutcome.ALLOW for r in responses)
+
+    # 3. Exactly one payment rail dispatch executed
+    assert len(rail.dispatched) == 1
+
+    # 4. Exactly one response marked as idempotent replay
+    replay_count = sum(
+        1 for r in responses if PolicyReasonCode.IDEMPOTENCY_REPLAY in r.reason_codes
+    )
+    assert replay_count == 1
+
+    # 5. Exactly one budget deduction recorded (30,000, not double 60,000)
+    assert authz.get_lifetime_spent("agent-r22") == 30_000
+
+
+def test_r2_3_persistent_database_budget_accounting(db_session_factory: Any) -> None:
+    """R2.3: Authoritative lifetime/mandate budget accounting across service instances,
+    surviving restarts, and enforcing cap under concurrent requests.
+    """
+    import threading
+
+    clock = MockClock()
+    mandates = MandateService(clock=clock)
+    mandates.create_mandate(
+        CreateMandateCommand(
+            mandate_id="mandate-r23",
+            principal_id="principal-r23",
+            agent_id="agent-r23",
+            single_limit_minor=100_000,
+            instant_threshold_minor=50_000,
+            lifetime_budget_minor=100_000,  # Cap: $1,000
+            valid_days=7,
+        )
+    )
+
+    # 1. Service instance A spends $400 (40,000 minor)
+    authz_A = AuthorizationService(
+        clock=clock,
+        ledger=MemoryLedger(),
+        mandate_service=mandates,
+        payment_rail=MockPaymentRail(),
+        db_session_factory=db_session_factory,
+    )
+    res_A = authz_A.authorize(
+        AuthorizeTransactionCommand(
+            agent_id="agent-r23",
+            recipient_id="vendor-r23",
+            amount_minor=40_000,
+            currency="USD",
+            purpose="Instance A spend",
+            idempotency_key="key-r23-instA",
+        )
+    )
+    assert res_A.decision == DecisionOutcome.ALLOW
+    assert authz_A.get_lifetime_spent("agent-r23") == 40_000
+
+    # 2. Service instance B (separate service instance connected to same DB) sees the same $400
+    authz_B = AuthorizationService(
+        clock=clock,
+        ledger=MemoryLedger(),
+        mandate_service=mandates,
+        payment_rail=MockPaymentRail(),
+        db_session_factory=db_session_factory,
+    )
+    assert authz_B.get_lifetime_spent("agent-r23") == 40_000
+
+    # 3. Restart (simulating process restart) still sees the same $400
+    authz_restarted = AuthorizationService(
+        clock=clock,
+        ledger=MemoryLedger(),
+        mandate_service=mandates,
+        payment_rail=MockPaymentRail(),
+        db_session_factory=db_session_factory,
+    )
+    assert authz_restarted.get_lifetime_spent("agent-r23") == 40_000
+
+    # 4. Concurrent requests cannot exceed mandate:
+    # Cap is 100,000. 40,000 already spent, so 60,000 remains.
+    # Two concurrent requests of 40,000 each (total 80,000 > 60,000) are issued across instances.
+    # Exactly one must succeed with ALLOW and the other must be DENIED!
+    concurrent_results: list[DecisionOutcome] = []
+
+    def worker(key_suffix: str) -> None:
+        res = authz_B.authorize(
+            AuthorizeTransactionCommand(
+                agent_id="agent-r23",
+                recipient_id="vendor-r23",
+                amount_minor=40_000,
+                currency="USD",
+                purpose=f"Concurrent spend {key_suffix}",
+                idempotency_key=f"key-r23-conc-{key_suffix}",
+            )
+        )
+        concurrent_results.append(res.decision)
+
+    t1 = threading.Thread(target=worker, args=("1",))
+    t2 = threading.Thread(target=worker, args=("2",))
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    # One ALLOW, one DENY
+    decisions = sorted([d.value for d in concurrent_results])
+    assert decisions == ["ALLOW", "DENY"]
+    # Total spent in database is exactly 80,000 (40,000 original + 40,000 successful concurrent)
+    assert authz_restarted.get_lifetime_spent("agent-r23") == 80_000

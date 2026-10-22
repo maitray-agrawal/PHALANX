@@ -1,0 +1,27 @@
+<svg width="192" height="192" viewBox="0 0 192 192" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Lateral Cross Axis with Nodes -->
+  <line x1="24" y1="96" x2="168" y2="96" stroke="#B87333" stroke-width="1.25" opacity="0.6"/>
+  <polygon points="24,91 29,96 24,101 19,96" fill="#B87333"/>
+  <polygon points="168,91 173,96 168,101 163,96" fill="#B87333"/>
+
+  <!-- Vertical Spear Axis of Control (04) -->
+  <line x1="96" y1="12" x2="96" y2="180" stroke="#B87333" stroke-width="1.5"/>
+  <polygon points="96,12 102,22 96,32 90,22" fill="#B87333"/>
+  <polygon points="96,160 102,170 96,180 90,170" fill="#B87333"/>
+
+  <!-- Protective Shield Wings (02) -->
+  <path d="M96 46 L38 60 L62 126 L96 162 L82 122 L62 76 Z" fill="#1E3A8A"/>
+  <path d="M96 46 L154 60 L130 126 L96 162 L110 122 L130 76 Z" fill="#1E3A8A"/>
+
+  <!-- Inner Chevron Plates -->
+  <path d="M96 66 L68 76 L82 118 L96 140 L96 112 L84 88 Z" fill="#0EA5A3" opacity="0.9"/>
+  <path d="M96 66 L124 76 L110 118 L96 140 L96 112 L108 88 Z" fill="#0EA5A3" opacity="0.9"/>
+
+  <!-- Authority Bindu Diamond (01) -->
+  <polygon points="96,78 114,96 96,114 78,96" fill="#B87333"/>
+  <polygon points="96,86 106,96 96,106 86,96" fill="#FDF7EC"/>
+
+  <!-- Verification Checkpoint Nodes (03) -->
+  <polygon points="56,66 61,71 56,76 51,71" fill="#B87333"/>
+  <polygon points="136,66 141,71 136,76 131,71" fill="#B87333"/>
+</svg>

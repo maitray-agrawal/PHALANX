@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.domain.mandates import MandateStatus
 from app.domain.models import DecisionOutcome
 from app.domain.policy import PolicyReasonCode
+from app.domain.state_machine import RequestState
 
 
 class AuthorizeTransactionCommand(BaseModel):
@@ -50,6 +51,7 @@ class AuthorizationResponseDTO(BaseModel):
     intent_digest: str
     evaluated_at_utc: datetime
     payout_id: str | None = None
+    request_state: RequestState | None = None
 
 
 class CreateMandateCommand(BaseModel):

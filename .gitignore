@@ -48,3 +48,6 @@ npm-debug.log*
 *.swo
 .DS_Store
 Thumbs.db
+
+
+*.docx

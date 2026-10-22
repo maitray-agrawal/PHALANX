@@ -1069,3 +1069,421 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--accent-cyan);
   outline-offset: 2px;
 }
+
+/* ==========================================================================
+   AstraX Brand & System Lockup
+   ========================================================================== */
+.phalanx-brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.phalanx-brand-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.phalanx-brand-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.phalanx-title {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 1.5rem;
+  letter-spacing: 0.14em;
+  color: var(--text-main);
+}
+
+.phalanx-system-badge {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--ax-radius-sm);
+  background: var(--ax-badge-sandbox-bg);
+  color: var(--ax-badge-sandbox-text);
+  border: 1px solid var(--ax-badge-sandbox-border);
+  text-transform: uppercase;
+}
+
+.phalanx-subtitle {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--accent-cyan);
+  margin-top: 0.1rem;
+  text-transform: uppercase;
+}
+
+/* Theme Switcher */
+.theme-switcher-container {
+  display: flex;
+  align-items: center;
+  background: var(--bg-card);
+  padding: 0.2rem 0.35rem;
+  border-radius: var(--ax-radius-md);
+  border: 1px solid var(--border-subtle);
+  gap: 0.2rem;
+}
+
+.theme-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.25rem 0.45rem;
+  border-radius: var(--ax-radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.theme-btn:hover {
+  color: var(--text-main);
+}
+
+.theme-btn.active {
+  background: var(--accent-blue);
+  color: #ffffff;
+}
+
+.theme-btn-label {
+  display: inline;
+}
+
+@media (max-width: 640px) {
+  .theme-btn-label {
+    display: none;
+  }
+}
+
+/* ==========================================================================
+   AstraX Cockpit & Overview Dashboard
+   ========================================================================== */
+.cockpit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.metric-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--ax-radius-lg);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--ax-shadow-card);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-cyan);
+}
+
+.metric-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.metric-card-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.metric-value {
+  font-family: var(--font-heading);
+  font-size: 1.85rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.2;
+}
+
+.metric-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.metric-badge-green {
+  color: var(--accent-emerald);
+  font-weight: 600;
+}
+
+.metric-badge-blue {
+  color: var(--accent-blue);
+  font-weight: 600;
+}
+
+.metric-badge-amber {
+  color: var(--accent-amber);
+  font-weight: 600;
+}
+
+.metric-badge-cyan {
+  color: var(--accent-cyan);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Decision Pipeline Architecture Component
+   ========================================================================== */
+.pipeline-container {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--ax-radius-lg);
+  padding: 1.5rem;
+  margin-bottom: 1.75rem;
+  box-shadow: var(--ax-shadow-card);
+}
+
+.pipeline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+}
+
+.pipeline-title {
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pipeline-flow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.5rem 0;
+}
+
+.pipeline-node {
+  flex: 1;
+  min-width: 140px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--ax-radius-md);
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.pipeline-node.active {
+  border-color: var(--accent-cyan);
+  background: var(--bg-secondary);
+}
+
+.pipeline-node.pass {
+  border-color: var(--accent-emerald);
+}
+
+.pipeline-node.step_up {
+  border-color: var(--accent-amber);
+}
+
+.pipeline-node.deny {
+  border-color: var(--accent-rose);
+}
+
+.node-step {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 0.25rem;
+}
+
+.node-title {
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.node-desc {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+}
+
+.pipeline-arrow {
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+}
+
+/* ==========================================================================
+   Reconciliation Lifecycle Component (F6)
+   ========================================================================== */
+.reconcile-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.reconcile-state-strip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--bg-elevated);
+  border-radius: var(--ax-radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.reconcile-state-step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.reconcile-state-step.current {
+  color: var(--accent-amber);
+}
+
+.reconcile-state-step.confirmed {
+  color: var(--accent-emerald);
+}
+
+.reconcile-state-step.released {
+  color: var(--accent-rose);
+}
+
+.reconcile-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.reconcile-table th {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.reconcile-table td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-main);
+}
+
+.reconcile-action-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* ==========================================================================
+   Security Center & Defense Matrix
+   ========================================================================== */
+.security-matrix {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.25rem;
+}
+
+.security-invariant-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--ax-radius-md);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.invariant-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.invariant-title {
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.invariant-badge {
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--ax-radius-sm);
+  background: var(--ax-decision-allow-bg);
+  color: var(--accent-emerald);
+  font-weight: 600;
+}
+
+.invariant-desc {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* Developer & MCP Explorer */
+.mcp-tool-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--ax-radius-md);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.mcp-tool-title {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--accent-cyan);
+  margin-bottom: 0.35rem;
+}
+
+.code-block {
+  background: var(--ax-code-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--ax-radius-md);
+  padding: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-main);
+  overflow-x: auto;
+  line-height: 1.5;
+}
+

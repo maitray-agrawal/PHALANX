@@ -29,8 +29,9 @@ def load_env_if_present() -> None:
 class FakePaymentRail(PaymentRail):
     """Recording test double for deterministic test execution."""
 
-    def __init__(self, should_succeed: bool = True) -> None:
+    def __init__(self, should_succeed: bool = True, status: str = "COMPLETED") -> None:
         self.should_succeed = should_succeed
+        self.status = status
         self.dispatched_payments: list[TransactionIntent] = []
         self._tx_counter = 0
 
@@ -41,21 +42,21 @@ class FakePaymentRail(PaymentRail):
             return PaymentResult(
                 success=True,
                 transaction_id=f"sandbox_tx_{self._tx_counter:08d}",
-                status="COMPLETED",
+                status=self.status,
                 details={"rail": "fake_sandbox", "amount_minor": intent.money.amount_minor},
             )
         return PaymentResult(
             success=False,
             transaction_id="",
-            status="FAILED",
+            status=self.status if self.status != "COMPLETED" else "FAILED",
             details={"error": "simulated_rail_failure"},
         )
 
     def lookup(self, transaction_id: str) -> PaymentResult:
         return PaymentResult(
-            success=True,
+            success=self.should_succeed,
             transaction_id=transaction_id,
-            status="COMPLETED",
+            status=self.status,
             details={"lookup": True},
         )
 
@@ -170,7 +171,10 @@ class PayPalPaymentRailAdapter(PaymentRail):
                 success=False,
                 transaction_id="",
                 status="PAYOUT_REJECTED",
-                details={"error": self.normalize_error(resp.text)},
+                details={
+                    "error": self.normalize_error(resp.text),
+                    "http_status": resp.status_code,
+                },
             )
         except Exception as exc:
             return PaymentResult(
@@ -216,7 +220,10 @@ class PayPalPaymentRailAdapter(PaymentRail):
                 success=False,
                 transaction_id="",
                 status="FALLBACK_FAILED",
-                details={"error": self.normalize_error(resp.text)},
+                details={
+                    "error": self.normalize_error(resp.text),
+                    "http_status": resp.status_code,
+                },
             )
         except Exception as exc:
             return PaymentResult(

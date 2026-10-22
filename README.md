@@ -63,7 +63,7 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 ## Running Verification & Tests
 
 ```bash
-# Run all 237 backend tests (unit, integration, concurrency, and red-team)
+# Run all 245 backend tests (unit, integration, concurrency, and red-team)
 pytest -q
 
 # Run adversarial red-team suite only (67 threat catalog tests)
@@ -73,7 +73,7 @@ pytest -q -m redteam
 ruff check . && ruff format --check .
 mypy app
 
-# Run frontend test suite & production bundle build
+# Run frontend test suite (11 tests) & production bundle build
 cd web && npm run lint && npx tsc --noEmit && npm test -- --run && npm run build
 ```
 
