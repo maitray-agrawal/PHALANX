@@ -16,3 +16,4 @@ Every architectural decision and dependency addition must be recorded here befor
 | D-010 | Web dependencies: React 19, Vite 6, TypeScript 5, AG Grid 33, Vitest 3 | Modern operator console with enterprise audit grid | Custom HTML table | AG Grid dependency weight |
 | D-011 | cryptography==44.0.1 | Standard library-grade Ed25519 asymmetric signing and verification for mandates (RFC 8032) | PyNaCl, custom ECC | C-extension dependency |
 | D-012 | PaymentRail: Route A Payouts v1 primary with Orders v2 fallback (ADR-009) | Autonomous agent disbursement without interactive payer present; automatic fallback trigger if 403 scope missing | Vault MIT only | Payouts requires business sandbox account |
+| D-013 | rfc8785==0.1.4 | Official RFC 8785 (JSON Canonicalization Scheme) library | Hand-rolled json.dumps | Dependency addition pinned in pyproject.toml |

@@ -59,3 +59,19 @@ All facts about external systems, PayPal sandbox APIs, libraries, and toolchains
 - **Linter & Formatter (Ruff)**: All checks passed, 43 files clean
 - **Static Type Check (Mypy)**: Success: no issues found in 25 source files (`.venv\Scripts\mypy app`)
 - **Frontend Web Suite**: ESLint clean, TypeScript clean, Vitest passed (3/3), Vite production build clean
+
+---
+
+## 5. RFC 8785 Canonical JSON Library Verification (Date: 2026-10-22)
+- **Library**: `rfc8785==0.1.4`
+- **PyPI URL**: `https://pypi.org/project/rfc8785/` (Read: 2026-10-22)
+- **Specification**: IETF RFC 8785 (JSON Canonicalization Scheme / JCS)
+- **Author**: Anders Rundgren (Cyberphone), RFC 8785 author and reference implementation maintainer
+- **Properties Verified**:
+  - Pure-Python, zero external dependencies
+  - Lexicographical sorting of JSON object keys by UTF-16 code units (RFC 8785 Section 3.2.3)
+  - Zero whitespace between keys, colons, commas, and values
+  - Compliant ECMAScript 262 float number representation
+  - Stable across dictionary key insertion order
+  - Deterministic digest generation for asymmetric Ed25519 cryptographic signatures
+
