@@ -29,10 +29,16 @@ class Mandate(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    mandate_id: str = Field(..., min_length=1, max_length=64, description="Unique mandate identifier")
+    mandate_id: str = Field(
+        ..., min_length=1, max_length=64, description="Unique mandate identifier"
+    )
     version: int = Field(..., ge=1, description="Mandate version number (monotonically increasing)")
-    principal_id: str = Field(..., min_length=1, max_length=128, description="Authorizing principal ID")
-    agent_id: str = Field(..., min_length=1, max_length=128, description="Authorized autonomous agent ID")
+    principal_id: str = Field(
+        ..., min_length=1, max_length=128, description="Authorizing principal ID"
+    )
+    agent_id: str = Field(
+        ..., min_length=1, max_length=128, description="Authorized autonomous agent ID"
+    )
     single_limit_minor: int = Field(
         ...,
         gt=0,
@@ -41,7 +47,7 @@ class Mandate(BaseModel):
     instant_threshold_minor: int = Field(
         ...,
         ge=0,
-        description="Instant approval threshold in integer minor units; amounts above trigger step-up",
+        description="Instant approval threshold in minor units; amounts above trigger step-up",
     )
     lifetime_budget_minor: int = Field(
         ...,
@@ -61,13 +67,21 @@ class Mandate(BaseModel):
     )
     allowed_purposes: tuple[str, ...] = Field(
         default_factory=tuple,
-        description="Permitted transaction purpose categories. If empty, all purposes are permitted.",
+        description="Permitted transaction purpose categories. If empty, all purposes permitted.",
     )
-    valid_from_utc: datetime = Field(..., description="UTC timestamp defining the start of mandate validity")
-    valid_until_utc: datetime = Field(..., description="UTC timestamp defining the expiration of the mandate")
+    valid_from_utc: datetime = Field(
+        ..., description="UTC timestamp defining the start of mandate validity"
+    )
+    valid_until_utc: datetime = Field(
+        ..., description="UTC timestamp defining the expiration of the mandate"
+    )
     status: MandateStatus = Field(default=MandateStatus.ACTIVE, description="Lifecycle status")
-    key_id: str = Field(..., min_length=1, max_length=64, description="Identifier of the Ed25519 signing key")
-    signature: str = Field(default="", description="Hex-encoded Ed25519 cryptographic signature seal")
+    key_id: str = Field(
+        ..., min_length=1, max_length=64, description="Identifier of the Ed25519 signing key"
+    )
+    signature: str = Field(
+        default="", description="Hex-encoded Ed25519 cryptographic signature seal"
+    )
 
     @field_validator("valid_from_utc", "valid_until_utc")
     @classmethod
@@ -135,9 +149,8 @@ class Mandate(BaseModel):
         Returns (superseded_old, active_new).
         """
         if new_version <= self.version:
-            raise ValueError(
-                f"New mandate version {new_version} must be strictly greater than current {self.version}"
-            )
+            msg = f"New version {new_version} must be strictly greater than {self.version}"
+            raise ValueError(msg)
         superseded_old = self.model_copy(update={"status": MandateStatus.SUPERSEDED})
         active_new = Mandate(
             mandate_id=self.mandate_id,

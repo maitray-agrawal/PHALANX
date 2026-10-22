@@ -39,12 +39,9 @@ from app.domain.policy import (
 )
 from app.domain.ports import ClockPort, LedgerPort, PaymentRail
 from app.infrastructure.crypto import (
-    generate_ed25519_keypair,
-    get_key_id,
     load_or_generate_keypair,
     sign_bytes,
     verify_mandate_seal,
-    verify_signature,
 )
 from app.infrastructure.paypal import FakePaymentRail
 
@@ -231,12 +228,16 @@ class MandateService:
             if not current:
                 raise ValueError(f"Mandate {mandate_id} not found")
             if current.status != MandateStatus.ACTIVE:
-                raise ValueError(f"Cannot supersede mandate {mandate_id} with status {current.status}")
+                raise ValueError(
+                    f"Cannot supersede mandate {mandate_id} with status {current.status}"
+                )
 
             now = self._clock.now_utc()
             new_version = current.version + 1
             valid_until = (
-                now + timedelta(days=valid_days) if valid_days is not None else current.valid_until_utc
+                now + timedelta(days=valid_days)
+                if valid_days is not None
+                else current.valid_until_utc
             )
 
             effective_payees = (

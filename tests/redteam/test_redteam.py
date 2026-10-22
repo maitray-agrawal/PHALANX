@@ -11,12 +11,13 @@ from fastapi import status
 from fastapi.testclient import TestClient
 
 from app.domain.canonical_json import canonical_json_bytes
-from app.domain.mandates import MandateStatus
+from app.domain.mandates import Mandate, MandateStatus
 from app.domain.models import DecisionOutcome, escalate_decision
 from app.infrastructure.crypto import (
     generate_ed25519_keypair,
     get_key_id,
     sign_bytes,
+    verify_mandate_seal,
     verify_signature,
 )
 from app.infrastructure.ledger import InMemoryLedgerAdapter
@@ -88,6 +89,74 @@ def test_b1_mandate_signature_tamper_detection() -> None:
     tampered = dict(payload)
     tampered["single_limit_minor"] = 99999999  # attacker forged limit
     assert verify_signature(pub, canonical_json_bytes(tampered), sig) is False
+
+
+@pytest.mark.redteam
+def test_b2_mandate_wrong_key_id_fails() -> None:
+    """Catalog B2: Forged signature using adversary key with wrong key_id is rejected."""
+    _priv, pub = generate_ed25519_keypair()
+    other_priv, _other_pub = generate_ed25519_keypair()
+    msg = canonical_json_bytes({"mandate_id": "m2", "limit": 100})
+    forged_sig = sign_bytes(other_priv, msg)
+
+    # Legitimate public key cannot verify signature created with another private key
+    assert verify_signature(pub, msg, forged_sig) is False
+    # Mismatched key_id explicitly rejected
+    assert verify_mandate_seal(pub, msg, forged_sig, "key_forged999") is False
+
+
+@pytest.mark.redteam
+def test_b3_mandate_stripped_signature_rejected() -> None:
+    """Catalog B3: Mandate presented with stripped/missing signature seal is rejected."""
+    _priv, pub = generate_ed25519_keypair()
+    msg = canonical_json_bytes({"mandate_id": "m3", "limit": 100})
+    key_id = get_key_id(pub)
+
+    assert verify_mandate_seal(pub, msg, "", key_id) is False
+    assert verify_signature(pub, msg, "") is False
+
+
+@pytest.mark.redteam
+def test_b4_mandate_outside_validity_window_rejected() -> None:
+    """Catalog B4: Mandate presented outside validity window (premature or expired) is rejected."""
+    _priv, pub = generate_ed25519_keypair()
+    key_id = get_key_id(pub)
+    t0 = datetime(2026, 10, 22, 12, 0, 0, tzinfo=UTC)
+    t1 = t0 + timedelta(days=7)
+
+    mandate = Mandate(
+        mandate_id="m4",
+        version=1,
+        principal_id="p1",
+        agent_id="a1",
+        single_limit_minor=1000,
+        instant_threshold_minor=500,
+        lifetime_budget_minor=10000,
+        currency="USD",
+        allowed_payees=(),
+        allowed_purposes=(),
+        valid_from_utc=t0,
+        valid_until_utc=t1,
+        status=MandateStatus.ACTIVE,
+        key_id=key_id,
+        signature="fake",
+    )
+
+    # Premature
+    assert mandate.is_active_at(t0 - timedelta(minutes=1)) is False
+    # Expired
+    assert mandate.is_active_at(t1 + timedelta(minutes=1)) is False
+
+
+@pytest.mark.redteam
+def test_b5_mandate_malformed_signature_hex_fails() -> None:
+    """Catalog B5: Malformed signature hex or invalid algorithm parameters reject cleanly."""
+    _priv, pub = generate_ed25519_keypair()
+    key_id = get_key_id(pub)
+    msg = canonical_json_bytes({"mandate_id": "m5"})
+
+    assert verify_mandate_seal(pub, msg, "not_hex_data", key_id) is False
+    assert verify_mandate_seal(pub, msg, "deadbeef", key_id) is False  # 4 bytes != 64 bytes
 
 
 @pytest.mark.redteam
