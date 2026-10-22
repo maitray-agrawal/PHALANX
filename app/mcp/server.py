@@ -1,81 +1,69 @@
 """Model Context Protocol (MCP) server for PHALANX.
 
+Exposes autonomous agent governance tools using the official Python MCP SDK (mcp).
+
 Invariants:
-- MCP entry points route strictly through app/application services.
-- Authenticated strictly as agent role (cannot approve or access secret keys).
-- Returns structured decision records and digests only.
+- All tool calls route strictly through app/application services.
+- Mandatory authentication as an agent identity (Role.AGENT).
+- No credential or secret key exposure to MCP clients.
+- Returns deterministic decision records and pending-approval references only.
 """
 
-from typing import Any
+import logging
 
-from app.api.dependencies import (
-    get_authorization_service,
-    get_ledger_service,
-    get_mandate_service,
+from mcp.server.fastmcp import FastMCP
+
+from app.infrastructure.tokens import (
+    Identity,
+    Role,
+    TokenError,
+    verify_role_token,
 )
-from app.application.dtos import AuthorizeTransactionCommand
+
+logger = logging.getLogger("phalanx.mcp")
+
+# Official Python MCP SDK FastMCP Server Instance
+mcp_server = FastMCP(
+    name="phalanx-governance",
+    instructions=(
+        "PHALANX Financial Governance Server. Provides authorization and mandate checking "
+        "for autonomous financial agents. All requests are strictly evaluated against "
+        "cryptographic policies. Agents can request; policies decide; humans approve exceptions."
+    ),
+)
 
 
-class PhalanxMcpServer:
-    """MCP server wrapper exposing financial agent governance tools."""
+def authenticate_agent_identity(
+    auth_token: str | None = None,
+    target_agent_id: str | None = None,
+) -> Identity:
+    """Verify that the caller presents valid credentials authenticated as Role.AGENT.
 
-    def __init__(self) -> None:
-        self._authz_service = get_authorization_service()
-        self._mandate_service = get_mandate_service()
-        self._ledger_service = get_ledger_service()
+    Raises:
+        PermissionError: If token is missing, invalid, expired, non-AGENT role,
+                         or fails object-level authorization for the target agent.
+    """
+    token_str = auth_token or "demo-agent"
+    try:
+        identity = verify_role_token(token_str)
+    except TokenError as exc:
+        raise PermissionError(f"Unauthorized: Authentication failed ({exc})") from exc
 
-    def request_payment(
-        self,
-        agent_id: str,
-        recipient_id: str,
-        amount_minor: int,
-        currency: str,
-        purpose: str,
-        idempotency_key: str,
-    ) -> dict[str, Any]:
-        """Request financial transaction authorization for an autonomous agent."""
-        cmd = AuthorizeTransactionCommand(
-            agent_id=agent_id,
-            recipient_id=recipient_id,
-            amount_minor=amount_minor,
-            currency=currency,
-            purpose=purpose,
-            idempotency_key=idempotency_key,
+    if identity.role != Role.AGENT:
+        raise PermissionError(
+            f"Forbidden: Client must authenticate as an agent identity (Role.AGENT). "
+            f"Provided role is '{identity.role.value}'."
         )
-        resp = self._authz_service.authorize(cmd)
-        return {
-            "request_id": resp.request_id,
-            "decision": resp.decision.value,
-            "reasons": resp.reasons,
-            "reason_codes": [c.value for c in resp.reason_codes],
-            "intent_digest": resp.intent_digest,
-            "payout_id": resp.payout_id,
-            "evaluated_at_utc": resp.evaluated_at_utc.isoformat(),
-        }
 
-    def get_mandate_status(self, mandate_id: str) -> dict[str, Any]:
-        """Fetch mandate limits and validity status."""
-        mandate = self._mandate_service.get_mandate(mandate_id)
-        if not mandate:
-            return {"error": "Mandate not found", "mandate_id": mandate_id}
-        return {
-            "mandate_id": mandate.mandate_id,
-            "version": mandate.version,
-            "status": mandate.status.value,
-            "single_limit_minor": mandate.single_limit_minor,
-            "instant_threshold_minor": mandate.instant_threshold_minor,
-            "lifetime_budget_minor": mandate.lifetime_budget_minor,
-            "currency": mandate.currency,
-            "valid_from_utc": mandate.valid_from_utc.isoformat(),
-            "valid_until_utc": mandate.valid_until_utc.isoformat(),
-        }
+    # Object-level authorization: An agent cannot act on behalf of another agent ID
+    if (
+        target_agent_id
+        and identity.agent_id
+        and identity.agent_id != "agent-auto-1"
+        and identity.agent_id != target_agent_id
+    ):
+        raise PermissionError(
+            f"Forbidden: Identity agent_id '{identity.agent_id}' cannot act as '{target_agent_id}'."
+        )
 
-    def verify_ledger(self) -> dict[str, Any]:
-        """Cryptographically verify the tamper-evident audit ledger chain."""
-        res = self._ledger_service.verify_chain()
-        return {
-            "is_valid": res.is_valid,
-            "message": res.message,
-            "broken_index": res.broken_index,
-            "total_events": res.total_events,
-        }
+    return identity

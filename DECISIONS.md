@@ -18,3 +18,4 @@ Every architectural decision and dependency addition must be recorded here befor
 | D-012 | PaymentRail: Route A Payouts v1 primary with Orders v2 fallback (ADR-009) | Autonomous agent disbursement without interactive payer present; automatic fallback trigger if 403 scope missing | Vault MIT only | Payouts requires business sandbox account |
 | D-013 | rfc8785==0.1.4 | Official RFC 8785 (JSON Canonicalization Scheme) library | Hand-rolled json.dumps | Dependency addition pinned in pyproject.toml |
 | D-014 | bandit==1.8.3 | Python AST security linter to verify zero high security findings | Manual code review only | Dev-only static analysis dependency |
+| D-015 | mcp==1.3.0 | Official Python Model Context Protocol SDK for agent tool exposure | Custom JSON-RPC server | Maintained official SDK with standard stdio transport |
