@@ -21,7 +21,9 @@ def get_clock() -> SystemUtcClock:
 
 @lru_cache(maxsize=1)
 def get_ledger() -> InMemoryLedgerAdapter:
-    return InMemoryLedgerAdapter()
+    ledger = InMemoryLedgerAdapter()
+    ledger.seed_demo_events()
+    return ledger
 
 
 @lru_cache(maxsize=1)

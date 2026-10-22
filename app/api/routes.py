@@ -26,16 +26,21 @@ from app.api.dependencies import (
 )
 from app.application.dtos import (
     ApprovalCommand,
+    AssistantChatRequestDTO,
+    AssistantChatResponseDTO,
     AuthorizationResponseDTO,
     AuthorizeTransactionCommand,
     CreateMandateCommand,
     DemoTokenRequestDTO,
     DemoTokenResponseDTO,
+    ExtractedIntentDTO,
     HealthStatusDTO,
     LedgerEventDTO,
     LedgerVerificationDTO,
     MandateResponseDTO,
+    PendingStepUpDTO,
 )
+from app.application.llm_proposer import MockLLMProposer
 from app.application.services import (
     AuthorizationService,
     HealthService,
@@ -237,8 +242,9 @@ def get_mandate(
     mandate_id: str,
     identity: Annotated[Identity, Depends(get_current_identity)],
     service: Annotated[MandateService, Depends(get_mandate_service)],
+    auth_service: Annotated[AuthorizationService, Depends(get_authorization_service)],
 ) -> MandateResponseDTO:
-    """Fetch an active or historical mandate by ID."""
+    """Fetch an active or historical mandate by ID with current budget utilization."""
     _ = identity
     mandate = service.get_mandate(mandate_id)
     if not mandate:
@@ -246,6 +252,8 @@ def get_mandate(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Mandate '{mandate_id}' not found",
         )
+    spent = auth_service.get_lifetime_spent()
+    remaining = max(0, mandate.lifetime_budget_minor - spent)
     return MandateResponseDTO(
         mandate_id=mandate.mandate_id,
         version=mandate.version,
@@ -262,6 +270,8 @@ def get_mandate(
         status=mandate.status,
         key_id=mandate.key_id,
         signature=mandate.signature,
+        spent_budget_minor=spent,
+        remaining_budget_minor=remaining,
     )
 
 
@@ -289,6 +299,20 @@ def get_decision(
             detail=f"Decision '{decision_id}' not found",
         )
     return res
+
+
+@router.get(
+    "/v1/approvals",
+    response_model=list[PendingStepUpDTO],
+    status_code=status.HTTP_200_OK,
+)
+def list_pending_approvals(
+    identity: Annotated[Identity, Depends(get_current_identity)],
+    service: Annotated[AuthorizationService, Depends(get_authorization_service)],
+) -> list[PendingStepUpDTO]:
+    """List transactions currently pending human supervisor review in step-up queue."""
+    _ = identity
+    return service.get_pending_step_ups()
 
 
 @router.post(
@@ -379,6 +403,85 @@ def verify_ledger(
     """Cryptographically verify the hash chain integrity of the ledger."""
     _ = identity
     return service.verify_chain()
+
+
+@router.post(
+    "/v1/assistant/chat",
+    response_model=AssistantChatResponseDTO,
+    status_code=status.HTTP_200_OK,
+)
+def assistant_chat(
+    request: AssistantChatRequestDTO,
+    identity: Annotated[Identity, Depends(get_current_identity)],
+) -> AssistantChatResponseDTO:
+    """Natural language agent chat and delimiter-isolated intent extraction."""
+    proposer = MockLLMProposer()
+    cmd = proposer.extract_intent_from_user_prompt(
+        untrusted_user_text=request.message,
+        agent_id=request.agent_id or identity.agent_id or "agent-auto-1",
+    )
+    is_flagged = cmd.anomaly_signal is not None
+    flag_reason = (
+        "Prompt injection pattern detected by heuristic safety scanner" if is_flagged else None
+    )
+
+    if is_flagged:
+        reply = (
+            "Caution: Security advisory scanner flagged this prompt for heuristic injection "
+            "patterns. The intent has been structured inside delimiters and escalated."
+        )
+    else:
+        dollars_str = f"{(cmd.amount_minor / 100):.2f}"
+        reply = (
+            f"Extracted payment intent for ${dollars_str} USD to {cmd.recipient_id}. "
+            "Review the structured intent card below and dispatch to the "
+            "policy authorization engine."
+        )
+
+    intent_dto = ExtractedIntentDTO(
+        agent_id=cmd.agent_id,
+        recipient_id=cmd.recipient_id,
+        amount_minor=cmd.amount_minor,
+        currency=cmd.currency,
+        purpose=cmd.purpose,
+        idempotency_key=cmd.idempotency_key,
+        anomaly_signal=cmd.anomaly_signal.value if cmd.anomaly_signal else None,
+    )
+
+    return AssistantChatResponseDTO(
+        reply=reply,
+        intent=intent_dto,
+        heuristic_flagged=is_flagged,
+        heuristic_reason=flag_reason,
+    )
+
+
+@router.post("/v1/ledger/tamper", status_code=status.HTTP_200_OK)
+def tamper_ledger(
+    identity: Annotated[Identity, Depends(get_current_identity)],
+    service: Annotated[LedgerService, Depends(get_ledger_service)],
+) -> dict[str, str]:
+    """Testing hook to simulate illicit SQL modification of ledger event amount."""
+    _ = identity
+    service.tamper_chain(index=1, new_amount=99999999)
+    return {
+        "status": "tampered",
+        "message": "Block #2 modified illegally. Hash chain integrity broken.",
+    }
+
+
+@router.post("/v1/ledger/restore", status_code=status.HTTP_200_OK)
+def restore_ledger(
+    identity: Annotated[Identity, Depends(get_current_identity)],
+    service: Annotated[LedgerService, Depends(get_ledger_service)],
+) -> dict[str, str]:
+    """Restore authentic ledger blocks."""
+    _ = identity
+    service.restore_chain()
+    return {
+        "status": "restored",
+        "message": "Authentic ledger blocks restored. Hash chain valid.",
+    }
 
 
 # ---------------------------------------------------------------------------

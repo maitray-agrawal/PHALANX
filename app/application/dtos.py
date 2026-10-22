@@ -84,6 +84,59 @@ class MandateResponseDTO(BaseModel):
     status: MandateStatus
     key_id: str
     signature: str
+    spent_budget_minor: int = Field(default=0)
+    remaining_budget_minor: int = Field(default=0)
+
+
+class PendingStepUpDTO(BaseModel):
+    """Pending human review item in step-up queue."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+    agent_id: str
+    recipient_id: str
+    amount_minor: int
+    currency: str
+    purpose: str
+    intent_digest: str
+    created_at_utc: datetime
+    status: str = Field(default="PENDING")
+
+
+class ExtractedIntentDTO(BaseModel):
+    """Extracted structured transaction intent draft."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    agent_id: str
+    recipient_id: str
+    amount_minor: int
+    currency: str
+    purpose: str
+    idempotency_key: str
+    anomaly_signal: str | None = None
+
+
+class AssistantChatRequestDTO(BaseModel):
+    """Natural language agent message to be processed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    message: str = Field(..., min_length=1, max_length=2000)
+    agent_id: str = Field(default="agent-auto-1")
+    session_id: str = Field(default="session-demo-01")
+
+
+class AssistantChatResponseDTO(BaseModel):
+    """Assistant response with optional extracted intent draft."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reply: str
+    intent: ExtractedIntentDTO | None = None
+    heuristic_flagged: bool = False
+    heuristic_reason: str | None = None
 
 
 class ApprovalCommand(BaseModel):

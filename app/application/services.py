@@ -22,6 +22,7 @@ from app.application.dtos import (
     LedgerEventDTO,
     LedgerVerificationDTO,
     MandateResponseDTO,
+    PendingStepUpDTO,
 )
 from app.domain.canonical_json import canonical_json_bytes
 from app.domain.mandates import Mandate, MandateStatus
@@ -375,6 +376,58 @@ class AuthorizationService:
         self._idempotency_records: dict[str, tuple[str, DecisionOutcome]] = {}
         self._pending_step_ups: dict[str, dict[str, Any]] = {}
         self._responses_by_id: dict[str, AuthorizationResponseDTO] = {}
+        self._seed_default_step_up()
+
+    def _seed_default_step_up(self) -> None:
+        """Seed a pending step-up request for the human supervisor demo queue."""
+        now_utc = self._clock.now_utc()
+        intent = TransactionIntent(
+            agent_id="agent-auto-1",
+            recipient_id="vendor-paypal-sandbox-1",
+            money=Money(amount_minor=120000, currency="USD"),
+            purpose="Equipment invoice review",
+            idempotency_key="stepup_seed_1001",
+            occurred_at_utc=now_utc,
+        )
+        digest = compute_intent_digest(
+            agent_id=intent.agent_id,
+            recipient_id=intent.recipient_id,
+            amount_minor=intent.money.amount_minor,
+            currency=intent.money.currency,
+            purpose=intent.purpose,
+            idempotency_key=intent.idempotency_key,
+        )
+        mandate = self._mandate_service.get_active_mandate_for_agent("agent-auto-1")
+        self._pending_step_ups["req_stepup_1001"] = {
+            "intent": intent,
+            "intent_digest": digest,
+            "created_at_utc": now_utc,
+            "mandate": mandate,
+        }
+
+    def get_pending_step_ups(self) -> list[PendingStepUpDTO]:
+        with self._lock:
+            items = []
+            for req_id, data in self._pending_step_ups.items():
+                intent = data["intent"]
+                items.append(
+                    PendingStepUpDTO(
+                        request_id=req_id,
+                        agent_id=intent.agent_id,
+                        recipient_id=intent.recipient_id,
+                        amount_minor=intent.money.amount_minor,
+                        currency=intent.money.currency,
+                        purpose=intent.purpose,
+                        intent_digest=data["intent_digest"],
+                        created_at_utc=data["created_at_utc"],
+                        status="PENDING",
+                    )
+                )
+            return items
+
+    def get_lifetime_spent(self) -> int:
+        with self._lock:
+            return self._lifetime_spent
 
     def authorize(self, command: AuthorizeTransactionCommand) -> AuthorizationResponseDTO:
         now_utc = self._clock.now_utc()
@@ -631,6 +684,16 @@ class LedgerService:
             broken_index=None,
             total_events=0,
         )
+
+    def tamper_chain(self, index: int = 1, new_amount: int = 99999999) -> None:
+        """Tamper with a ledger block for auditor demo testing."""
+        if hasattr(self._ledger, "tamper_for_testing"):
+            self._ledger.tamper_for_testing(index, new_amount)
+
+    def restore_chain(self) -> None:
+        """Restore pristine unmodified ledger state."""
+        if hasattr(self._ledger, "restore_true_ledger"):
+            self._ledger.restore_true_ledger()
 
 
 class HealthService:
