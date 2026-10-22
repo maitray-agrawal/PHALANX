@@ -1,11 +1,11 @@
 """Unit test for Alembic migrations forward and rollback on a clean database (Manual 56.12)."""
 
-import os
 from pathlib import Path
+
+from sqlalchemy import create_engine, inspect
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, inspect
 
 
 def test_alembic_migrations_forward_and_rollback() -> None:
@@ -50,7 +50,9 @@ def test_alembic_migrations_forward_and_rollback() -> None:
         inspector = inspect(engine)
         tables_after_downgrade = set(inspector.get_table_names())
         for table in expected_tables - {"alembic_version"}:
-            assert table not in tables_after_downgrade, f"Table '{table}' not dropped after downgrade"
+            assert table not in tables_after_downgrade, (
+                f"Table '{table}' not dropped after downgrade"
+            )
 
     finally:
         engine.dispose()

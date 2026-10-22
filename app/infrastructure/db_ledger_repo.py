@@ -28,11 +28,7 @@ class DatabaseLedgerAdapter:
     ) -> str:
         """Append an event to the ledger, computing prev_hash and event_hash."""
         # 1. Fetch latest event sequence and hash
-        latest_stmt = (
-            select(LedgerEventModel)
-            .order_by(LedgerEventModel.event_seq.desc())
-            .limit(1)
-        )
+        latest_stmt = select(LedgerEventModel).order_by(LedgerEventModel.event_seq.desc()).limit(1)
         latest = self.session.scalar(latest_stmt)
 
         next_seq = (latest.event_seq + 1) if latest else 1
@@ -58,7 +54,7 @@ class DatabaseLedgerAdapter:
         canonical_str = canonical_bytes.decode("utf-8")
 
         # Hash chaining: event_hash = SHA256(prev_hash + canonical_payload)
-        chain_material = f"{prev_hash}{canonical_str}".encode("utf-8")
+        chain_material = f"{prev_hash}{canonical_str}".encode()
         event_hash = hashlib.sha256(chain_material).hexdigest()
 
         event = LedgerEventModel(
@@ -107,7 +103,7 @@ class DatabaseLedgerAdapter:
                 )
 
             # 3. Payload integrity check (detects row modification)
-            chain_material = f"{ev.prev_hash}{ev.payload_json}".encode("utf-8")
+            chain_material = f"{ev.prev_hash}{ev.payload_json}".encode()
             recomputed_hash = hashlib.sha256(chain_material).hexdigest()
             if recomputed_hash != ev.event_hash:
                 return (

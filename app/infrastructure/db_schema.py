@@ -23,7 +23,9 @@ def install_ledger_triggers(engine: Engine) -> None:
                     CREATE TRIGGER IF NOT EXISTS trg_no_update_ledger
                     BEFORE UPDATE ON ledger_events
                     BEGIN
-                        SELECT RAISE(ABORT, 'ledger_events is append-only: updates are strictly prohibited');
+                        SELECT RAISE(ABORT,
+                            'ledger_events is append-only: updates are strictly prohibited'
+                        );
                     END;
                     """
                 )
@@ -34,7 +36,9 @@ def install_ledger_triggers(engine: Engine) -> None:
                     CREATE TRIGGER IF NOT EXISTS trg_no_delete_ledger
                     BEFORE DELETE ON ledger_events
                     BEGIN
-                        SELECT RAISE(ABORT, 'ledger_events is append-only: deletes are strictly prohibited');
+                        SELECT RAISE(ABORT,
+                            'ledger_events is append-only: deletes are strictly prohibited'
+                        );
                     END;
                     """
                 )
@@ -46,7 +50,8 @@ def install_ledger_triggers(engine: Engine) -> None:
                     CREATE OR REPLACE FUNCTION deny_ledger_mutation()
                     RETURNS TRIGGER AS $$
                     BEGIN
-                        RAISE EXCEPTION 'ledger_events is append-only: updates and deletes are strictly prohibited';
+                        RAISE EXCEPTION
+                            'ledger_events is append-only: updates and deletes are prohibited';
                     END;
                     $$ LANGUAGE plpgsql;
                     """

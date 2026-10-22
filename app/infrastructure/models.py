@@ -64,6 +64,11 @@ class AgentBudgetModel(Base):
         CheckConstraint("allocated_minor >= 0", name="chk_allocated_non_negative"),
     )
 
+    @property
+    def available_minor(self) -> int:
+        """Remaining unreserved and unspent budget available for reservation."""
+        return self.allocated_minor - self.spent_minor - self.reserved_minor
+
 
 class BudgetReservationModel(Base):
     """Individual transaction reservations under an agent budget."""
@@ -71,11 +76,15 @@ class BudgetReservationModel(Base):
     __tablename__ = "budget_reservations"
 
     reservation_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    idempotency_key: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
+    idempotency_key: Mapped[str] = mapped_column(
+        String(128), unique=True, nullable=False, index=True
+    )
     agent_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default=ReservationStatus.PENDING.value)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=ReservationStatus.PENDING.value
+    )
     created_at_utc: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -88,9 +97,7 @@ class BudgetReservationModel(Base):
         onupdate=lambda: datetime.now(UTC),
     )
 
-    __table_args__ = (
-        CheckConstraint("amount_minor > 0", name="chk_reservation_positive"),
-    )
+    __table_args__ = (CheckConstraint("amount_minor > 0", name="chk_reservation_positive"),)
 
 
 class IdempotencyModel(Base):
@@ -119,7 +126,9 @@ class StepUpApprovalModel(Base):
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     expected_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     intent_payload: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default=ApprovalStatus.PENDING.value)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=ApprovalStatus.PENDING.value
+    )
     expires_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     decision: Mapped[str | None] = mapped_column(String(16), nullable=True)
     approver_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -157,6 +166,4 @@ class LedgerEventModel(Base):
         default=lambda: datetime.now(UTC),
     )
 
-    __table_args__ = (
-        Index("idx_ledger_events_seq", "event_seq"),
-    )
+    __table_args__ = (Index("idx_ledger_events_seq", "event_seq"),)

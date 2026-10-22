@@ -135,13 +135,16 @@ class BudgetRepository:
             raise ValueError(f"No budget configured for agent '{agent_id}'")
 
         if budget.currency != currency:
-            raise ValueError(f"Currency mismatch: budget is {budget.currency}, requested {currency}")
+            raise ValueError(
+                f"Currency mismatch: budget is {budget.currency}, requested {currency}"
+            )
 
         # 3. Invariant check: spent + reserved + amount <= allocated
         if budget.spent_minor + budget.reserved_minor + amount_minor > budget.allocated_minor:
             raise InsufficientBudgetError(
                 f"Insufficient budget for agent '{agent_id}': requested {amount_minor}, "
-                f"spent {budget.spent_minor}, reserved {budget.reserved_minor}, cap {budget.allocated_minor}"
+                f"spent {budget.spent_minor}, reserved {budget.reserved_minor}, "
+                f"cap {budget.allocated_minor}"
             )
 
         # 4. Atomic increment
@@ -288,15 +291,23 @@ class BudgetRepository:
                 f"Approval '{request_id}' is already in state '{approval.status}'"
             )
 
-        if now_utc > approval.expires_at_utc:
+        exp_utc = approval.expires_at_utc
+        if exp_utc.tzinfo is None:
+            exp_utc = exp_utc.replace(tzinfo=UTC)
+        current_utc = now_utc if now_utc.tzinfo is not None else now_utc.replace(tzinfo=UTC)
+
+        if current_utc > exp_utc:
             approval.status = ApprovalStatus.EXPIRED.value
-            approval.updated_at_utc = now_utc
+            approval.updated_at_utc = current_utc
             self.session.flush()
-            raise ApprovalExpiredError(f"Approval '{request_id}' expired at {approval.expires_at_utc}")
+            raise ApprovalExpiredError(
+                f"Approval '{request_id}' expired at {approval.expires_at_utc}"
+            )
 
         if provided_digest != approval.expected_digest:
             raise ApprovalDigestMismatchError(
-                f"Provided digest '{provided_digest}' does not match expected '{approval.expected_digest}'"
+                f"Provided digest '{provided_digest}' does not match "
+                f"expected '{approval.expected_digest}'"
             )
 
         approval.status = ApprovalStatus.APPROVED.value
