@@ -114,3 +114,64 @@ class Mandate(BaseModel):
         if self.status != MandateStatus.ACTIVE:
             return False
         return self.valid_from_utc <= check_time_utc < self.valid_until_utc
+
+    def supersede(
+        self,
+        new_version: int,
+        key_id: str,
+        signature: str,
+        *,
+        single_limit_minor: int | None = None,
+        instant_threshold_minor: int | None = None,
+        lifetime_budget_minor: int | None = None,
+        allowed_payees: tuple[str, ...] | None = None,
+        allowed_purposes: tuple[str, ...] | None = None,
+        valid_from_utc: datetime | None = None,
+        valid_until_utc: datetime | None = None,
+    ) -> tuple["Mandate", "Mandate"]:
+        """Create a new version of the mandate and supersede the old one.
+
+        Invariant: Mandates are immutable; old versions are NEVER edited in-place.
+        Returns (superseded_old, active_new).
+        """
+        if new_version <= self.version:
+            raise ValueError(
+                f"New mandate version {new_version} must be strictly greater than current {self.version}"
+            )
+        superseded_old = self.model_copy(update={"status": MandateStatus.SUPERSEDED})
+        active_new = Mandate(
+            mandate_id=self.mandate_id,
+            version=new_version,
+            principal_id=self.principal_id,
+            agent_id=self.agent_id,
+            single_limit_minor=(
+                single_limit_minor if single_limit_minor is not None else self.single_limit_minor
+            ),
+            instant_threshold_minor=(
+                instant_threshold_minor
+                if instant_threshold_minor is not None
+                else self.instant_threshold_minor
+            ),
+            lifetime_budget_minor=(
+                lifetime_budget_minor
+                if lifetime_budget_minor is not None
+                else self.lifetime_budget_minor
+            ),
+            currency=self.currency,
+            allowed_payees=allowed_payees if allowed_payees is not None else self.allowed_payees,
+            allowed_purposes=(
+                allowed_purposes if allowed_purposes is not None else self.allowed_purposes
+            ),
+            valid_from_utc=valid_from_utc if valid_from_utc is not None else self.valid_from_utc,
+            valid_until_utc=(
+                valid_until_utc if valid_until_utc is not None else self.valid_until_utc
+            ),
+            status=MandateStatus.ACTIVE,
+            key_id=key_id,
+            signature=signature,
+        )
+        return superseded_old, active_new
+
+    def revoke(self) -> "Mandate":
+        """Revoke the mandate, returning a revoked immutable copy without editing in place."""
+        return self.model_copy(update={"status": MandateStatus.REVOKED})

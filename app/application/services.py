@@ -93,6 +93,7 @@ class MandateService:
                 key_file_path=settings.mandate_signing_key_file,
             )
         self._mandates: dict[str, Mandate] = {}
+        self._history: dict[str, list[Mandate]] = {}
         self._lock = Lock()
         self._seed_default_mandate()
 
@@ -135,6 +136,7 @@ class MandateService:
             signature=sig,
         )
         self._mandates[mandate_id] = mandate
+        self._history[mandate_id] = [mandate]
 
     def get_active_mandate_for_agent(self, agent_id: str) -> Mandate | None:
         with self._lock:
@@ -187,6 +189,7 @@ class MandateService:
         )
         with self._lock:
             self._mandates[cmd.mandate_id] = mandate
+            self._history[cmd.mandate_id] = [mandate]
 
         return MandateResponseDTO(
             mandate_id=mandate.mandate_id,
@@ -205,6 +208,144 @@ class MandateService:
             key_id=mandate.key_id,
             signature=mandate.signature,
         )
+
+    def supersede_mandate(
+        self,
+        mandate_id: str,
+        *,
+        single_limit_minor: int | None = None,
+        instant_threshold_minor: int | None = None,
+        lifetime_budget_minor: int | None = None,
+        allowed_payees: list[str] | None = None,
+        allowed_purposes: list[str] | None = None,
+        valid_days: int | None = None,
+    ) -> MandateResponseDTO:
+        """Create a new version of an active mandate and mark the previous version SUPERSEDED.
+
+        Invariants:
+        - Old versions are never edited in place (frozen).
+        - Version numbers are strictly monotonic (+1).
+        """
+        with self._lock:
+            current = self._mandates.get(mandate_id)
+            if not current:
+                raise ValueError(f"Mandate {mandate_id} not found")
+            if current.status != MandateStatus.ACTIVE:
+                raise ValueError(f"Cannot supersede mandate {mandate_id} with status {current.status}")
+
+            now = self._clock.now_utc()
+            new_version = current.version + 1
+            valid_until = (
+                now + timedelta(days=valid_days) if valid_days is not None else current.valid_until_utc
+            )
+
+            effective_payees = (
+                allowed_payees if allowed_payees is not None else list(current.allowed_payees)
+            )
+            effective_purposes = (
+                allowed_purposes if allowed_purposes is not None else list(current.allowed_purposes)
+            )
+
+            signable_dict = {
+                "mandate_id": current.mandate_id,
+                "version": new_version,
+                "principal_id": current.principal_id,
+                "agent_id": current.agent_id,
+                "single_limit_minor": (
+                    single_limit_minor
+                    if single_limit_minor is not None
+                    else current.single_limit_minor
+                ),
+                "instant_threshold_minor": (
+                    instant_threshold_minor
+                    if instant_threshold_minor is not None
+                    else current.instant_threshold_minor
+                ),
+                "lifetime_budget_minor": (
+                    lifetime_budget_minor
+                    if lifetime_budget_minor is not None
+                    else current.lifetime_budget_minor
+                ),
+                "currency": current.currency,
+                "allowed_payees": effective_payees,
+                "allowed_purposes": effective_purposes,
+                "valid_from_utc": now.isoformat(),
+                "valid_until_utc": valid_until.isoformat(),
+                "status": MandateStatus.ACTIVE.value,
+                "key_id": self._key_id,
+            }
+            sig = sign_bytes(self._priv_key, canonical_json_bytes(signable_dict))
+
+            superseded_old, active_new = current.supersede(
+                new_version=new_version,
+                key_id=self._key_id,
+                signature=sig,
+                single_limit_minor=single_limit_minor,
+                instant_threshold_minor=instant_threshold_minor,
+                lifetime_budget_minor=lifetime_budget_minor,
+                allowed_payees=tuple(effective_payees),
+                allowed_purposes=tuple(effective_purposes),
+                valid_from_utc=now,
+                valid_until_utc=valid_until,
+            )
+
+            self._mandates[mandate_id] = active_new
+            if mandate_id not in self._history:
+                self._history[mandate_id] = []
+            self._history[mandate_id].append(active_new)
+
+            return MandateResponseDTO(
+                mandate_id=active_new.mandate_id,
+                version=active_new.version,
+                principal_id=active_new.principal_id,
+                agent_id=active_new.agent_id,
+                single_limit_minor=active_new.single_limit_minor,
+                instant_threshold_minor=active_new.instant_threshold_minor,
+                lifetime_budget_minor=active_new.lifetime_budget_minor,
+                currency=active_new.currency,
+                allowed_payees=list(active_new.allowed_payees),
+                allowed_purposes=list(active_new.allowed_purposes),
+                valid_from_utc=active_new.valid_from_utc,
+                valid_until_utc=active_new.valid_until_utc,
+                status=active_new.status,
+                key_id=active_new.key_id,
+                signature=active_new.signature,
+            )
+
+    def revoke_mandate(self, mandate_id: str) -> MandateResponseDTO:
+        """Revoke an active mandate. Returns the updated revoked mandate model."""
+        with self._lock:
+            current = self._mandates.get(mandate_id)
+            if not current:
+                raise ValueError(f"Mandate {mandate_id} not found")
+            revoked = current.revoke()
+            self._mandates[mandate_id] = revoked
+            if mandate_id not in self._history:
+                self._history[mandate_id] = []
+            self._history[mandate_id].append(revoked)
+
+            return MandateResponseDTO(
+                mandate_id=revoked.mandate_id,
+                version=revoked.version,
+                principal_id=revoked.principal_id,
+                agent_id=revoked.agent_id,
+                single_limit_minor=revoked.single_limit_minor,
+                instant_threshold_minor=revoked.instant_threshold_minor,
+                lifetime_budget_minor=revoked.lifetime_budget_minor,
+                currency=revoked.currency,
+                allowed_payees=list(revoked.allowed_payees),
+                allowed_purposes=list(revoked.allowed_purposes),
+                valid_from_utc=revoked.valid_from_utc,
+                valid_until_utc=revoked.valid_until_utc,
+                status=revoked.status,
+                key_id=revoked.key_id,
+                signature=revoked.signature,
+            )
+
+    def get_mandate_history(self, mandate_id: str) -> list[Mandate]:
+        """Retrieve complete immutable version history of a mandate."""
+        with self._lock:
+            return list(self._history.get(mandate_id, []))
 
     def verify_mandate_integrity(self, mandate: Mandate) -> bool:
         """Verify the Ed25519 signature seal of a mandate and ensure key_id binding."""
