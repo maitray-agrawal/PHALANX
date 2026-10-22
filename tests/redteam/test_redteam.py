@@ -10,9 +10,12 @@ import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
+from app.application.dtos import AuthorizationResponseDTO
+from app.application.grounding import GroundedExplanationValidator
 from app.domain.canonical_json import canonical_json_bytes
 from app.domain.mandates import Mandate, MandateStatus
 from app.domain.models import DecisionOutcome, escalate_decision
+from app.domain.policy import PolicyReasonCode
 from app.infrastructure.crypto import (
     generate_ed25519_keypair,
     get_key_id,
@@ -67,6 +70,68 @@ def test_a3_adversary_signal_cannot_downgrade_step_up_to_allow() -> None:
     manipulated_signal = DecisionOutcome.ALLOW
     outcome = escalate_decision(base=step_up, heuristic_or_ml_recommendation=manipulated_signal)
     assert outcome == DecisionOutcome.STEP_UP
+
+
+@pytest.mark.redteam
+def test_a4_grounding_rejects_hallucinated_amount() -> None:
+    """Catalog A4: Assistant explanation hallucinates wrong/inflated financial amount."""
+    validator = GroundedExplanationValidator()
+    record = AuthorizationResponseDTO(
+        request_id="req_a4_test",
+        decision=DecisionOutcome.ALLOW,
+        reasons=["Pre-authorized autonomous expense"],
+        reason_codes=[PolicyReasonCode.PRE_AUTHORIZED],
+        escalated=False,
+        event_id="evt_a4",
+        intent_digest="digest_a4",
+        evaluated_at_utc=datetime.now(UTC),
+        payout_id="sandbox_tx_a4",
+    )
+    # LLM hallucinates $50,000 instead of actual $50.00 (5000 cents)
+    hallucinated_explanation = (
+        "Your request req_a4_test was approved with decision ALLOW. "
+        "We successfully dispatched $50000.00 to vendor-paypal-sandbox-1."
+    )
+    valid, text = validator.validate_and_ground(
+        hallucinated_explanation,
+        record,
+        expected_recipient_id="vendor-paypal-sandbox-1",
+        expected_amount_minor=5000,
+    )
+    assert valid is False
+    assert "Decision: ALLOW for request req_a4_test" in text
+    assert "USD 50.00 to payee 'vendor-paypal-sandbox-1'" in text
+
+
+@pytest.mark.redteam
+def test_a5_grounding_rejects_hallucinated_payee() -> None:
+    """Catalog A5: Assistant explanation hallucinates unauthorized foreign recipient."""
+    validator = GroundedExplanationValidator()
+    record = AuthorizationResponseDTO(
+        request_id="req_a5_test",
+        decision=DecisionOutcome.ALLOW,
+        reasons=["Pre-authorized autonomous expense"],
+        reason_codes=[PolicyReasonCode.PRE_AUTHORIZED],
+        escalated=False,
+        event_id="evt_a5",
+        intent_digest="digest_a5",
+        evaluated_at_utc=datetime.now(UTC),
+        payout_id="sandbox_tx_a5",
+    )
+    # LLM hallucinates destination wallet
+    hallucinated_explanation = (
+        "Your request req_a5_test was approved with decision ALLOW. "
+        "The $50.00 was transferred to recipient evil-attacker-crypto-wallet."
+    )
+    valid, text = validator.validate_and_ground(
+        hallucinated_explanation,
+        record,
+        expected_recipient_id="vendor-paypal-sandbox-1",
+        expected_amount_minor=5000,
+    )
+    assert valid is False
+    assert "vendor-paypal-sandbox-1" in text
+    assert "evil-attacker-crypto-wallet" not in text
 
 
 @pytest.mark.redteam

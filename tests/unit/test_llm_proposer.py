@@ -34,7 +34,7 @@ def test_grounded_validator_accepts_accurate_explanation() -> None:
         evaluated_at_utc=datetime.now(UTC),
         payout_id="sandbox_123",
     )
-    explanation = "Transaction ALLOW for 50 dollars (5000 cents)."
+    explanation = "Transaction req_001 decision ALLOW for 50 dollars (5000 cents)."
     valid, output = validator.validate_and_ground(
         explanation, record, expected_recipient_id="vendor-1", expected_amount_minor=5000
     )
