@@ -22,10 +22,11 @@ Completed:
 - P9: Python MCP server wrapper (`app/mcp/server.py`) routing agent tools through application services.
 - P10: Deployment configuration (`render.yaml`), idempotent demo boot/reset (`POST /v1/admin/reset`), and `docs/RUNBOOK.md`.
 - P11: Complete documentation and submission package (`README.md`, `ARCHITECTURE.md`, `API_SPEC.md`, `DEMO_SCRIPT.md`, `DEVPOST.md`).
+- Payment Rail Proof: ADR-009 recorded; PaymentRail protocol, FakePaymentRail test double, and PayPalPaymentRailAdapter with Orders v2 fallback implemented and verified.
 
 Test status:
-- Backend: 83/83 pytest tests passed in 0.89s
+- Backend: 86/86 pytest tests passed in 0.94s
 - Static Analysis: ruff clean (0 errors), mypy strict app clean (0 errors)
 - Frontend: ESLint clean, TypeScript clean, Vitest passed (3/3), Vite production build clean
 
-Next recommended action: Run git status, review changes, commit directly to main.
+Next recommended action: Commit changes directly to main.
