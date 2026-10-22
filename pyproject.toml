@@ -11,7 +11,7 @@ dependencies = [
     "pydantic-settings==2.8.0",
     "sqlalchemy==2.0.38",
     "alembic==1.14.1",
-    "psycopg[binary]==3.2.4",
+    "psycopg[binary]==3.3.6",
     "httpx==0.28.1",
     "cryptography==44.0.1",
     "rfc8785==0.1.4",
