@@ -82,6 +82,10 @@ class Mandate(BaseModel):
     signature: str = Field(
         default="", description="Hex-encoded Ed25519 cryptographic signature seal"
     )
+    require_invoice_reference: bool = Field(
+        default=False,
+        description="Whether payments under this mandate require a non-empty invoice reference",
+    )
 
     @field_validator("valid_from_utc", "valid_until_utc")
     @classmethod
@@ -102,7 +106,7 @@ class Mandate(BaseModel):
 
     def to_signable_dict(self) -> dict[str, Any]:
         """Convert mandate fields (excluding signature) into a canonical dictionary for signing."""
-        return {
+        payload: dict[str, Any] = {
             "mandate_id": self.mandate_id,
             "version": self.version,
             "principal_id": self.principal_id,
@@ -118,6 +122,9 @@ class Mandate(BaseModel):
             "status": self.status.value,
             "key_id": self.key_id,
         }
+        if self.require_invoice_reference:
+            payload["require_invoice_reference"] = True
+        return payload
 
     def signable_bytes(self) -> bytes:
         """Serialize signable dictionary into RFC 8785 canonical JSON bytes."""

@@ -33,14 +33,14 @@ class DecisionOutcome(str, Enum):
                 return 3
 
 
-def escalate_decision(
+def guard_advisory_escalation(
     base: DecisionOutcome,
     heuristic_or_ml_recommendation: DecisionOutcome | None,
 ) -> DecisionOutcome:
-    """Escalate a decision based on an auxiliary ML or heuristic signal.
+    """Enforce one-way asymmetric escalation guard.
 
-    Crucial invariant: The signal can ONLY raise severity (ALLOW -> STEP_UP -> DENY),
-    never lower it.
+    Crucial invariant: Advisory signals can ONLY raise severity (ALLOW -> STEP_UP -> DENY),
+    never lower or soften it.
     """
     if heuristic_or_ml_recommendation is None:
         return base
@@ -48,6 +48,10 @@ def escalate_decision(
     if heuristic_or_ml_recommendation.severity > base.severity:
         return heuristic_or_ml_recommendation
     return base
+
+
+# Backward compatibility alias
+escalate_decision = guard_advisory_escalation
 
 
 @dataclass(frozen=True)
@@ -80,6 +84,7 @@ class TransactionIntent:
     purpose: str
     idempotency_key: str
     occurred_at_utc: datetime
+    invoice_reference: str | None = None
 
     def __post_init__(self) -> None:
         if not self.agent_id.strip():
@@ -90,6 +95,8 @@ class TransactionIntent:
             raise ValueError("idempotency_key cannot be blank")
         if self.occurred_at_utc.tzinfo is None:
             raise ValueError("occurred_at_utc must be timezone-aware UTC")
+        if self.invoice_reference is not None and not self.invoice_reference.strip():
+            raise ValueError("invoice_reference cannot be whitespace-only")
 
 
 @dataclass(frozen=True)
