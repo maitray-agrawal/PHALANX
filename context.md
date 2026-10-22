@@ -1,5 +1,5 @@
 # context.md
-Phase: P10 Complete   Branch: main   Last green CI: local-verified
+Phase: P12 Complete (Final Review & Submission Package Ready)   Branch: main   Last green CI: local-verified
 Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
 - app/domain: Pure deterministic policy engine, Ed25519 mandate invariants, canonical RFC 8785 JSON, cryptographic hash-chained ledger. AST purity test enforced.
 - app/application: AuthorizationService, MandateService, LedgerService, ProviderAgnosticLLMClient (quotas, timeouts, retries), IntentExtractor (delimiter isolation, strict Pydantic draft), GroundedExplanationValidator (hallucination rejection & templated fallback), PrincipalSessionMemory (rolling summary, N turns), DeterministicKnowledgeBase ("I do not know" boundary), CompositeAdvisoryPipeline (heuristics, Median/MAD velocity, synthetic TF-IDF + Logistic Regression).
@@ -7,7 +7,7 @@ Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
 - app/api: Complete FastAPI REST suite (/v1/payment-requests, /v1/mandates, /v1/decisions, /v1/approvals, /v1/ledger, /v1/ledger/verify, /v1/webhooks/paypal, /v1/admin/reset, /v1/auth/demo-token).
 - app/mcp: Model Context Protocol server exposing financial agent governance tools.
 - web: React + Vite + TypeScript dashboard in AstraX design system with 4 operational scenes (Request Console, Step-Up Approvals, Tamper-Evident Ledger, Active Mandate).
-- tests: 210 automated tests (unit, integration, concurrency, external failure, red-team A1-H2).
+- tests: 224 automated tests (unit, integration, concurrency, external failure, MCP parity, red-team A1-H2).
 
 Completed:
 - P0: Bootstrap layout, Dockerfile, docker-compose.yml, CI workflows, and AST domain purity test.
@@ -22,6 +22,7 @@ Completed:
 - P9: Official Python MCP SDK (`mcp==1.3.0`, FastMCP) exposing `request_payment` and `get_mandate_status` through `app/application`, authenticated strictly as agent identity (`Role.AGENT`), returning decision and pending-approval references only with zero credential leakage, red-team G1 test proving no alternate path, AstraX client example (`examples/astrax_mcp_client.py`), `docs/MCP_INTEGRATION.md`, and 100% decision parity between MCP and HTTP verified in `tests/integration/test_mcp_vs_http.py`.
 - P10: Hosted demo deployment pipeline on Render (`render.yaml`), idempotent boot script (`scripts/boot.py`), demo mandate valid until 31 Mar 2027, admin-token reset endpoint (`POST /v1/admin/reset` with `X-Admin-Token`), structured JSON logging with request IDs (`X-Request-ID`), external keepalive pinger (`scripts/pinger.py` and `.github/workflows/keepalive.yml`), deploy-on-green-CI GitHub Actions workflow with Render deploy hook, automated post-deploy smoke test runner (`scripts/post_deploy_smoke.py` validating Scene 1, Scene 2, Scene 3, and admin reset), `docs/DEPLOYMENT.md`, `docs/OBSERVABILITY.md`, updated `docs/RUNBOOK.md`, and Render free tier vs Starter plan evidence and PayPal sandbox longevity recorded in `docs/EVIDENCE.md`.
 - P11: Complete documentation and submission package (`README.md`, `ARCHITECTURE.md`, `API_SPEC.md`, `DEMO_SCRIPT.md`, `DEVPOST.md`).
+- P12: Comprehensive Independent Release Review & Audit (manual 56.41 vibe-code audit, 56.44 prove-it gate claim mapping, 56.36 fresh-machine installation test, Apache-2.0 license check, Bandit AST 0-issue security scan, git history credential scan, pinned `requirements.txt` / `requirements-dev.txt`, and publication of `docs/FINAL_REPORT.md` with Release Status `QUALIFIED_FOR_SUBMISSION` and Assessment Confidence `HIGH`).
 - Payment Rail Proof: ADR-009 recorded; PaymentRail protocol, FakePaymentRail test double, and PayPalPaymentRailAdapter with Orders v2 fallback implemented and verified.
 - Mandates & Applied Cryptography: Strict Pydantic Mandate model, RFC 8785 canonical JSON via `rfc8785==0.1.4`, Ed25519 signing/verification with key_id binding, immutable versioning (`supersede`/`revoke`), Hypothesis property testing, and threat catalog B1-B5 red-team tests.
 - Pure Decision Core: Exact Master Specification Section 5 rule order, `PolicyReasonCode` enum, `PolicyDecision(policy_version="1.0.0")`, pure `PolicyState`, purpose & invoice reference allowlists, lifetime budget caps, `guard_advisory_escalation()`, explicit request lifecycle state machine (`RECEIVED` to `CLOSED`), and 99% unit test coverage on `app/domain`.

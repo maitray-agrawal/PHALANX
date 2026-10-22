@@ -39,8 +39,9 @@ cd PHALANX
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-# Install dependencies
-pip install -r requirements.txt -r requirements-dev.txt && pip install -e .
+# Install dependencies (using pip with dev optional dependencies or requirements-dev.txt)
+pip install -e ".[dev]"
+# Or: pip install -r requirements.txt -r requirements-dev.txt && pip install -e .
 
 # Start PostgreSQL database (optional, in-memory ledger runs by default for tests)
 docker compose up -d db
@@ -62,13 +63,13 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 ## Running Verification & Tests
 
 ```bash
-# Run all 83 backend tests (unit, integration, and red-team)
+# Run all 224 backend tests (unit, integration, and red-team)
 pytest -q
 
-# Run adversarial red-team suite only
+# Run adversarial red-team suite only (61 threat catalog tests)
 pytest -q -m redteam
 
-# Run linters & typecheckers
+# Run linters, formatters, and typecheckers
 ruff check . && ruff format --check .
 mypy app
 
