@@ -24,7 +24,7 @@ dev = [
     "pytest-cov==6.0.0",
     "hypothesis==6.128.0",
     "ruff==0.9.7",
-    "mypy==1.15.0",
+    "mypy==2.4.0",
     "bandit==1.8.3",
 ]
 
