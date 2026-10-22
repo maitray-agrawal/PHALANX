@@ -1,7 +1,36 @@
 """API integration tests."""
 
+from unittest.mock import patch
+
 from fastapi import status
 from fastapi.testclient import TestClient
+
+
+def test_api_healthz_endpoint(client: TestClient) -> None:
+    response = client.get("/healthz")
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == {"status": "ok"}
+
+
+def test_api_readyz_endpoint_success(client: TestClient) -> None:
+    with patch("app.api.routes.check_database_readiness", return_value=(True, "connected")):
+        response = client.get("/readyz")
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["status"] == "ready"
+        assert data["database"] == "connected"
+
+
+def test_api_readyz_endpoint_failure(client: TestClient) -> None:
+    with patch(
+        "app.api.routes.check_database_readiness",
+        return_value=(False, "database unreachable: ConnectionRefusedError"),
+    ):
+        response = client.get("/readyz")
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        data = response.json()
+        assert data["status"] == "not_ready"
+        assert "unreachable" in data["database"]
 
 
 def test_api_health_endpoint(client: TestClient) -> None:

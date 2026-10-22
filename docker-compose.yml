@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: phalanx-db
+    container_name: phalanx-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: phalanx_admin
@@ -17,6 +17,27 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: phalanx-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - DATABASE_URL=postgresql+psycopg://phalanx_app:phalanx_app_password@db:5432/phalanx_db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
 volumes:
   postgres_data:
