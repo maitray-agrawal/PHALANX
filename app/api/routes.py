@@ -34,8 +34,8 @@ from app.application.services import (
     MandateService,
 )
 from app.domain.models import DecisionOutcome
+from app.domain.ports import PaymentRail
 from app.infrastructure.database import check_database_readiness
-from app.infrastructure.paypal import PaymentRail
 
 router = APIRouter()
 

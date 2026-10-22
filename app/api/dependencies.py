@@ -8,9 +8,10 @@ from app.application.services import (
     LedgerService,
     MandateService,
 )
+from app.domain.ports import PaymentRail
 from app.infrastructure.clock import SystemUtcClock
 from app.infrastructure.ledger import InMemoryLedgerAdapter
-from app.infrastructure.paypal import FakePaymentRail, PaymentRail
+from app.infrastructure.paypal import FakePaymentRail
 
 
 @lru_cache(maxsize=1)

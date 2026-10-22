@@ -37,14 +37,14 @@ from app.domain.policy import (
     PolicyState,
     evaluate_policy,
 )
-from app.domain.ports import ClockPort, LedgerPort
+from app.domain.ports import ClockPort, LedgerPort, PaymentRail
 from app.infrastructure.crypto import (
     generate_ed25519_keypair,
     get_key_id,
     sign_bytes,
     verify_signature,
 )
-from app.infrastructure.paypal import FakePaymentRail, PaymentRail
+from app.infrastructure.paypal import FakePaymentRail
 
 
 def compute_intent_digest(
