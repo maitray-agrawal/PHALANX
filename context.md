@@ -23,10 +23,11 @@ Completed:
 - P10: Deployment configuration (`render.yaml`), idempotent demo boot/reset (`POST /v1/admin/reset`), and `docs/RUNBOOK.md`.
 - P11: Complete documentation and submission package (`README.md`, `ARCHITECTURE.md`, `API_SPEC.md`, `DEMO_SCRIPT.md`, `DEVPOST.md`).
 - Payment Rail Proof: ADR-009 recorded; PaymentRail protocol, FakePaymentRail test double, and PayPalPaymentRailAdapter with Orders v2 fallback implemented and verified.
+- Mandates & Applied Cryptography: Strict Pydantic Mandate model, RFC 8785 canonical JSON via `rfc8785==0.1.4`, Ed25519 signing/verification with key_id binding, immutable versioning (`supersede`/`revoke`), Hypothesis property testing, and threat catalog B1-B5 red-team tests.
 
 Test status:
-- Backend: 86/86 pytest tests passed in 0.94s
-- Static Analysis: ruff clean (0 errors), mypy strict app clean (0 errors)
+- Backend: 108/108 pytest tests passed in 1.08s (including 44 red-team adversarial tests)
+- Static Analysis: ruff clean (0 errors), mypy strict app/domain clean (0 errors across 25 source files)
 - Frontend: ESLint clean, TypeScript clean, Vitest passed (3/3), Vite production build clean
 
 Next recommended action: Commit changes directly to main.
