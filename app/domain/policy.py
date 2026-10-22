@@ -1,9 +1,10 @@
 """Pure deterministic policy engine for PHALANX.
 
 Invariants:
-- Zero I/O, no clock, no randomness.
-- Strict precedence order.
-- One-way escalation: advisory signals can only raise risk, never lower it.
+- Zero I/O, no clock, no randomness (time and state injected).
+- Strict rule order adhering exactly to Master Specification Section 5.
+- One-way escalation: advisory signals can only raise risk, never soften it.
+- State arrives as a plain, immutable object.
 """
 
 from dataclasses import dataclass
@@ -11,28 +12,36 @@ from datetime import datetime
 from enum import Enum
 
 from app.domain.mandates import Mandate, MandateStatus
-from app.domain.models import DecisionOutcome, TransactionIntent, escalate_decision
+from app.domain.models import (
+    DecisionOutcome,
+    TransactionIntent,
+    guard_advisory_escalation,
+)
 
 
 class PolicyReasonCode(str, Enum):
+    IDEMPOTENCY_REPLAY = "IDEMPOTENCY_REPLAY"
+    IDEMPOTENCY_MISMATCH = "IDEMPOTENCY_MISMATCH"
     MANDATE_INACTIVE = "MANDATE_INACTIVE"
-    MANDATE_EXPIRED = "MANDATE_EXPIRED"
     MANDATE_NOT_YET_VALID = "MANDATE_NOT_YET_VALID"
+    MANDATE_EXPIRED = "MANDATE_EXPIRED"
     CURRENCY_MISMATCH = "CURRENCY_MISMATCH"
     PAYEE_UNAUTHORIZED = "PAYEE_UNAUTHORIZED"
     PURPOSE_UNAUTHORIZED = "PURPOSE_UNAUTHORIZED"
+    INVOICE_REFERENCE_REQUIRED = "INVOICE_REFERENCE_REQUIRED"
     LIFETIME_BUDGET_EXCEEDED = "LIFETIME_BUDGET_EXCEEDED"
     SINGLE_LIMIT_EXCEEDED = "SINGLE_LIMIT_EXCEEDED"
     INSTANT_THRESHOLD_EXCEEDED = "INSTANT_THRESHOLD_EXCEEDED"
-    IDEMPOTENCY_MISMATCH = "IDEMPOTENCY_MISMATCH"
-    IDEMPOTENCY_REPLAY = "IDEMPOTENCY_REPLAY"
-    RISK_ESCALATED = "RISK_ESCALATED"
     PRE_AUTHORIZED = "PRE_AUTHORIZED"
+    RISK_ESCALATED = "RISK_ESCALATED"
 
 
 @dataclass(frozen=True)
 class PolicyState:
-    """Current cumulative financial state of the agent under a mandate."""
+    """Current cumulative financial state of the agent under a mandate.
+
+    Plain object: zero database, network, clock, or randomness inside.
+    """
 
     lifetime_spent_minor: int
     rolling_24h_spent_minor: int
@@ -59,7 +68,21 @@ def evaluate_policy(
     advisory_signal: DecisionOutcome | None = None,
     intent_digest: str | None = None,
 ) -> PolicyDecision:
-    """Evaluate a transaction intent deterministically against mandate and state."""
+    """Evaluate a transaction intent deterministically against mandate and state.
+
+    Rule order (Master Specification Section 5):
+    1. Idempotency Check (replay vs parameter tampering)
+    2. Mandate Status Check (ACTIVE)
+    3. Temporal Validity Check (valid_from <= now <= valid_until)
+    4. Currency Check (ISO 4217 match)
+    5. Payee Allowlist Check (if configured)
+    6. Purpose Allowlist Check (if configured)
+    7. Invoice Reference Check (if required by mandate)
+    8. Lifetime Budget Cap Check (lifetime_spent + amount <= budget)
+    9. Single Transaction Limit Check (amount <= single_limit)
+    10. Instant Threshold Check (amount <= instant_threshold -> ALLOW, else STEP_UP)
+    11. Advisory Signal Escalation Guard (one-way tightening: ALLOW -> STEP_UP -> DENY)
+    """
     reasons: list[str] = []
     codes: list[PolicyReasonCode] = []
 
@@ -146,7 +169,18 @@ def evaluate_policy(
             evaluated_at_utc=now_utc,
         )
 
-    # 7. Lifetime budget check
+    # 7. Invoice reference check
+    if mandate.require_invoice_reference:
+        if not intent.invoice_reference or not intent.invoice_reference.strip():
+            return PolicyDecision(
+                outcome=DecisionOutcome.DENY,
+                reasons=("Mandate requires an invoice reference, but none was provided",),
+                reason_codes=(PolicyReasonCode.INVOICE_REFERENCE_REQUIRED,),
+                escalated_from=None,
+                evaluated_at_utc=now_utc,
+            )
+
+    # 8. Lifetime budget check
     new_lifetime_spent = state.lifetime_spent_minor + intent.money.amount_minor
     if new_lifetime_spent > mandate.lifetime_budget_minor:
         return PolicyDecision(
@@ -160,7 +194,7 @@ def evaluate_policy(
             evaluated_at_utc=now_utc,
         )
 
-    # 8. Single transaction limit check
+    # 9. Single transaction limit check
     if intent.money.amount_minor > mandate.single_limit_minor:
         base_decision = DecisionOutcome.DENY
         reasons.append(
@@ -180,8 +214,8 @@ def evaluate_policy(
         reasons.append("Amount within pre-authorized autonomous limits")
         codes.append(PolicyReasonCode.PRE_AUTHORIZED)
 
-    # 9. Asymmetric advisory signal escalation
-    final_decision = escalate_decision(base_decision, advisory_signal)
+    # 10. Advisory signal escalation guard
+    final_decision = guard_advisory_escalation(base_decision, advisory_signal)
     escalated = final_decision != base_decision
     if escalated:
         reasons.append(
@@ -196,3 +230,7 @@ def evaluate_policy(
         escalated_from=base_decision if escalated else None,
         evaluated_at_utc=now_utc,
     )
+
+
+# Standard functional alias matching evaluate(intent, mandate, state, now)
+evaluate = evaluate_policy
