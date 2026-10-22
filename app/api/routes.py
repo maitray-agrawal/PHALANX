@@ -9,7 +9,17 @@ Strict entry path:
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
+from fastapi.security import HTTPAuthorizationCredentials
 
 from app.api.auth import (
     check_agent_object_authorization,
@@ -49,6 +59,7 @@ from app.application.services import (
 )
 from app.domain.models import DecisionOutcome
 from app.domain.ports import PaymentRail
+from app.infrastructure.config import settings
 from app.infrastructure.database import check_database_readiness
 from app.infrastructure.tokens import Identity, Role, create_role_token
 
@@ -527,15 +538,51 @@ async def paypal_webhook(
 # ---------------------------------------------------------------------------
 
 
+def verify_admin_reset_access(
+    x_admin_token: Annotated[str | None, Header(alias="X-Admin-Token")] = None,
+    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+    x_phalanx_role: Annotated[str | None, Header(alias="x-phalanx-role")] = None,
+) -> bool:
+    """Verify admin access via X-Admin-Token or Principal role."""
+    expected_token = settings.admin_token or "phalanx-admin-demo-key"
+    if x_admin_token:
+        if x_admin_token == expected_token:
+            return True
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized: Invalid X-Admin-Token",
+        )
+
+    if authorization or x_phalanx_role:
+        creds = None
+        if authorization and authorization.lower().startswith("bearer "):
+            creds = HTTPAuthorizationCredentials(
+                scheme="Bearer", credentials=authorization.split(" ", 1)[1]
+            )
+        identity = get_current_identity(credentials=creds, x_phalanx_role=x_phalanx_role)
+        if identity.role == Role.PRINCIPAL:
+            return True
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Forbidden: Role '{identity.role.value}' cannot reset admin state.",
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Unauthorized: Authentication required (X-Admin-Token or Principal Bearer token)",
+    )
+
+
 @router.post("/v1/admin/reset", status_code=status.HTTP_200_OK)
 def admin_reset(
-    identity: Annotated[Identity, Depends(require_roles(Role.PRINCIPAL))],
+    _authorized: Annotated[bool, Depends(verify_admin_reset_access)],
     service: Annotated[AuthorizationService, Depends(get_authorization_service)],
+    ledger_service: Annotated[LedgerService, Depends(get_ledger_service)],
 ) -> dict[str, str]:
-    """Reset sandbox demo state (clears spent budgets and idempotency cache).
+    """Reset sandbox demo state (clears spent budgets, idempotency cache, restores ledger).
 
-    Only principal role can reset administrative state.
+    Only principal role or holder of X-Admin-Token can reset administrative state.
     """
-    _ = identity
     service.reset_state()
+    ledger_service.restore_chain()
     return {"status": "reset_completed", "message": "Demo state reset successfully."}

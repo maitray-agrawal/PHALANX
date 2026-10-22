@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     # Security: No secret defaults! Must be supplied via environment/.env
     secret_key: str = Field(default="")
+    admin_token: str = Field(default="", description="Token for administrative endpoints")
     paypal_client_id: str = Field(default="")
     paypal_client_secret: str = Field(default="")
     paypal_webhook_id: str = Field(default="")

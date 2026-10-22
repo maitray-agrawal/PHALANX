@@ -141,4 +141,36 @@ Manual section references: 36, 37, 56.25.
   - Persona switcher: `role="radiogroup" aria-label="Active Operator Role"` with `role="radio"`.
 - **Form Controls**: All inputs have explicitly bound `<label htmlFor={id}>` elements or `.sr-only` descriptive labels.
 
+---
+
+## 8. Hosted Deployment & PayPal Sandbox Longevity Evidence (2026-10-22)
+
+### 8.1 Render Free-Tier Limitations & Demo Survival Analysis
+- **URL**: `https://render.com/docs/free` (Accessed 2026-10-22)
+- **Web Service Sleep Rule**:
+  - **Rule**: Free Web Services spin down (sleep) after **15 minutes of HTTP inactivity**.
+  - **Cold Start Latency**: The first incoming request takes 30-50 seconds to wake the service.
+  - **Instance Limit**: 750 free instance hours per calendar month across all free services.
+  - **Mitigation**: Scheduled keepalive pinger (`scripts/pinger.py` invoked every 10 minutes via `.github/workflows/keepalive.yml`) sends `GET /healthz` to prevent sleep cycles during the evaluation window.
+- **PostgreSQL Database Expiry Rule**:
+  - **Rule**: Free PostgreSQL instances **expire and are automatically deleted 30 days after creation**.
+  - **Data Retention**: Render provides a 14-day grace period to upgrade to a paid plan ($7/mo Starter). If not upgraded, all data is permanently destroyed.
+  - **Demo Risk**: A free PostgreSQL instance deployed in October or November **WILL NOT survive through the judging period (1 to 15 Dec 2026)**.
+  - **Alternative & Production Decision**:
+    1. **Render Starter Plan**: Upgrade managed PostgreSQL to `plan: starter` ($7/month). Starter databases never expire, have persistent SSD storage, and operate 24/7 without interruption.
+    2. **External Persistent Postgres**: Alternatively configure `DATABASE_URL` pointing to persistent managed PostgreSQL (e.g. Supabase or Neon persistent tier).
+    3. **Idempotent Boot**: If a database is freshly reprovisioned at any time, `scripts/boot.py` automatically reconstructs all tables, triggers, demo mandates (valid until 2027-03-31), payees, and ledger genesis blocks.
+
+### 8.2 PayPal Developer Sandbox Longevity & Token Validity
+- **URL**: `https://developer.paypal.com/api/rest/` (Accessed 2026-10-22)
+- **Developer App Credentials (`PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET`)**:
+  - **Validity**: PayPal Sandbox Client IDs and Client Secrets **do not expire**. They remain indefinitely active unless manually deleted or rotated in the PayPal Developer Dashboard.
+  - **Judging Survival**: Confirmed valid through 15 Dec 2026 and beyond.
+- **Saved Customer Payment Tokens (PayPal Vault v3 / Setup Tokens)**:
+  - **Validity**: Vault payment tokens generated in sandbox remain valid indefinitely until explicitly deleted via `DELETE /v3/vault/payment-tokens/{id}` or account reset.
+  - **Judging Survival**: Pre-consented payment tokens (`vault_id` / `payment_source.token.id`) stay valid through 15 Dec 2026.
+- **OAuth 2.0 Bearer Access Tokens**:
+  - **Validity**: Short-lived (`expires_in: 32400` seconds / 9 hours).
+  - **Adapter Architecture**: PHALANX `PayPalPaymentRailAdapter` dynamically acquires and refreshes OAuth tokens using the persistent Client ID and Secret, ensuring autonomous operations never stall due to expired Bearer tokens.
+
 

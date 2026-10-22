@@ -9,7 +9,7 @@ Invariants:
 """
 
 import hashlib
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from threading import Lock
 from typing import Any
 
@@ -99,6 +99,10 @@ class MandateService:
         """Seed a standard operational demo mandate."""
         now = self._clock.now_utc()
         mandate_id = "mandate_default_astra"
+        valid_until = max(
+            now + timedelta(days=365),
+            datetime(2027, 3, 31, 23, 59, 59, tzinfo=UTC),
+        )
         payload = {
             "mandate_id": mandate_id,
             "version": 1,
@@ -111,7 +115,7 @@ class MandateService:
             "allowed_payees": [],
             "allowed_purposes": [],
             "valid_from_utc": (now - timedelta(days=1)).isoformat(),
-            "valid_until_utc": (now + timedelta(days=365)).isoformat(),
+            "valid_until_utc": valid_until.isoformat(),
             "status": MandateStatus.ACTIVE.value,
             "key_id": self._key_id,
         }
@@ -128,7 +132,7 @@ class MandateService:
             allowed_payees=(),
             allowed_purposes=(),
             valid_from_utc=now - timedelta(days=1),
-            valid_until_utc=now + timedelta(days=365),
+            valid_until_utc=valid_until,
             status=MandateStatus.ACTIVE,
             key_id=self._key_id,
             signature=sig,
@@ -644,6 +648,7 @@ class AuthorizationService:
             self._idempotency_records.clear()
             self._pending_step_ups.clear()
             self._responses_by_id.clear()
+            self._seed_default_step_up()
 
 
 class LedgerService:

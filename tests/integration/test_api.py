@@ -106,3 +106,39 @@ def test_api_rejects_extra_fields_strictly(client: TestClient) -> None:
     )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
     assert response.headers["content-type"] == "application/problem+json"
+
+
+def test_admin_reset_with_admin_token(client: TestClient) -> None:
+    """Verify admin reset succeeds with X-Admin-Token header."""
+    resp = client.post(
+        "/v1/admin/reset",
+        headers={"X-Admin-Token": "phalanx-admin-demo-key"},
+    )
+    assert resp.status_code == status.HTTP_200_OK
+    assert resp.json()["status"] == "reset_completed"
+
+
+def test_admin_reset_with_invalid_token_fails(client: TestClient) -> None:
+    """Verify admin reset fails with invalid X-Admin-Token."""
+    resp = client.post(
+        "/v1/admin/reset",
+        headers={"X-Admin-Token": "wrong-secret-token"},
+    )
+    assert resp.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+def test_admin_reset_with_principal_role(client: TestClient) -> None:
+    """Verify admin reset succeeds with principal role token."""
+    resp = client.post(
+        "/v1/admin/reset",
+        headers={"Authorization": "Bearer demo-principal"},
+    )
+    assert resp.status_code == status.HTTP_200_OK
+    assert resp.json()["status"] == "reset_completed"
+
+
+def test_request_id_header_propagated(client: TestClient) -> None:
+    """Verify X-Request-ID header is generated or preserved on responses."""
+    resp = client.get("/healthz", headers={"X-Request-ID": "custom-req-id-12345"})
+    assert resp.status_code == status.HTTP_200_OK
+    assert resp.headers.get("X-Request-ID") == "custom-req-id-12345"

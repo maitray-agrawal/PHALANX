@@ -7,6 +7,7 @@ from app.api.middleware import (
     BodySizeLimitMiddleware,
     LogRedactionFilter,
     RateLimitMiddleware,
+    RequestIdAndStructuredLoggingMiddleware,
     SecurityHeadersMiddleware,
     register_exception_handlers,
 )
@@ -28,7 +29,8 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
     )
 
-    # Security middlewares
+    # Security & observability middlewares
+    app.add_middleware(RequestIdAndStructuredLoggingMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(BodySizeLimitMiddleware)
     app.add_middleware(RateLimitMiddleware)
@@ -44,6 +46,15 @@ def create_app() -> FastAPI:
 
     register_exception_handlers(app)
     app.include_router(router)
+
+    from pathlib import Path
+
+    dist_dir = Path(__file__).resolve().parent.parent / "web" / "dist"
+    if dist_dir.exists():
+        from starlette.staticfiles import StaticFiles
+
+        app.mount("/", StaticFiles(directory=str(dist_dir), html=True), name="static_frontend")
+
     return app
 
 

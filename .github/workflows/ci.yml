@@ -74,3 +74,41 @@ jobs:
       - name: Build
         working-directory: ./web
         run: npm run build
+
+  deploy:
+    name: Trigger Render Deployment
+    needs: [backend-checks, frontend-checks]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render Deploy Hook
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          if [ -n "$RENDER_DEPLOY_HOOK" ]; then
+            echo "Triggering Render deployment from main on green CI..."
+            curl -f -X POST "$RENDER_DEPLOY_HOOK"
+            echo "Render deploy hook triggered successfully."
+          else
+            echo "RENDER_DEPLOY_HOOK secret not configured; skipping automatic deploy trigger."
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Post-Deploy Smoke Test
+        env:
+          PHALANX_TARGET_URL: ${{ secrets.PHALANX_TARGET_URL }}
+          PHALANX_ADMIN_TOKEN: ${{ secrets.PHALANX_ADMIN_TOKEN }}
+        run: |
+          if [ -n "$PHALANX_TARGET_URL" ]; then
+            echo "Waiting 45s for Render service to finish rollout..."
+            sleep 45
+            python scripts/post_deploy_smoke.py --url "$PHALANX_TARGET_URL" --admin-token "${PHALANX_ADMIN_TOKEN:-phalanx-admin-demo-key}"
+          else
+            echo "PHALANX_TARGET_URL not configured; skipping remote smoke test."
+          fi

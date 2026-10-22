@@ -1,0 +1,29 @@
+name: Render Demo Keepalive
+
+on:
+  schedule:
+    # Run every 10 minutes to prevent Render free instance 15-minute sleep
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  keepalive-ping:
+    name: Ping PHALANX Deployment
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run Keepalive Pinger
+        env:
+          PHALANX_TARGET_URL: ${{ secrets.PHALANX_TARGET_URL }}
+        run: |
+          if [ -n "$PHALANX_TARGET_URL" ]; then
+            python scripts/pinger.py --url "$PHALANX_TARGET_URL"
+          else
+            echo "PHALANX_TARGET_URL secret not configured; skipping keepalive ping."
+          fi

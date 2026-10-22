@@ -1,8 +1,10 @@
 """Security middleware, rate limiting, size limits, and RFC 7807 Problem+JSON handlers."""
 
+import json
 import logging
 import re
 import time
+import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
 
@@ -17,6 +19,35 @@ MAX_REQUEST_BODY_BYTES = 64 * 1024
 # Per-identity rate limit: 120 requests per minute
 RATE_LIMIT_MAX_REQUESTS = 120
 RATE_LIMIT_WINDOW_SECONDS = 60
+
+
+class RequestIdAndStructuredLoggingMiddleware(BaseHTTPMiddleware):
+    """Assigns X-Request-ID and emits structured JSON access logs with execution latency."""
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        request_id = request.headers.get("x-request-id") or f"req_{uuid.uuid4().hex[:16]}"
+        request.state.request_id = request_id
+
+        start_time = time.perf_counter()
+        client_ip = request.client.host if request.client else "unknown"
+
+        response: Response = await call_next(request)
+
+        duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+        response.headers["X-Request-ID"] = request_id
+
+        log_payload = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": response.status_code,
+            "latency_ms": duration_ms,
+            "client_ip": client_ip,
+        }
+        logging.getLogger("phalanx.access").info(json.dumps(log_payload))
+
+        return response
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
