@@ -1,13 +1,25 @@
-"""Main entry point for the PHALANX application."""
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.middleware import (
+    BodySizeLimitMiddleware,
+    LogRedactionFilter,
+    RateLimitMiddleware,
+    SecurityHeadersMiddleware,
+    register_exception_handlers,
+)
 from app.api.routes import router
 
 
 def create_app() -> FastAPI:
     """Application factory for PHALANX."""
+    # Configure logging with redaction
+    logging.basicConfig(level=logging.INFO)
+    root_logger = logging.getLogger()
+    root_logger.addFilter(LogRedactionFilter())
+
     app = FastAPI(
         title="PHALANX",
         description="Authorization & Governance Layer for Autonomous Financial Agents",
@@ -15,6 +27,11 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
     )
+
+    # Security middlewares
+    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(BodySizeLimitMiddleware)
+    app.add_middleware(RateLimitMiddleware)
 
     # Restrictive CORS configuration
     app.add_middleware(
@@ -25,6 +42,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    register_exception_handlers(app)
     app.include_router(router)
     return app
 
@@ -34,4 +52,4 @@ app = create_app()
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
