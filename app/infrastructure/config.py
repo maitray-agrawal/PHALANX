@@ -1,4 +1,7 @@
-"""Configuration and environment settings."""
+"""Configuration and environment settings with strict security boundaries.
+
+Rule: No secret defaults in code. Secrets must be injected via environment.
+"""
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -15,13 +18,13 @@ class Settings(BaseSettings):
 
     environment: str = Field(default="development")
     log_level: str = Field(default="INFO")
-    secret_key: str = Field(default="insecure-dev-key-must-be-changed-in-production")
     allowed_hosts: str = Field(default="*")
     database_url: str = Field(
         default="postgresql+psycopg://phalanx_app:phalanx_app_password@localhost:5432/phalanx_db"
     )
 
-    # PayPal Sandbox Configuration
+    # Security: No secret defaults! Must be supplied via environment/.env
+    secret_key: str = Field(default="")
     paypal_client_id: str = Field(default="")
     paypal_client_secret: str = Field(default="")
     paypal_webhook_id: str = Field(default="")
