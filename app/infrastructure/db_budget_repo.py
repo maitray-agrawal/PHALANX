@@ -11,6 +11,7 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.infrastructure.models import (
@@ -83,7 +84,20 @@ class BudgetRepository:
                 created_at_utc=now,
                 updated_at_utc=now,
             )
-            self.session.add(budget)
+            try:
+                with self.session.begin_nested():
+                    self.session.add(budget)
+                    self.session.flush()
+                return budget
+            except IntegrityError:
+                existing = self.session.scalar(stmt)
+                if existing:
+                    return existing
+                raise
+        elif budget.allocated_minor != allocated_minor or budget.mandate_id != mandate_id:
+            budget.allocated_minor = allocated_minor
+            budget.mandate_id = mandate_id
+            budget.updated_at_utc = datetime.now(UTC)
             self.session.flush()
         return budget
 
@@ -164,10 +178,7 @@ class BudgetRepository:
                 f"cap {budget.allocated_minor}"
             )
 
-        # 4. Atomic increment
-        budget.reserved_minor += amount_minor
-        budget.updated_at_utc = datetime.now(UTC)
-
+        # 4. Atomic increment and savepoint-protected reservation insert (F4)
         reservation_id = f"res_{uuid.uuid4().hex[:16]}"
         now = datetime.now(UTC)
         reservation = BudgetReservationModel(
@@ -180,9 +191,44 @@ class BudgetRepository:
             created_at_utc=now,
             updated_at_utc=now,
         )
-        self.session.add(reservation)
-        self.session.flush()
-        return reservation
+
+        try:
+            with self.session.begin_nested():
+                budget.reserved_minor += amount_minor
+                budget.updated_at_utc = now
+                self.session.add(reservation)
+                self.session.flush()
+            return reservation
+        except IntegrityError as err:
+            # Concurrent duplicate request hit unique constraint on idempotency_key
+            # Savepoint rollback reverted budget.reserved_minor; now query existing record
+            existing_rec = self.session.scalar(
+                select(IdempotencyModel).where(IdempotencyModel.idempotency_key == idempotency_key)
+            )
+            if existing_rec:
+                if existing_rec.intent_digest != intent_digest:
+                    raise IdempotencyMismatchError(
+                        f"Idempotency key '{idempotency_key}' reused with mutated parameters."
+                    ) from err
+                raise IdempotencyReplayError(existing_rec) from err
+
+            existing_res_concurrent = self.session.scalar(
+                select(BudgetReservationModel).where(
+                    BudgetReservationModel.idempotency_key == idempotency_key
+                )
+            )
+            if existing_res_concurrent:
+                raise IdempotencyReplayError(
+                    IdempotencyModel(
+                        idempotency_key=idempotency_key,
+                        agent_id=agent_id,
+                        intent_digest=intent_digest,
+                        decision="PENDING",
+                        response_payload="",
+                        created_at_utc=existing_res_concurrent.created_at_utc,
+                    )
+                ) from err
+            raise
 
     def confirm_reservation(self, reservation_id: str) -> BudgetReservationModel:
         """Confirm settlement of a reservation, moving reserved funds to spent."""
@@ -262,6 +308,38 @@ class BudgetRepository:
         self.session.flush()
         return res
 
+    def reconcile_reservation(
+        self,
+        reservation_id: str,
+        rail_status: str,
+    ) -> BudgetReservationModel:
+        """Reconcile a reservation against payment rail outcome (Manual 56.13, 56.17).
+
+        Outcomes:
+        - Confirmed success: confirms reservation -> CONFIRMED
+        - Confirmed failure: releases reservation -> RELEASED
+        - Still unknown: holds reservation in RECONCILE
+        """
+        status_norm = (rail_status or "UNKNOWN").upper()
+        CONFIRMED_SUCCESS = {"SUCCESS", "COMPLETED", "CONFIRMED", "SETTLED"}
+        CONFIRMED_FAILURE = {
+            "FAILED",
+            "DENIED",
+            "REJECTED",
+            "PAYOUT_REJECTED",
+            "FALLBACK_FAILED",
+            "CANCELED",
+            "RETURNED",
+            "LOOKUP_FAILED",
+        }
+
+        if status_norm in CONFIRMED_SUCCESS:
+            return self.confirm_reservation(reservation_id)
+        elif status_norm in CONFIRMED_FAILURE:
+            return self.release_reservation(reservation_id, confirmed_failure=True)
+        else:
+            return self.release_reservation(reservation_id, confirmed_failure=False)
+
     def record_decision(
         self,
         idempotency_key: str,
@@ -279,9 +357,30 @@ class BudgetRepository:
             response_payload=response_payload,
             created_at_utc=datetime.now(UTC),
         )
-        self.session.add(record)
-        self.session.flush()
-        return record
+        try:
+            with self.session.begin_nested():
+                self.session.add(record)
+                self.session.flush()
+            return record
+        except IntegrityError:
+            existing = self.session.scalar(
+                select(IdempotencyModel).where(IdempotencyModel.idempotency_key == idempotency_key)
+            )
+            if existing:
+                return existing
+            raise
+
+    def get_budget(self, agent_id: str) -> AgentBudgetModel | None:
+        """Fetch agent budget row if it exists."""
+        stmt = select(AgentBudgetModel).where(AgentBudgetModel.agent_id == agent_id)
+        return self.session.scalar(stmt)
+
+    def get_spent_budget(self, agent_id: str) -> int:
+        """Fetch total spent + reserved budget for an agent."""
+        budget = self.get_budget(agent_id)
+        if not budget:
+            return 0
+        return budget.spent_minor + budget.reserved_minor
 
     def create_step_up_approval(
         self,

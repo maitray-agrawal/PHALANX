@@ -507,6 +507,39 @@ def restore_ledger(
 
 
 # ---------------------------------------------------------------------------
+# Ambiguous-Outcome Reconciliation Endpoints (GET /v1/reconcile, POST /v1/reconcile/{id})
+# ---------------------------------------------------------------------------
+
+
+@router.get("/v1/reconcile", response_model=list[dict[str, Any]], status_code=status.HTTP_200_OK)
+def list_reconcile_items(
+    identity: Annotated[Identity, Depends(get_current_identity)],
+    service: Annotated[AuthorizationService, Depends(get_authorization_service)],
+) -> list[dict[str, Any]]:
+    """List payment requests currently held in ambiguous RECONCILE state."""
+    _ = identity
+    return service.get_held_reservations()
+
+
+@router.post("/v1/reconcile/{request_id}", status_code=status.HTTP_200_OK)
+def reconcile_request(
+    request_id: str,
+    payload: dict[str, Any],
+    identity: Annotated[Identity, Depends(get_current_identity)],
+    service: Annotated[AuthorizationService, Depends(get_authorization_service)],
+) -> dict[str, Any]:
+    """Reconcile an ambiguous payment request outcome against confirmed rail status."""
+    if identity.role not in (Role.APPROVER, Role.PRINCIPAL, Role.AUDITOR):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Forbidden: Role '{identity.role.value}' cannot reconcile payments.",
+        )
+    rail_status = payload.get("status")
+    new_state = service.reconcile(request_id, rail_status=rail_status)
+    return {"request_id": request_id, "state": new_state.value}
+
+
+# ---------------------------------------------------------------------------
 # PayPal Webhook Ingestion (POST /v1/webhooks/paypal)
 # ---------------------------------------------------------------------------
 

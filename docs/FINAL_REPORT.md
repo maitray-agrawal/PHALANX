@@ -69,15 +69,15 @@ The installation procedure documented in `README.md` was followed strictly from 
    - **Pre-Audit Finding**: `requirements.txt` and `requirements-dev.txt` were absent because dependencies were specified in `pyproject.toml`. A user executing the exact README text would have failed.
    - **Resolution**: Created pinned `requirements.txt` and `requirements-dev.txt` matching `pyproject.toml` (DECISIONS.md D-009, D-011, D-013, D-014, D-015) and updated `README.md` to document both commands.
 3. `python -m pip check`: **Passed** (No broken requirements found).
-4. `uv run pytest -q`: **Passed** (237/237 passed in 12.51s).
-5. `uv run pytest -q -m redteam`: **Passed** (67/67 passed in 4.32s).
+4. `uv run pytest -q`: **Passed** (245/245 passed in 13.77s).
+5. `uv run pytest -q -m redteam`: **Passed** (67/67 passed in 2.34s).
 6. `uv run ruff check . && uv run ruff format --check . && uv run mypy app`: **Passed** (All checks passed, 76 files formatted, 0 type errors in 38 source files).
 7. `cd web && npm run lint && npx tsc --noEmit && npm test -- --run && npm run build`:
    - **Lint**: **Passed** (0 ESLint errors).
    - **TypeScript**: **Passed** (`tsc --noEmit` clean).
-   - **Unit Tests**: **Passed** (6/6 Vitest tests passed in 1.89s).
-   - **Build**: **Passed** (Vite production bundle generated in `web/dist`).
-   - **Observation**: React test runner logged warning regarding `act(...)` wrapping during simulated asynchronous state updates in Vitest. All 6 tests assert and pass. Rollup noted vendor chunk is 1.2MB due to AG Grid bundling.
+   - **Unit Tests**: **Passed** (11/11 Vitest tests passed across 2 suites in 1.76s).
+   - **Build**: **Passed** (Vite production bundle generated in `web/dist` in 7.87s).
+   - **Observation**: React test runner logged warning regarding `act(...)` wrapping during simulated asynchronous state updates in Vitest. All 11 tests assert and pass. Rollup noted vendor chunk is 1.2MB due to AG Grid bundling.
 
 ---
 
@@ -122,21 +122,21 @@ In accordance with hackathon rules and truthfulness requirements, the 'Built wit
   - F1 (Step-up retry / final idempotency): `execute_approval()` persists final decision in `_idempotency_records`; replayed requests return cached decision without duplicate payment dispatch or budget deduction.
   - F2 (`confirm_reservation` state guard): In `db_budget_repo.py`, rejected confirmations on non-PENDING/RECONCILE reservations (`InvalidApprovalStateError`).
   - F3 (`release_reservation` state guard): In `db_budget_repo.py`, rejected releases on CONFIRMED reservations (`ValueError`) and duplicate releases (`InvalidApprovalStateError`).
-  - F4 (Reservation/idempotency atomicity): In `db_budget_repo.py`, pre-emptively queries existing idempotency key and raises `IdempotencyReplayError` before database insertion.
-  - F5 (Per-agent/per-mandate budget tracking): Converted scalar `_lifetime_spent` and `_rolling_spent` in `AuthorizationService` to per-agent dicts, preventing budget cross-talk between agents.
-  - F6 (`RECONCILE` state and ambiguous rail outcome): Added `RequestState.RECONCILE` to domain state machine with explicit transitions (`EXECUTING -> RECONCILE`, `RECONCILE -> SETTLED/FAILED/CLOSED`).
+  - F4 (Atomic concurrent idempotency): In `db_budget_repo.py`, savepoints (`begin_nested()`) catch concurrent duplicate constraint collisions, roll back reservation, and return cached replay without raw IntegrityError.
+  - F5 (Persistent multi-instance budget accounting): Authoritative database-backed `AgentBudgetModel` with row-locks isolates budgets across restarts and separate service instances.
+  - F6 (Ambiguous rail outcome lifecycle): Transitions to `RECONCILE` on timeout/5xx; budget reservation held until confirmed settlement or release. (Documented limitation: automatic periodic polling resolution requires an external scheduled worker or inbound webhook dispatcher; manual/API reconciliation provided via `/v1/reconcile`).
   - F7 (Row-lock on step-up approval): Added `with_for_update()` on PostgreSQL dialect in `approve_step_up()`.
-  - Added 7 transaction audit regression tests in `tests/concurrency/test_transaction_audit.py`.
+  - Added 15 concurrency transaction audit regression tests in `tests/concurrency/test_transaction_audit.py`.
 - Authored and updated `docs/FINAL_REPORT.md` (this report).
 
 ### Tested
-- `uv run pytest -q`: 237/237 tests passing in 12.51s.
-- `uv run pytest -q -m redteam`: 67/67 red-team tests passing in 4.32s.
-- `uv run pytest tests/concurrency/test_transaction_audit.py -q`: 7/7 tests passing in 0.52s.
+- `uv run pytest -q`: 245/245 tests passing in 13.77s.
+- `uv run pytest -q -m redteam`: 67/67 red-team tests passing in 2.34s.
+- `uv run pytest tests/concurrency/test_transaction_audit.py -q`: 15/15 tests passing in 1.16s.
 - `uv run ruff check . && uv run ruff format --check .`: Clean (0 errors, 76 files formatted).
 - `uv run mypy app`: Clean across 38 source files.
-- `uv run bandit -r app`: Clean (0 findings across 4,936 lines of code).
-- `cd web && npm run lint && npx tsc --noEmit && npm test -- --run && npm run build`: Clean (6/6 tests passing, bundle built).
+- `uv run bandit -r app`: Clean (0 findings across 5,529 lines of code).
+- `cd web && npm run lint && npx tsc --noEmit && npm test -- --run && npm run build`: Clean (11/11 tests passing, production bundle built in 7.87s).
 - `python -m pip check`: 0 conflicts.
 
 ### Not Tested

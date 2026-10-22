@@ -1,40 +1,172 @@
+/* ==========================================================================
+   ASTRAX INTELLIGENCE SYSTEM — PHALANX DESIGN SYSTEM TOKENS
+   Primary Reference: Phalanx Brand Identity Styleboard (LOGO)
+   Geometry: 0/90 Sharp, Bindu diamond nodes, Directional spear axis
+   ========================================================================== */
+
 :root {
-  --ax-bg-primary: #0B0F17;
-  --ax-bg-secondary: #111827;
-  --ax-bg-card: #161F30;
-  --ax-bg-elevated: #1E293B;
+  /* Core AstraX / Phalanx Palette */
+  --ax-ivory: #FDF7EC;
+  --ax-sandstone: #EADCC8;
+  --ax-ink: #221B14;
+  --ax-copper: #B87333;
+  --ax-copper-light: #D9822B;
+  --ax-indigo: #1E3A8A;
+  --ax-indigo-light: #2563EB;
+  --ax-teal: #0EA5A3;
+  --ax-teal-light: #14B8A6;
+  --ax-vermilion: #DC2626;
+  --ax-forest: #166534;
+  --ax-forest-light: #15803D;
+  --ax-saffron: #F59E38;
+  --ax-ochre: #CA8A04;
 
-  --ax-border-subtle: #243247;
-  --ax-border-strong: #3B82F6;
-  --ax-border-error: #EF4444;
-
-  --ax-text-primary: #F9FAFB;
-  --ax-text-secondary: #94A3B8;
-  --ax-text-muted: #64748B;
-  --ax-text-inverse: #0B0F17;
-
-  --ax-decision-allow: #10B981;
-  --ax-decision-allow-bg: rgba(16, 185, 129, 0.12);
-  --ax-decision-allow-border: #059669;
-
-  --ax-decision-step-up: #F59E0B;
-  --ax-decision-step-up-bg: rgba(245, 158, 11, 0.12);
-  --ax-decision-step-up-border: #D97706;
-
-  --ax-decision-deny: #EF4444;
-  --ax-decision-deny-bg: rgba(239, 68, 68, 0.12);
-  --ax-decision-deny-border: #DC2626;
-
-  --ax-accent-cyan: #00D2FF;
-  --ax-accent-blue: #2563EB;
-  --ax-accent-glow: rgba(0, 210, 255, 0.25);
-
-  --ax-font-heading: 'Space Grotesk', -apple-system, sans-serif;
+  /* Typography */
+  --ax-font-brand: 'Cinzel', 'Space Grotesk', serif;
+  --ax-font-heading: 'Space Grotesk', 'Inter', sans-serif;
   --ax-font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --ax-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
+  /* Geometry & Radii - Sharp mathematical structure (no excessive rounded corners) */
+  --ax-radius-none: 0px;
+  --ax-radius-xs: 2px;
   --ax-radius-sm: 4px;
-  --ax-radius-md: 8px;
-  --ax-radius-lg: 12px;
+  --ax-radius-md: 6px;
+  --ax-radius-lg: 8px;
   --ax-radius-full: 9999px;
+
+  /* Default Dark Mode (Matches security console standard) */
+  --ax-bg-canvas: #120F0D;
+  --ax-bg-surface: #1A1512;
+  --ax-bg-surface-elevated: #241E1A;
+  --ax-bg-card: #1D1814;
+  --ax-bg-subtle: #2A231D;
+  
+  --ax-border-subtle: rgba(234, 220, 200, 0.12);
+  --ax-border-medium: rgba(234, 220, 200, 0.22);
+  --ax-border-strong: rgba(184, 115, 51, 0.45);
+  --ax-border-accent: #B87333;
+
+  --ax-text-primary: #FDF7EC;
+  --ax-text-secondary: #D4C5B3;
+  --ax-text-muted: #8F8073;
+  --ax-text-inverse: #221B14;
+
+  /* Semantic State Tokens */
+  --ax-status-allow: #166534;
+  --ax-status-allow-light: #15803D;
+  --ax-status-allow-bg: rgba(22, 101, 52, 0.18);
+  --ax-status-allow-border: rgba(22, 101, 52, 0.4);
+
+  --ax-status-step-up: #F59E38;
+  --ax-status-step-up-bg: rgba(245, 158, 56, 0.18);
+  --ax-status-step-up-border: rgba(245, 158, 56, 0.4);
+
+  --ax-status-deny: #DC2626;
+  --ax-status-deny-bg: rgba(220, 38, 38, 0.18);
+  --ax-status-deny-border: rgba(220, 38, 38, 0.4);
+
+  --ax-status-reconcile: #B87333;
+  --ax-status-reconcile-bg: rgba(184, 115, 51, 0.2);
+  --ax-status-reconcile-border: rgba(184, 115, 51, 0.5);
+
+  --ax-status-executing: #1E3A8A;
+  --ax-status-executing-bg: rgba(30, 58, 138, 0.25);
+  --ax-status-executing-border: rgba(30, 58, 138, 0.5);
+
+  --ax-status-teal: #0EA5A3;
+  --ax-status-teal-bg: rgba(14, 165, 163, 0.18);
+  --ax-status-teal-border: rgba(14, 165, 163, 0.4);
+
+  /* Legacy Bridge Tokens (for existing test & class compatibility) */
+  --ax-bg-primary: var(--ax-bg-canvas);
+  --ax-bg-secondary: var(--ax-bg-surface);
+  --ax-border-error: var(--ax-status-deny);
+  --ax-decision-allow: var(--ax-status-allow-light);
+  --ax-decision-allow-bg: var(--ax-status-allow-bg);
+  --ax-decision-allow-border: var(--ax-status-allow-border);
+  --ax-decision-step-up: var(--ax-status-step-up);
+  --ax-decision-step-up-bg: var(--ax-status-step-up-bg);
+  --ax-decision-step-up-border: var(--ax-status-step-up-border);
+  --ax-decision-deny: var(--ax-status-deny);
+  --ax-decision-deny-bg: var(--ax-status-deny-bg);
+  --ax-decision-deny-border: var(--ax-status-deny-border);
+  --ax-accent-cyan: var(--ax-copper-light);
+  --ax-accent-blue: var(--ax-indigo-light);
+  --ax-accent-glow: rgba(184, 115, 51, 0.2);
+}
+
+/* ==========================================================================
+   LIGHT MODE (AstraX Ivory / Sandstone / Ink editorial aesthetic)
+   ========================================================================== */
+:root[data-theme="light"] {
+  --ax-bg-canvas: #FDF7EC;
+  --ax-bg-surface: #F5EDE0;
+  --ax-bg-surface-elevated: #EDE3D4;
+  --ax-bg-card: #FFFFFF;
+  --ax-bg-subtle: #EADCC8;
+
+  --ax-border-subtle: rgba(34, 27, 20, 0.12);
+  --ax-border-medium: rgba(34, 27, 20, 0.22);
+  --ax-border-strong: rgba(184, 115, 51, 0.45);
+  --ax-border-accent: #B87333;
+
+  --ax-text-primary: #221B14;
+  --ax-text-secondary: #574A3F;
+  --ax-text-muted: #857467;
+  --ax-text-inverse: #FDF7EC;
+
+  --ax-status-allow: #166534;
+  --ax-status-allow-light: #166534;
+  --ax-status-allow-bg: rgba(22, 101, 52, 0.1);
+  --ax-status-allow-border: rgba(22, 101, 52, 0.35);
+
+  --ax-status-step-up: #B45309;
+  --ax-status-step-up-bg: rgba(245, 158, 56, 0.12);
+  --ax-status-step-up-border: rgba(245, 158, 56, 0.4);
+
+  --ax-status-deny: #DC2626;
+  --ax-status-deny-bg: rgba(220, 38, 38, 0.1);
+  --ax-status-deny-border: rgba(220, 38, 38, 0.35);
+
+  --ax-status-reconcile: #B87333;
+  --ax-status-reconcile-bg: rgba(184, 115, 51, 0.12);
+  --ax-status-reconcile-border: rgba(184, 115, 51, 0.4);
+
+  --ax-status-executing: #1E3A8A;
+  --ax-status-executing-bg: rgba(30, 58, 138, 0.12);
+  --ax-status-executing-border: rgba(30, 58, 138, 0.35);
+
+  --ax-bg-primary: var(--ax-bg-canvas);
+  --ax-bg-secondary: var(--ax-bg-surface);
+  --ax-accent-cyan: #B87333;
+  --ax-accent-blue: #1E3A8A;
+  --ax-accent-glow: rgba(184, 115, 51, 0.15);
+}
+
+/* ==========================================================================
+   DARK MODE EXPLICIT OVERRIDE
+   ========================================================================== */
+:root[data-theme="dark"] {
+  --ax-bg-canvas: #120F0D;
+  --ax-bg-surface: #1A1512;
+  --ax-bg-surface-elevated: #241E1A;
+  --ax-bg-card: #1D1814;
+  --ax-bg-subtle: #2A231D;
+
+  --ax-border-subtle: rgba(234, 220, 200, 0.12);
+  --ax-border-medium: rgba(234, 220, 200, 0.22);
+  --ax-border-strong: rgba(184, 115, 51, 0.45);
+  --ax-border-accent: #B87333;
+
+  --ax-text-primary: #FDF7EC;
+  --ax-text-secondary: #D4C5B3;
+  --ax-text-muted: #8F8073;
+  --ax-text-inverse: #221B14;
+
+  --ax-bg-primary: var(--ax-bg-canvas);
+  --ax-bg-secondary: var(--ax-bg-surface);
+  --ax-accent-cyan: var(--ax-copper-light);
+  --ax-accent-blue: var(--ax-indigo-light);
+  --ax-accent-glow: rgba(184, 115, 51, 0.2);
 }

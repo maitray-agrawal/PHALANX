@@ -21,8 +21,8 @@ PHALANX is an authorization, governance, and tamper-evident audit layer position
 ## How We Built It
 - **Backend & Core**: Python 3.12, FastAPI, Pydantic v2 (strict `extra="forbid"`), RFC 8785 Canonical JSON serialization, `cryptography` (Ed25519).
 - **Architecture**: Clean Hexagonal Architecture (Ports and Adapters). An AST purity test enforces that `app/domain` imports zero external modules.
-- **Frontend**: React + Vite + TypeScript, AG Grid, AstraX dark-control-room design system with Space Grotesk, Inter, and JetBrains Mono typography.
-- **Testing & Security**: 237 automated unit, integration, concurrency, and red-team tests covering threat catalog items A1 through H2 (prompt injection, digest mutation, replay attacks, privilege escalation, unmandated fallback rejection, mandate revocation recheck, database tampering, and transaction boundary/lock audits F1-F7).
+- **Frontend**: React + Vite + TypeScript, AG Grid, AstraX production design system with Light/Dark/System themes, 0/90 mathematical geometry, and Space Grotesk, Inter, and JetBrains Mono typography.
+- **Testing & Security**: 245 automated backend unit, integration, concurrency, and red-team tests plus 11 frontend Vitest tests covering threat catalog items A1 through H2 and transaction audit findings F1-F7.
 - **Model Context Protocol (MCP)**: Official Python FastMCP server (`mcp==1.3.0`) exposing authenticated agent payment request and status inspection without bypass paths.
 - **Deployment**: Docker multi-stage build, non-root user, GitHub Actions CI, Render blueprint (`render.yaml`).
 

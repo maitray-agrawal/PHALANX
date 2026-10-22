@@ -185,19 +185,19 @@ Audit conducted per manual sections 56.13, 56.14, 56.17 covering transaction bou
 | **F1** | `AuthorizationService` | High | Step-up final idempotency: executed approvals cache final decision; replays skip payment dispatch and budget re-deduction | `test_f1_step_up_replay_idempotency_cached` | **Verified** |
 | **F2** | `DatabaseBudgetRepository` | High | Reservation confirmation guard: rejects non-PENDING/RECONCILE reservations (`InvalidApprovalStateError`) | `test_f2_confirm_reservation_state_guard` | **Verified** |
 | **F3** | `DatabaseBudgetRepository` | High | Reservation release guard: rejects CONFIRMED reservations (`ValueError`) and double-release | `test_f3_release_reservation_state_guard` | **Verified** |
-| **F4** | `DatabaseBudgetRepository` | Medium | Pre-emptive idempotency replay check prior to DB reservation insert (`IdempotencyReplayError`) | `test_f4_reservation_idempotency_atomicity` | **Verified** |
-| **F5** | `AuthorizationService` | High | Per-agent/per-mandate budget tracking: `_lifetime_spent` and `_rolling_spent` segregated by `agent_id` | `test_f5_per_agent_lifetime_budget_isolation` | **Verified** |
-| **F6** | `RequestStateMachine` | Medium | Ambiguous rail outcome handling: `RequestState.RECONCILE` state and transitions | `test_f6_reconcile_state_transitions` | **Verified** |
+| **F4** | `DatabaseBudgetRepository` | High | Atomic concurrent idempotency: DB savepoints (`begin_nested()`) catch duplicate constraint collisions, roll back reservation, and return cached replay without raw IntegrityError | `test_f4_reservation_idempotency_atomicity`, `test_r2_2_concurrent_duplicate_idempotency` | **Verified** |
+| **F5** | `BudgetRepository` / `AuthorizationService` | High | Persistent multi-instance budget accounting: DB-backed `AgentBudgetModel` with row-locks isolates budgets across restarts and separate service instances | `test_f5_per_agent_lifetime_budget_isolation`, `test_r2_3_persistent_database_budget_accounting` | **Verified** |
+| **F6** | `RequestStateMachine` / `AuthorizationService` | Medium | Ambiguous rail outcome lifecycle: transitions to `RECONCILE` on timeout/5xx; budget reservation held until confirmed settlement or release. (Documented limitation: automatic periodic polling resolution requires an external scheduled worker or inbound webhook dispatcher; manual/API reconciliation provided via `/v1/reconcile`) | `test_f6_reconcile_state_transitions`, `test_paypal_payout_timeout_transitions_to_reconcile` | **Verified** |
 | **F7** | `DatabaseBudgetRepository` | High | Row-level locking: `with_for_update` on step-up approvals under PostgreSQL | `test_f7_step_up_row_lock` | **Verified** |
 
 ### 9.2 Complete Test Suite Execution Proof (2026-10-23)
-- **Pytest Full Suite**: **237 passed** in 12.51s (`uv run pytest -q`)
-- **Red Team Suite**: **67 passed**, 170 deselected in 4.32s (`uv run pytest -q -m redteam`)
-- **Transaction Audit Suite**: **7 passed** in 0.52s (`uv run pytest tests/concurrency/test_transaction_audit.py -q`)
+- **Pytest Full Suite**: **245 passed** in 13.77s (`uv run pytest -q`)
+- **Red Team Suite**: **67 passed**, 178 deselected in 2.34s (`uv run pytest -q -m redteam`)
+- **Transaction Audit Suite**: **15 passed** in 1.16s (`uv run pytest tests/concurrency/test_transaction_audit.py -q`)
 - **Static Typing**: Success: no issues found in 38 source files (`uv run mypy app`)
 - **Linting & Code Style**: All checks passed, 76 files already formatted (`uv run ruff check . && uv run ruff format --check .`)
-- **Security AST Audit**: 0 High, 0 Medium, 0 Low across 4,936 LOC (`uv run bandit -r app`)
-- **Frontend Quality Gate**: ESLint clean (0 errors), TypeScript clean (`npx tsc --noEmit`), Vitest passed (6/6 in 490ms), Vite production build clean (dist generated in 9.12s)
+- **Security AST Audit**: 0 High, 0 Medium, 0 Low across 5,529 LOC (`uv run bandit -r app`)
+- **Frontend Quality Gate**: ESLint clean (0 errors), TypeScript clean (`npx tsc --noEmit`), Vitest passed (11/11 across 2 test suites), Vite production build clean (`web/dist` generated in 7.87s)
 
 
 

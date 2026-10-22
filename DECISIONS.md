@@ -19,3 +19,6 @@ Every architectural decision and dependency addition must be recorded here befor
 | D-013 | rfc8785==0.1.4 | Official RFC 8785 (JSON Canonicalization Scheme) library | Hand-rolled json.dumps | Dependency addition pinned in pyproject.toml |
 | D-014 | bandit==1.8.3 | Python AST security linter to verify zero high security findings | Manual code review only | Dev-only static analysis dependency |
 | D-015 | mcp==1.3.0 | Official Python Model Context Protocol SDK for agent tool exposure | Custom JSON-RPC server | Maintained official SDK with standard stdio transport |
+| D-016 | Savepoint rollback (begin_nested) & DB-backed AgentBudgetModel for F4/F5 | Prevent raw IntegrityError crashes on concurrent duplicate requests and guarantee multi-instance persistent budget isolation | In-memory only locks | Requires PostgreSQL/SQLite transaction savepoints |
+| D-017 | AstraX Master UI/UX Brand System | Enterprise financial security interface adhering to styleboard: 0/90 geometry, diamond bindu nodes, Light/Dark/System theme switcher, and interactive decision pipeline | Generic fintech dashboard | Custom tokens and SVG components |
+
