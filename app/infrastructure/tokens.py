@@ -125,7 +125,10 @@ def verify_role_token(token_str: str) -> Identity:
     signing_input = f"{header_b64}.{payload_b64}".encode()
 
     expected_sig = hmac.new(_get_signing_key(), signing_input, hashlib.sha256).digest()
-    actual_sig = _b64url_decode(signature_b64)
+    try:
+        actual_sig = _b64url_decode(signature_b64)
+    except Exception as exc:
+        raise TokenSignatureError(f"Invalid base64 signature encoding: {exc}") from exc
 
     if not hmac.compare_digest(expected_sig, actual_sig):
         raise TokenSignatureError("Invalid token signature.")

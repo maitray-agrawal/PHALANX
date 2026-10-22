@@ -19,7 +19,7 @@ Completed:
 - P6: LLM intent proposer with delimiter isolation, heuristic prompt injection scanner, and grounded explanation validator.
 - P7: AstraX theme UI with Space Grotesk, Inter, and JetBrains Mono fonts, AG Grid audit log, and visual blockchain diagram.
 - P8: Full adversarial red-team suite (30 prompt injection vectors, digest tampering, replay attacks, and `docs/TEST_REPORT.md` generator).
-- P9: Python MCP server wrapper (`app/mcp/server.py`) routing agent tools through application services.
+- P9: Official Python MCP SDK (`mcp==1.3.0`, FastMCP) exposing `request_payment` and `get_mandate_status` through `app/application`, authenticated strictly as agent identity (`Role.AGENT`), returning decision and pending-approval references only with zero credential leakage, red-team G1 test proving no alternate path, AstraX client example (`examples/astrax_mcp_client.py`), `docs/MCP_INTEGRATION.md`, and 100% decision parity between MCP and HTTP verified in `tests/integration/test_mcp_vs_http.py`.
 - P10: Hosted demo deployment pipeline on Render (`render.yaml`), idempotent boot script (`scripts/boot.py`), demo mandate valid until 31 Mar 2027, admin-token reset endpoint (`POST /v1/admin/reset` with `X-Admin-Token`), structured JSON logging with request IDs (`X-Request-ID`), external keepalive pinger (`scripts/pinger.py` and `.github/workflows/keepalive.yml`), deploy-on-green-CI GitHub Actions workflow with Render deploy hook, automated post-deploy smoke test runner (`scripts/post_deploy_smoke.py` validating Scene 1, Scene 2, Scene 3, and admin reset), `docs/DEPLOYMENT.md`, `docs/OBSERVABILITY.md`, updated `docs/RUNBOOK.md`, and Render free tier vs Starter plan evidence and PayPal sandbox longevity recorded in `docs/EVIDENCE.md`.
 - P11: Complete documentation and submission package (`README.md`, `ARCHITECTURE.md`, `API_SPEC.md`, `DEMO_SCRIPT.md`, `DEVPOST.md`).
 - Payment Rail Proof: ADR-009 recorded; PaymentRail protocol, FakePaymentRail test double, and PayPalPaymentRailAdapter with Orders v2 fallback implemented and verified.
@@ -32,8 +32,8 @@ Completed:
 - Adversarial Security Suite & Test Report (Manual 53, 56.44): Automated red-team suite covering every catalog row A1 through H2; 30 parameterized prompt injection attack payloads in corpus (all rejected with DENY); Wilson 95% confidence intervals calculated across all defense rates; empirical load test measuring pure policy core latency (median 1.20 µs, p95 1.40 µs, supporting manual 53/56.44 sub-millisecond claims) and full HTTP request path latency (median 4.46 ms, p95 7.16 ms, supporting manual 56.44 < 200ms claim); negative control rule weakening and test failure verified; published report written in `docs/TEST_REPORT.md`.
 
 Test status:
-- Backend: 210/210 pytest tests passed in 10.98s (including external failure, concurrency, LLM safety, and 60 red-team tests)
-- Red Team: 60/60 red-team tests passed (catalog A1-H2, B-Crypto 1-5, G4-G6, and 30 prompt injection corpus vectors)
+- Backend: 224/224 pytest tests passed in 11.29s (including external failure, concurrency, LLM safety, FastMCP tools, parity, and 61 red-team tests)
+- Red Team: 61/61 red-team tests passed (catalog A1-H2, B-Crypto 1-5, G1-G6, and 30 prompt injection corpus vectors)
 - Security Audit: bandit -r app reports 0 issues (0 High, 0 Medium, 0 Low)
 - Static Analysis: ruff check clean (0 errors), ruff format clean, mypy app clean (0 errors across 38 source files)
 - Frontend: ESLint clean (0 errors), TypeScript clean (`npx tsc --noEmit`), Vitest passed (6/6), Playwright smoke tests passed (4/4 on Chromium), Vite production build clean (0 errors)

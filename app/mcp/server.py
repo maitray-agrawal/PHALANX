@@ -76,16 +76,7 @@ def authenticate_agent_identity(
     return identity
 
 
-@mcp_server.tool(
-    name="request_payment",
-    description=(
-        "Request financial transaction authorization for an autonomous agent. "
-        "Evaluates the transaction against active cryptographic mandates, velocity, "
-        "and allowlists through app/application services. Returns a decision "
-        "(ALLOW, STEP_UP, DENY) and reference IDs only. Never exposes credentials."
-    ),
-)
-def request_payment(
+def execute_request_payment(
     agent_id: str,
     recipient_id: str,
     amount_minor: int,
@@ -121,14 +112,7 @@ def request_payment(
     }
 
 
-@mcp_server.tool(
-    name="get_mandate_status",
-    description=(
-        "Query active limits, remaining budget, and validity status for an agent mandate. "
-        "Requires authenticated agent identity. Never exposes internal private signing keys."
-    ),
-)
-def get_mandate_status(
+def execute_get_mandate_status(
     mandate_id: str,
     auth_token: str | None = None,
 ) -> dict[str, Any]:
@@ -161,6 +145,54 @@ def get_mandate_status(
     }
 
 
+@mcp_server.tool(
+    name="request_payment",
+    description=(
+        "Request financial transaction authorization for an autonomous agent. "
+        "Evaluates the transaction against active cryptographic mandates, velocity, "
+        "and allowlists through app/application services. Returns a decision "
+        "(ALLOW, STEP_UP, DENY) and reference IDs only. Never exposes credentials."
+    ),
+)
+def request_payment(
+    agent_id: str,
+    recipient_id: str,
+    amount_minor: int,
+    currency: str,
+    purpose: str,
+    idempotency_key: str,
+    invoice_reference: str | None = None,
+    auth_token: str | None = None,
+) -> dict[str, Any]:
+    return execute_request_payment(
+        agent_id=agent_id,
+        recipient_id=recipient_id,
+        amount_minor=amount_minor,
+        currency=currency,
+        purpose=purpose,
+        idempotency_key=idempotency_key,
+        invoice_reference=invoice_reference,
+        auth_token=auth_token,
+    )
+
+
+@mcp_server.tool(
+    name="get_mandate_status",
+    description=(
+        "Query active limits, remaining budget, and validity status for an agent mandate. "
+        "Requires authenticated agent identity. Never exposes internal private signing keys."
+    ),
+)
+def get_mandate_status(
+    mandate_id: str,
+    auth_token: str | None = None,
+) -> dict[str, Any]:
+    return execute_get_mandate_status(
+        mandate_id=mandate_id,
+        auth_token=auth_token,
+    )
+
+
 class PhalanxMcpServer:
     """Wrapper class providing backward-compatible programmatic interface."""
 
@@ -181,7 +213,7 @@ class PhalanxMcpServer:
         invoice_reference: str | None = None,
         auth_token: str | None = None,
     ) -> dict[str, Any]:
-        return request_payment(
+        return execute_request_payment(
             agent_id=agent_id,
             recipient_id=recipient_id,
             amount_minor=amount_minor,
@@ -197,7 +229,7 @@ class PhalanxMcpServer:
         mandate_id: str,
         auth_token: str | None = None,
     ) -> dict[str, Any]:
-        return get_mandate_status(
+        return execute_get_mandate_status(
             mandate_id=mandate_id,
             auth_token=auth_token,
         )
