@@ -9,7 +9,9 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.domain.mandates import MandateStatus
 from app.domain.models import DecisionOutcome
+from app.domain.policy import PolicyReasonCode
 
 
 class AuthorizeTransactionCommand(BaseModel):
@@ -34,11 +36,93 @@ class AuthorizationResponseDTO(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    request_id: str
     decision: DecisionOutcome
     reasons: list[str]
+    reason_codes: list[PolicyReasonCode]
     escalated: bool
     event_id: str
+    intent_digest: str
     evaluated_at_utc: datetime
+    payout_id: str | None = None
+
+
+class CreateMandateCommand(BaseModel):
+    """Command to issue an Ed25519-signed authority mandate."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mandate_id: str = Field(..., min_length=1, max_length=64)
+    principal_id: str = Field(..., min_length=1, max_length=128)
+    agent_id: str = Field(..., min_length=1, max_length=128)
+    single_limit_minor: int = Field(..., gt=0)
+    instant_threshold_minor: int = Field(..., ge=0)
+    lifetime_budget_minor: int = Field(..., gt=0)
+    currency: str = Field(default="USD", min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
+    allowed_payees: list[str] = Field(default_factory=list)
+    allowed_purposes: list[str] = Field(default_factory=list)
+    valid_days: int = Field(default=90, ge=1, le=365)
+
+
+class MandateResponseDTO(BaseModel):
+    """Public mandate data structure."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mandate_id: str
+    version: int
+    principal_id: str
+    agent_id: str
+    single_limit_minor: int
+    instant_threshold_minor: int
+    lifetime_budget_minor: int
+    currency: str
+    allowed_payees: list[str]
+    allowed_purposes: list[str]
+    valid_from_utc: datetime
+    valid_until_utc: datetime
+    status: MandateStatus
+    key_id: str
+    signature: str
+
+
+class ApprovalCommand(BaseModel):
+    """Human supervisor step-up authorization command."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str = Field(..., min_length=1)
+    expected_digest: str = Field(
+        ...,
+        min_length=64,
+        max_length=64,
+        description="SHA-256 digest of the canonical intent. Must match to prevent tampering.",
+    )
+    decision: DecisionOutcome = Field(..., description="ALLOW or DENY")
+    reason: str = Field(..., min_length=1, max_length=500)
+
+
+class LedgerEventDTO(BaseModel):
+    """Public audit log event view."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str
+    event_type: str
+    prev_hash: str
+    event_hash: str
+    payload: dict[str, object]
+
+
+class LedgerVerificationDTO(BaseModel):
+    """Integrity status of the cryptographic hash chain."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    is_valid: bool
+    message: str
+    broken_index: int | None
+    total_events: int
 
 
 class HealthStatusDTO(BaseModel):
