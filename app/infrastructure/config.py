@@ -34,5 +34,12 @@ class Settings(BaseSettings):
     mandate_signing_key_hex: str = Field(default="")
     mandate_signing_key_file: str = Field(default="")
 
+    # LLM & AI Guardrails (Manual 41-44)
+    llm_model_name: str = Field(default="gpt-4o-mini")
+    llm_timeout_seconds: float = Field(default=5.0)
+    llm_max_retries: int = Field(default=2)
+    llm_token_cap_per_identity: int = Field(default=50_000)
+    llm_cost_cap_dollars_per_identity: float = Field(default=2.0)
+
 
 settings = Settings()
