@@ -41,7 +41,9 @@ from app.domain.ports import ClockPort, LedgerPort, PaymentRail
 from app.infrastructure.crypto import (
     generate_ed25519_keypair,
     get_key_id,
+    load_or_generate_keypair,
     sign_bytes,
+    verify_mandate_seal,
     verify_signature,
 )
 from app.infrastructure.paypal import FakePaymentRail
@@ -71,10 +73,25 @@ def compute_intent_digest(
 class MandateService:
     """Manages Ed25519-signed authority mandates."""
 
-    def __init__(self, clock: ClockPort) -> None:
+    def __init__(
+        self,
+        clock: ClockPort,
+        priv_key: bytes | None = None,
+        pub_key: bytes | None = None,
+        key_id: str | None = None,
+    ) -> None:
         self._clock = clock
-        self._priv_key, self._pub_key = generate_ed25519_keypair()
-        self._key_id = get_key_id(self._pub_key)
+        if priv_key and pub_key and key_id:
+            self._priv_key = priv_key
+            self._pub_key = pub_key
+            self._key_id = key_id
+        else:
+            from app.infrastructure.config import settings
+
+            self._priv_key, self._pub_key, self._key_id = load_or_generate_keypair(
+                key_hex=settings.mandate_signing_key_hex,
+                key_file_path=settings.mandate_signing_key_file,
+            )
         self._mandates: dict[str, Mandate] = {}
         self._lock = Lock()
         self._seed_default_mandate()
@@ -190,10 +207,10 @@ class MandateService:
         )
 
     def verify_mandate_integrity(self, mandate: Mandate) -> bool:
-        """Verify the Ed25519 signature of a mandate."""
+        """Verify the Ed25519 signature seal of a mandate and ensure key_id binding."""
         signable_dict = mandate.to_signable_dict()
         message = canonical_json_bytes(signable_dict)
-        return verify_signature(self._pub_key, message, mandate.signature)
+        return verify_mandate_seal(self._pub_key, message, mandate.signature, mandate.key_id)
 
 
 class AuthorizationService:

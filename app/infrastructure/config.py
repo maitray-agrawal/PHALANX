@@ -30,5 +30,9 @@ class Settings(BaseSettings):
     paypal_webhook_id: str = Field(default="")
     paypal_environment: str = Field(default="sandbox")
 
+    # Mandate Ed25519 Signing Key (never logged or defaulted to static secret)
+    mandate_signing_key_hex: str = Field(default="")
+    mandate_signing_key_file: str = Field(default="")
+
 
 settings = Settings()

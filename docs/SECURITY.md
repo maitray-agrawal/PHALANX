@@ -27,6 +27,11 @@ PHALANX implements multi-layered security controls derived from the Antigravity 
 - **Asymmetric Risk Escalation**: Heuristic signals or ML risk assessments are strictly advisory and can only raise decision severity (`ALLOW` -> `STEP_UP` -> `DENY`), never lower it.
 - **Delimited Untrusted Text**: Invoices, vendor descriptions, and external prompt texts are encapsulated in strict data boundaries and never evaluated as code or instructions.
 
+### 1.5 Mandate Cryptographic Integrity Seal (Manual Section 7)
+- **Integrity Seal, Not Human Non-Repudiation**: The Ed25519 asymmetric signature over RFC 8785 canonical JSON is an automated data integrity seal ensuring mandate limits, payees, and temporal windows have not been modified. It does NOT represent human legal non-repudiation.
+- **Key Storage & Protection**: Private keys are injected strictly via environment (`MANDATE_SIGNING_KEY_HEX`) or secure file (`MANDATE_SIGNING_KEY_FILE`). Key material is never printed, logged, or returned in error traces.
+- **Key ID Binding**: Every signature embeds and validates the corresponding `key_id`, ensuring signature verification matches the active public key.
+
 ---
 
 ## 2. Production Gates Mapping (Manual Section 56)
