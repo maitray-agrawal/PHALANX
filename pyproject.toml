@@ -25,6 +25,7 @@ dev = [
     "hypothesis==6.128.0",
     "ruff==0.9.7",
     "mypy==1.15.0",
+    "bandit==1.8.3",
 ]
 
 [build-system]
