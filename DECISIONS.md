@@ -14,3 +14,4 @@ Every architectural decision and dependency addition must be recorded here befor
 | D-008 | Payment rail chosen by sandbox evidence (ADR after P2) | Capability not guaranteed | Assume Vault | Spike time |
 | D-009 | Python 3.12 dependencies: fastapi==0.115.8, uvicorn==0.34.0, pydantic==2.10.6, pydantic-settings==2.8.0, sqlalchemy==2.0.38, alembic==1.14.1, psycopg[binary]==3.2.4, httpx==0.28.1, pytest==8.3.4, pytest-asyncio==0.25.3, pytest-cov==6.0.0, hypothesis==6.128.0, ruff==0.9.7, mypy==1.15.0 | Pinned core and testing dependencies | Unpinned ranges | Explicit updates required |
 | D-010 | Web dependencies: React 19, Vite 6, TypeScript 5, AG Grid 33, Vitest 3 | Modern operator console with enterprise audit grid | Custom HTML table | AG Grid dependency weight |
+| D-011 | cryptography==44.0.1 | Standard library-grade Ed25519 asymmetric signing and verification for mandates (RFC 8032) | PyNaCl, custom ECC | C-extension dependency |
