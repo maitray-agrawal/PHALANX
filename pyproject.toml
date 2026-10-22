@@ -5,7 +5,7 @@ description = "Authorization & Governance Layer for Autonomous Financial Agents"
 readme = "README.md"
 requires-python = ">=3.12, <3.13"
 dependencies = [
-    "fastapi==0.115.8",
+    "fastapi==0.147.0",
     "uvicorn[standard]==0.34.0",
     "pydantic==2.10.6",
     "pydantic-settings==2.8.0",
