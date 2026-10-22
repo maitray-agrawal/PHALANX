@@ -5,6 +5,8 @@ from unittest.mock import patch
 from fastapi import status
 from fastapi.testclient import TestClient
 
+from app.infrastructure.tokens import Role, create_role_token
+
 
 def test_api_healthz_endpoint(client: TestClient) -> None:
     response = client.get("/healthz")
@@ -42,7 +44,30 @@ def test_api_health_endpoint(client: TestClient) -> None:
     assert "timestamp_utc" in data
 
 
+def test_api_unauthenticated_call_returns_401(client: TestClient) -> None:
+    """Security rule: Unauthenticated calls return 401 Unauthorized."""
+    payload = {
+        "agent_id": "finance-bot-42",
+        "recipient_id": "vendor-99",
+        "amount_minor": 1500,
+        "currency": "USD",
+        "purpose": "Server hosting fees",
+        "idempotency_key": "tx-key-unauth",
+    }
+    response = client.post("/api/v1/authorize", json=payload)
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    assert response.headers["content-type"] == "application/problem+json"
+    data = response.json()
+    assert data["status"] == 401
+    assert "Unauthorized" in data["title"]
+
+
 def test_api_authorize_endpoint(client: TestClient) -> None:
+    token = create_role_token(
+        role=Role.AGENT,
+        principal_id="corp-1",
+        agent_id="finance-bot-42",
+    )
     payload = {
         "agent_id": "finance-bot-42",
         "recipient_id": "vendor-99",
@@ -51,7 +76,11 @@ def test_api_authorize_endpoint(client: TestClient) -> None:
         "purpose": "Server hosting fees",
         "idempotency_key": "tx-key-42",
     }
-    response = client.post("/api/v1/authorize", json=payload)
+    response = client.post(
+        "/api/v1/authorize",
+        json=payload,
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert data["decision"] == "ALLOW"
@@ -70,5 +99,10 @@ def test_api_rejects_extra_fields_strictly(client: TestClient) -> None:
         "idempotency_key": "tx-key-42",
         "extra_unexpected_field": "exploit_attempt",
     }
-    response = client.post("/api/v1/authorize", json=payload)
+    response = client.post(
+        "/api/v1/authorize",
+        json=payload,
+        headers={"Authorization": "Bearer demo-agent"},
+    )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert response.headers["content-type"] == "application/problem+json"

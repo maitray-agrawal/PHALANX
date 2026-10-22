@@ -14,7 +14,11 @@ def test_full_step_up_and_approval_flow(client: TestClient) -> None:
         "purpose": "Monthly subscription renewal",
         "idempotency_key": "stepup-tx-001",
     }
-    resp = client.post("/v1/payment-requests", json=req_payload)
+    resp = client.post(
+        "/v1/payment-requests",
+        json=req_payload,
+        headers={"Authorization": "Bearer demo-agent"},
+    )
     assert resp.status_code == status.HTTP_200_OK
     data = resp.json()
     assert data["decision"] == "STEP_UP"
@@ -63,7 +67,10 @@ def test_full_step_up_and_approval_flow(client: TestClient) -> None:
     assert approved_data["payout_id"] is not None
 
     # 5. Verify the ledger chain contains both events and is cryptographically intact
-    verify_resp = client.get("/v1/ledger/verify")
+    verify_resp = client.get(
+        "/v1/ledger/verify",
+        headers={"Authorization": "Bearer demo-auditor"},
+    )
     assert verify_resp.status_code == status.HTTP_200_OK
     verify_data = verify_resp.json()
     assert verify_data["is_valid"] is True

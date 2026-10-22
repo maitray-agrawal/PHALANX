@@ -21,6 +21,7 @@ from app.infrastructure.crypto import (
     verify_signature,
 )
 from app.infrastructure.ledger import InMemoryLedgerAdapter
+from app.infrastructure.tokens import Role, create_role_token
 
 
 @pytest.mark.redteam
@@ -39,7 +40,11 @@ def test_a1_prompt_injection_in_purpose_cannot_override_policy(
         ),
         "idempotency_key": "inject-001",
     }
-    response = client.post("/api/v1/authorize", json=injection_payload)
+    response = client.post(
+        "/api/v1/authorize",
+        json=injection_payload,
+        headers={"Authorization": "Bearer demo-principal"},
+    )
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert data["decision"] == "DENY"
@@ -170,7 +175,11 @@ def test_c1_negative_minor_units_rejected_at_boundary(client: TestClient) -> Non
         "purpose": "Negative transfer exploit",
         "idempotency_key": "neg-001",
     }
-    response = client.post("/api/v1/authorize", json=payload)
+    response = client.post(
+        "/api/v1/authorize",
+        json=payload,
+        headers={"Authorization": "Bearer demo-principal"},
+    )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
@@ -188,6 +197,7 @@ def test_e1_mutated_digest_on_approval_fails(client: TestClient) -> None:
             "purpose": "Monthly subscription renewal",
             "idempotency_key": "redteam-stepup-001",
         },
+        headers={"Authorization": "Bearer demo-agent"},
     )
     data = req.json()
     assert data["decision"] == "STEP_UP"
@@ -247,6 +257,7 @@ def test_d1_idempotency_key_replay_with_mutated_payload(client: TestClient) -> N
             "purpose": "First request",
             "idempotency_key": key,
         },
+        headers={"Authorization": "Bearer demo-agent"},
     )
     assert r1.status_code == status.HTTP_200_OK
 
@@ -261,6 +272,7 @@ def test_d1_idempotency_key_replay_with_mutated_payload(client: TestClient) -> N
             "purpose": "Mutated request with same idempotency key",
             "idempotency_key": key,
         },
+        headers={"Authorization": "Bearer demo-agent"},
     )
     assert r2.status_code == status.HTTP_200_OK
     data = r2.json()
@@ -345,8 +357,156 @@ def test_adversarial_injection_corpus(client: TestClient, payload_text: str) -> 
             "purpose": payload_text,
             "idempotency_key": f"inject_{hash(payload_text)}",
         },
+        headers={"Authorization": "Bearer demo-principal"},
     )
     assert resp.status_code == status.HTTP_200_OK
     data = resp.json()
     # Must be DENY despite the adversarial prompt injection
     assert data["decision"] == "DENY"
+
+
+@pytest.mark.redteam
+def test_f2_paypal_webhook_event_id_deduplication(client: TestClient) -> None:
+    """Catalog F2: Duplicate PayPal webhook event IDs are detected and ignored."""
+    valid_headers = {
+        "PAYPAL-AUTH-ALGO": "SHA256withRSA",
+        "PAYPAL-TRANSMISSION-SIG": "valid_mock_signature_test_123",
+    }
+    payload = {"id": "WH-EVT-DEDUPE-001", "event_type": "PAYMENT.CAPTURE.COMPLETED"}
+
+    # First delivery
+    r1 = client.post("/v1/webhooks/paypal", json=payload, headers=valid_headers)
+    assert r1.status_code == status.HTTP_200_OK
+    assert r1.json()["status"] == "processed"
+
+    # Replayed delivery
+    r2 = client.post("/v1/webhooks/paypal", json=payload, headers=valid_headers)
+    assert r2.status_code == status.HTTP_200_OK
+    assert r2.json()["status"] == "duplicate_ignored"
+
+
+@pytest.mark.redteam
+def test_f3_paypal_webhook_forged_signature_rejected(client: TestClient) -> None:
+    """Catalog F3: Webhook with forged signature is rejected with 401 Unauthorized."""
+    forged_headers = {
+        "PAYPAL-AUTH-ALGO": "SHA256withRSA",
+        "PAYPAL-TRANSMISSION-SIG": "FORGED_SIGNATURE_HEX",
+    }
+    resp = client.post(
+        "/v1/webhooks/paypal",
+        json={"id": "WH-FORGED-001", "event_type": "PAYMENT.CAPTURE.COMPLETED"},
+        headers=forged_headers,
+    )
+    assert resp.status_code == status.HTTP_401_UNAUTHORIZED
+    assert resp.headers.get("content-type") == "application/problem+json"
+
+
+@pytest.mark.redteam
+def test_g2_unexpected_property_injection_rejected(client: TestClient) -> None:
+    """Catalog G2: Extra undeclared properties are rejected by strict Pydantic extra='forbid'."""
+    resp = client.post(
+        "/v1/payment-requests",
+        json={
+            "agent_id": "agent-auto-1",
+            "recipient_id": "vendor-paypal-sandbox-1",
+            "amount_minor": 1000,
+            "currency": "USD",
+            "purpose": "Normal payment",
+            "idempotency_key": "extra-prop-001",
+            "admin_override": True,  # Unexpected forbidden field
+        },
+        headers={"Authorization": "Bearer demo-agent"},
+    )
+    assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.redteam
+def test_g3_oversized_payload_buffer_flooding_rejected(client: TestClient) -> None:
+    """Catalog G3: Payloads exceeding the body limit are rejected with 413 Payload Too Large."""
+    oversized_purpose = "X" * 70_000
+    resp = client.post(
+        "/v1/payment-requests",
+        json={
+            "agent_id": "agent-auto-1",
+            "recipient_id": "vendor-paypal-sandbox-1",
+            "amount_minor": 1000,
+            "currency": "USD",
+            "purpose": oversized_purpose,
+            "idempotency_key": "oversized-001",
+        },
+        headers={"Authorization": "Bearer demo-agent"},
+    )
+    assert resp.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+    assert resp.headers.get("content-type") == "application/problem+json"
+
+
+@pytest.mark.redteam
+def test_g4_cross_principal_approver_object_authorization_rejected(client: TestClient) -> None:
+    """Catalog G4: Approver belonging to a different principal is rejected (403 Forbidden)."""
+    # Create request that requires step-up
+    req = client.post(
+        "/v1/payment-requests",
+        json={
+            "agent_id": "agent-auto-1",
+            "recipient_id": "vendor-paypal-sandbox-1",
+            "amount_minor": 120_000,  # $1,200 requires step-up
+            "currency": "USD",
+            "purpose": "High-value purchase",
+            "idempotency_key": "cross-princ-001",
+        },
+        headers={"Authorization": "Bearer demo-agent"},
+    )
+    data = req.json()
+    assert data["decision"] == "STEP_UP"
+    req_id = data["request_id"]
+    digest = data["intent_digest"]
+
+    # Approver from foreign organization attempts approval
+    foreign_token = create_role_token(Role.APPROVER, principal_id="corp-foreign-tenant")
+    resp = client.post(
+        f"/v1/approvals/{req_id}",
+        json={
+            "expected_digest": digest,
+            "decision": "ALLOW",
+            "reason": "Unauthorized foreign approval",
+        },
+        headers={"Authorization": f"Bearer {foreign_token}"},
+    )
+    assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.redteam
+def test_g5_unauthenticated_request_rejected(client: TestClient) -> None:
+    """Catalog G5: Requests without authentication credentials return 401 Unauthorized."""
+    routes_to_test = [
+        (
+            "POST",
+            "/v1/payment-requests",
+            {
+                "agent_id": "a1",
+                "recipient_id": "r1",
+                "amount_minor": 100,
+                "currency": "USD",
+                "purpose": "p",
+                "idempotency_key": "k1",
+            },
+        ),
+        ("GET", "/v1/payment-requests/req_123", None),
+        ("GET", "/v1/mandates/mandate_agent_auto_1", None),
+        ("GET", "/v1/decisions/req_123", None),
+        (
+            "POST",
+            "/v1/approvals/req_123",
+            {"expected_digest": "0" * 64, "decision": "ALLOW", "reason": "ok"},
+        ),
+        ("GET", "/v1/ledger", None),
+        ("GET", "/v1/ledger/verify", None),
+        ("POST", "/v1/admin/reset", None),
+    ]
+
+    for method, path, body in routes_to_test:
+        resp = client.post(path, json=body or {}) if method == "POST" else client.get(path)
+        assert resp.status_code == status.HTTP_401_UNAUTHORIZED, (
+            f"Expected 401 for {method} {path}, got {resp.status_code}"
+        )
+        assert resp.headers.get("content-type") == "application/problem+json"

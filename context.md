@@ -1,13 +1,13 @@
 # context.md
-Phase: P11 Complete   Branch: main   Last green CI: local-verified
+Phase: P9 Complete   Branch: main   Last green CI: local-verified
 Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
 - app/domain: Pure deterministic policy engine, Ed25519 mandate invariants, canonical RFC 8785 JSON, cryptographic hash-chained ledger. AST purity test enforced.
 - app/application: AuthorizationService, MandateService, LedgerService, LLM intent extraction & grounding validator.
-- app/infrastructure: Ed25519 signing/verification, append-only ledger adapter, PayPal Sandbox rail adapter, UTC clock.
-- app/api: Complete FastAPI REST suite (/v1/payment-requests, /v1/mandates, /v1/approvals, /v1/ledger, /v1/webhooks/paypal, /v1/admin/reset).
+- app/infrastructure: Ed25519 signing/verification, HMAC-SHA256 role tokens, append-only ledger adapter, PayPal Sandbox rail adapter, UTC clock, Bandit security scan.
+- app/api: Complete FastAPI REST suite (/v1/payment-requests, /v1/mandates, /v1/decisions, /v1/approvals, /v1/ledger, /v1/ledger/verify, /v1/webhooks/paypal, /v1/admin/reset, /v1/auth/demo-token).
 - app/mcp: Model Context Protocol server exposing financial agent governance tools.
 - web: React + Vite + TypeScript dashboard in AstraX design system with 4 operational scenes (Request Console, Step-Up Approvals, Tamper-Evident Ledger, Active Mandate).
-- tests: 83 automated tests (unit, integration, concurrency, red-team A1-H2).
+- tests: 178 automated tests (unit, integration, concurrency, external failure, red-team A1-H2).
 
 Completed:
 - P0: Bootstrap layout, Dockerfile, docker-compose.yml, CI workflows, and AST domain purity test.
@@ -26,12 +26,13 @@ Completed:
 - Mandates & Applied Cryptography: Strict Pydantic Mandate model, RFC 8785 canonical JSON via `rfc8785==0.1.4`, Ed25519 signing/verification with key_id binding, immutable versioning (`supersede`/`revoke`), Hypothesis property testing, and threat catalog B1-B5 red-team tests.
 - Pure Decision Core: Exact Master Specification Section 5 rule order, `PolicyReasonCode` enum, `PolicyDecision(policy_version="1.0.0")`, pure `PolicyState`, purpose & invoice reference allowlists, lifetime budget caps, `guard_advisory_escalation()`, explicit request lifecycle state machine (`RECEIVED` to `CLOSED`), and 99% unit test coverage on `app/domain`.
 - Money-Safe Persistence & Concurrency Core: `docs/DATABASE.md`, SQLAlchemy 2 models, Alembic migrations forward/rollback verified on empty database, single-transaction budget reservation using row locks and check constraints, conditional release (UNKNOWN outcome routes to RECONCILE, never releases funds), idempotency table with replay detection and parameter mutation rejection, step-up approvals cryptographically bound to canonical SHA-256 intent digest with expiration and replay checks, append-only ledger with hash chaining (`prev_hash` -> `event_hash`) and verification detecting row modification and deletion, database triggers strictly rejecting UPDATE and DELETE on `ledger_events`, and 50 parallel requests budget race passing 20 consecutive runs with zero flakes or race condition leaks.
+- API & Application Security Layer: Signed short-lived HMAC-SHA256 role tokens (principal, agent, approver, auditor) and zero-friction demo mode (`/v1/auth/demo-token`), Object-Level Authorization (OLA) preventing cross-agent requests (403) and cross-principal approvals (403), strict Pydantic schemas (`extra="forbid"`), 64KB payload size limit (`413 Payload Too Large`), per-identity sliding-window rate limiting (120 req/min, `429 Too Many Requests`), defensive security headers (CSP, HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Cache-Control), RFC 7807 Problem+JSON error envelopes hiding internal stack traces, LogRedactionFilter scrubbing credentials and tokens, PayPal webhook signature verification & event ID deduplication, PayPal external failure handling (timeout, 5xx, malformed response), OpenAPI schema generation and validation tests, Bandit AST security audit passing with 0 findings, and red-team tests G1-G5 and F1-F3 all passing.
 
 Test status:
-- Backend: 166/166 pytest tests passed in 10.26s (including 13 concurrency/money-safety tests and 44 red-team adversarial tests)
-- Concurrency: 50 parallel requests racing one budget verified across 20 consecutive runs with 0 race condition leaks or overdrafts
-- Domain Coverage: 99% branch & statement coverage across `app/domain`
-- Static Analysis: ruff check clean (0 errors), ruff format clean, mypy app clean (0 errors across 30 source files)
+- Backend: 178/178 pytest tests passed in 11.75s (including external failure, concurrency, and 50 red-team tests)
+- Red Team: 50/50 red-team tests passed (catalog A1-H2, F1-F3, G1-G5, and 30 prompt injection corpus vectors)
+- Security Audit: bandit -r app reports 0 issues (0 High, 0 Medium, 0 Low)
+- Static Analysis: ruff check clean (0 errors), ruff format clean, mypy app clean (0 errors across 33 source files)
 - Frontend: ESLint clean, TypeScript clean, Vitest passed (3/3), Vite production build clean
 
 Next recommended action: Commit changes directly to main.
