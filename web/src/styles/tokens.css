@@ -1,0 +1,39 @@
+:root {
+  --ax-bg-primary: #0B0F17;
+  --ax-bg-secondary: #111827;
+  --ax-bg-card: #161F30;
+  --ax-bg-elevated: #1E293B;
+
+  --ax-border-subtle: #243247;
+  --ax-border-strong: #3B82F6;
+  --ax-border-error: #EF4444;
+
+  --ax-text-primary: #F9FAFB;
+  --ax-text-secondary: #94A3B8;
+  --ax-text-muted: #64748B;
+
+  --ax-decision-allow: #10B981;
+  --ax-decision-allow-bg: rgba(16, 185, 129, 0.12);
+  --ax-decision-allow-border: #059669;
+
+  --ax-decision-step-up: #F59E0B;
+  --ax-decision-step-up-bg: rgba(245, 158, 11, 0.12);
+  --ax-decision-step-up-border: #D97706;
+
+  --ax-decision-deny: #EF4444;
+  --ax-decision-deny-bg: rgba(239, 68, 68, 0.12);
+  --ax-decision-deny-border: #DC2626;
+
+  --ax-accent-cyan: #00D2FF;
+  --ax-accent-blue: #2563EB;
+  --ax-accent-glow: rgba(0, 210, 255, 0.25);
+
+  --ax-font-heading: 'Space Grotesk', -apple-system, sans-serif;
+  --ax-font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --ax-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  --ax-radius-sm: 4px;
+  --ax-radius-md: 8px;
+  --ax-radius-lg: 12px;
+  --ax-radius-full: 9999px;
+}
