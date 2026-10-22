@@ -267,7 +267,7 @@ def get_mandate(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Mandate '{mandate_id}' not found",
         )
-    spent = auth_service.get_lifetime_spent()
+    spent = auth_service.get_lifetime_spent(mandate.agent_id)
     remaining = max(0, mandate.lifetime_budget_minor - spent)
     return MandateResponseDTO(
         mandate_id=mandate.mandate_id,

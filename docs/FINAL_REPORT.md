@@ -13,7 +13,7 @@
 | Assessment Dimension | Rating / Status | Detail |
 |---|---|---|
 | **Release Status** | **QUALIFIED_FOR_SUBMISSION** | Verified production-grade sandbox architecture with mathematical policy purity, cryptographic seals, and zero unbacked claims. |
-| **Assessment Confidence** | **HIGH** | 230/230 automated backend tests passed; 67/67 red-team adversarial tests passed; 0 security vulnerabilities in Bandit AST audit; 0 console logs in frontend. |
+| **Assessment Confidence** | **HIGH** | 237/237 automated backend tests passed; 67/67 red-team adversarial tests passed; 7/7 concurrency/transaction audit tests passed; 0 security vulnerabilities in Bandit AST audit; 0 console logs in frontend. |
 | **Purity & Safety Boundary** | **VERIFIED** | Pure domain core has zero I/O, zero clock, zero randomness, and zero non-domain imports enforced by AST test. LLM is isolated from authorization path. |
 | **Cryptographic Integrity** | **VERIFIED** | Ed25519 mandates, RFC 8785 canonical JSON, and SHA-256 hash-chained ledger are mathematically locked and tamper-evident. |
 
@@ -69,9 +69,9 @@ The installation procedure documented in `README.md` was followed strictly from 
    - **Pre-Audit Finding**: `requirements.txt` and `requirements-dev.txt` were absent because dependencies were specified in `pyproject.toml`. A user executing the exact README text would have failed.
    - **Resolution**: Created pinned `requirements.txt` and `requirements-dev.txt` matching `pyproject.toml` (DECISIONS.md D-009, D-011, D-013, D-014, D-015) and updated `README.md` to document both commands.
 3. `python -m pip check`: **Passed** (No broken requirements found).
-4. `uv run pytest -q`: **Passed** (230/230 passed in 22.66s).
-5. `uv run pytest -q -m redteam`: **Passed** (67/67 passed in 4.18s).
-6. `uv run ruff check . && uv run ruff format --check . && uv run mypy app`: **Passed** (All checks passed, 75 files formatted, 0 type errors in 38 source files).
+4. `uv run pytest -q`: **Passed** (237/237 passed in 12.51s).
+5. `uv run pytest -q -m redteam`: **Passed** (67/67 passed in 4.32s).
+6. `uv run ruff check . && uv run ruff format --check . && uv run mypy app`: **Passed** (All checks passed, 76 files formatted, 0 type errors in 38 source files).
 7. `cd web && npm run lint && npx tsc --noEmit && npm test -- --run && npm run build`:
    - **Lint**: **Passed** (0 ESLint errors).
    - **TypeScript**: **Passed** (`tsc --noEmit` clean).
@@ -110,7 +110,7 @@ In accordance with hackathon rules and truthfulness requirements, the 'Built wit
 
 ### Changed in Review
 - Created `requirements.txt` and `requirements-dev.txt` with exact pinned dependencies.
-- Updated `README.md` and `docs/DEVPOST.md` to reflect true test count (230 automated tests, 67 red-team tests) and exact install commands.
+- Updated `README.md` and `docs/DEVPOST.md` to reflect true test count (237 automated tests, 67 red-team tests, 7 transaction audit tests) and exact install commands.
 - Remediated hostile security audit findings:
   - F-01 (P0): Removed unmandated agent fallback to default mandate in `MandateService`; unmandated agents now strictly return None and evaluate to DENY (`MANDATE_INACTIVE`).
   - F-02 (P0): Enforced live mandate status (`ACTIVE`) and expiration check in `AuthorizationService.execute_approval()`. Approving after mandate expiry or revocation now evaluates to DENY and halts payment dispatch.
@@ -118,12 +118,22 @@ In accordance with hackathon rules and truthfulness requirements, the 'Built wit
   - F-04 (P2): Eliminated MCP agent impersonation exemption for `agent-auto-1`.
   - F-05 (P2): Restricted `/v1/ledger/tamper` and `/restore` to `AUDITOR` and `PRINCIPAL` roles.
   - Added 6 redteam regression tests in `tests/redteam/test_redteam.py`.
+- Remediated concurrency & transaction boundary audit findings (R2):
+  - F1 (Step-up retry / final idempotency): `execute_approval()` persists final decision in `_idempotency_records`; replayed requests return cached decision without duplicate payment dispatch or budget deduction.
+  - F2 (`confirm_reservation` state guard): In `db_budget_repo.py`, rejected confirmations on non-PENDING/RECONCILE reservations (`InvalidApprovalStateError`).
+  - F3 (`release_reservation` state guard): In `db_budget_repo.py`, rejected releases on CONFIRMED reservations (`ValueError`) and duplicate releases (`InvalidApprovalStateError`).
+  - F4 (Reservation/idempotency atomicity): In `db_budget_repo.py`, pre-emptively queries existing idempotency key and raises `IdempotencyReplayError` before database insertion.
+  - F5 (Per-agent/per-mandate budget tracking): Converted scalar `_lifetime_spent` and `_rolling_spent` in `AuthorizationService` to per-agent dicts, preventing budget cross-talk between agents.
+  - F6 (`RECONCILE` state and ambiguous rail outcome): Added `RequestState.RECONCILE` to domain state machine with explicit transitions (`EXECUTING -> RECONCILE`, `RECONCILE -> SETTLED/FAILED/CLOSED`).
+  - F7 (Row-lock on step-up approval): Added `with_for_update()` on PostgreSQL dialect in `approve_step_up()`.
+  - Added 7 transaction audit regression tests in `tests/concurrency/test_transaction_audit.py`.
 - Authored and updated `docs/FINAL_REPORT.md` (this report).
 
 ### Tested
-- `uv run pytest -q`: 230/230 tests passing.
-- `uv run pytest -q -m redteam`: 67/67 red-team tests passing.
-- `uv run ruff check . && uv run ruff format --check .`: Clean.
+- `uv run pytest -q`: 237/237 tests passing in 12.51s.
+- `uv run pytest -q -m redteam`: 67/67 red-team tests passing in 4.32s.
+- `uv run pytest tests/concurrency/test_transaction_audit.py -q`: 7/7 tests passing in 0.52s.
+- `uv run ruff check . && uv run ruff format --check .`: Clean (0 errors, 76 files formatted).
 - `uv run mypy app`: Clean across 38 source files.
 - `uv run bandit -r app`: Clean (0 findings across 4,936 lines of code).
 - `cd web && npm run lint && npx tsc --noEmit && npm test -- --run && npm run build`: Clean (6/6 tests passing, bundle built).

@@ -124,6 +124,23 @@ class BudgetRepository:
         # 1. Idempotency check inside transaction
         self.check_idempotency(idempotency_key, intent_digest)
 
+        # 1b. Check if reservation with this idempotency key already exists (F4)
+        stmt_res = select(BudgetReservationModel).where(
+            BudgetReservationModel.idempotency_key == idempotency_key
+        )
+        existing_res = self.session.scalar(stmt_res)
+        if existing_res:
+            raise IdempotencyReplayError(
+                IdempotencyModel(
+                    idempotency_key=idempotency_key,
+                    agent_id=agent_id,
+                    intent_digest=intent_digest,
+                    decision="PENDING",
+                    response_payload="",
+                    created_at_utc=existing_res.created_at_utc,
+                )
+            )
+
         # 2. Lock budget row
         dialect = self.session.bind.dialect.name if self.session.bind else ""
         stmt = select(AgentBudgetModel).where(AgentBudgetModel.agent_id == agent_id)
@@ -176,6 +193,15 @@ class BudgetRepository:
         if not res:
             raise ReservationNotFoundError(f"Reservation '{reservation_id}' not found")
 
+        # F2: Validate reservation state before confirmation
+        if (
+            res.status != ReservationStatus.PENDING.value
+            and res.status != ReservationStatus.RECONCILE.value
+        ):
+            raise InvalidApprovalStateError(
+                f"Reservation '{reservation_id}' is already in state '{res.status}'"
+            )
+
         budget_stmt = select(AgentBudgetModel).where(AgentBudgetModel.agent_id == res.agent_id)
         budget = self.session.scalar(budget_stmt)
         if not budget:
@@ -208,6 +234,14 @@ class BudgetRepository:
         res = self.session.scalar(res_stmt)
         if not res:
             raise ReservationNotFoundError(f"Reservation '{reservation_id}' not found")
+
+        # F3: State guard: cannot release an already confirmed/settled reservation
+        if res.status == ReservationStatus.CONFIRMED.value:
+            raise ValueError(f"Cannot release reservation '{reservation_id}' in state 'CONFIRMED'")
+        if res.status == ReservationStatus.RELEASED.value:
+            raise InvalidApprovalStateError(
+                f"Reservation '{reservation_id}' is already in state '{res.status}'"
+            )
 
         budget_stmt = select(AgentBudgetModel).where(AgentBudgetModel.agent_id == res.agent_id)
         budget = self.session.scalar(budget_stmt)
@@ -281,7 +315,10 @@ class BudgetRepository:
         now_utc: datetime,
     ) -> StepUpApprovalModel:
         """Execute step-up authorization with cryptographic digest and expiration verification."""
+        dialect = self.session.bind.dialect.name if self.session.bind else ""
         stmt = select(StepUpApprovalModel).where(StepUpApprovalModel.request_id == request_id)
+        if dialect in ("postgresql", "postgres"):
+            stmt = stmt.with_for_update()
         approval = self.session.scalar(stmt)
         if not approval:
             raise ValueError(f"Step-up approval '{request_id}' not found")
