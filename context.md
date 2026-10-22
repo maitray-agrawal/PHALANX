@@ -24,10 +24,12 @@ Completed:
 - P11: Complete documentation and submission package (`README.md`, `ARCHITECTURE.md`, `API_SPEC.md`, `DEMO_SCRIPT.md`, `DEVPOST.md`).
 - Payment Rail Proof: ADR-009 recorded; PaymentRail protocol, FakePaymentRail test double, and PayPalPaymentRailAdapter with Orders v2 fallback implemented and verified.
 - Mandates & Applied Cryptography: Strict Pydantic Mandate model, RFC 8785 canonical JSON via `rfc8785==0.1.4`, Ed25519 signing/verification with key_id binding, immutable versioning (`supersede`/`revoke`), Hypothesis property testing, and threat catalog B1-B5 red-team tests.
+- Pure Decision Core: Exact Master Specification Section 5 rule order, `PolicyReasonCode` enum, `PolicyDecision(policy_version="1.0.0")`, pure `PolicyState`, purpose & invoice reference allowlists, lifetime budget caps, `guard_advisory_escalation()`, explicit request lifecycle state machine (`RECEIVED` to `CLOSED`), and 99% unit test coverage on `app/domain`.
 
 Test status:
-- Backend: 108/108 pytest tests passed in 1.08s (including 44 red-team adversarial tests)
-- Static Analysis: ruff clean (0 errors), mypy strict app/domain clean (0 errors across 25 source files)
+- Backend: 153/153 pytest tests passed in 2.60s (including 44 red-team adversarial tests)
+- Domain Coverage: 99% branch & statement coverage across `app/domain`
+- Static Analysis: ruff clean (0 errors), mypy strict app/domain clean (0 errors across 26 source files)
 - Frontend: ESLint clean, TypeScript clean, Vitest passed (3/3), Vite production build clean
 
 Next recommended action: Commit changes directly to main.
