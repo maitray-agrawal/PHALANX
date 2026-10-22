@@ -170,15 +170,16 @@ def evaluate_policy(
         )
 
     # 7. Invoice reference check
-    if mandate.require_invoice_reference:
-        if not intent.invoice_reference or not intent.invoice_reference.strip():
-            return PolicyDecision(
-                outcome=DecisionOutcome.DENY,
-                reasons=("Mandate requires an invoice reference, but none was provided",),
-                reason_codes=(PolicyReasonCode.INVOICE_REFERENCE_REQUIRED,),
-                escalated_from=None,
-                evaluated_at_utc=now_utc,
-            )
+    if mandate.require_invoice_reference and (
+        not intent.invoice_reference or not intent.invoice_reference.strip()
+    ):
+        return PolicyDecision(
+            outcome=DecisionOutcome.DENY,
+            reasons=("Mandate requires an invoice reference, but none was provided",),
+            reason_codes=(PolicyReasonCode.INVOICE_REFERENCE_REQUIRED,),
+            escalated_from=None,
+            evaluated_at_utc=now_utc,
+        )
 
     # 8. Lifetime budget check
     new_lifetime_spent = state.lifetime_spent_minor + intent.money.amount_minor

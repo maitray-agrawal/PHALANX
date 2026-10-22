@@ -41,10 +41,7 @@ class InvalidStateTransitionError(ValueError):
         self.current_state = current_state
         self.target_state = target_state
         self.reason = reason
-        msg = (
-            f"Invalid request lifecycle transition: "
-            f"{current_state.value} -> {target_state.value}"
-        )
+        msg = f"Invalid request lifecycle transition: {current_state.value} -> {target_state.value}"
         if reason:
             msg += f" ({reason})"
         super().__init__(msg)
