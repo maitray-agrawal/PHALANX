@@ -7,7 +7,7 @@ Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
 - app/api: Complete FastAPI REST suite (/v1/payment-requests, /v1/mandates, /v1/decisions, /v1/approvals, /v1/ledger, /v1/ledger/verify, /v1/webhooks/paypal, /v1/admin/reset, /v1/auth/demo-token).
 - app/mcp: Model Context Protocol server exposing financial agent governance tools.
 - web: React + Vite + TypeScript dashboard in AstraX design system with 4 operational scenes (Request Console, Step-Up Approvals, Tamper-Evident Ledger, Active Mandate).
-- tests: 230 automated tests (unit, integration, concurrency, external failure, MCP parity, red-team A1-H2, security audit regressions).
+- tests: 237 automated tests (unit, integration, concurrency, external failure, MCP parity, red-team A1-H2, security audit regressions, transaction boundary audit F1-F7).
 
 Completed:
 - P0: Bootstrap layout, Dockerfile, docker-compose.yml, CI workflows, and AST domain purity test.
@@ -24,10 +24,12 @@ Completed:
 - P11: Complete documentation and submission package (`README.md`, `ARCHITECTURE.md`, `API_SPEC.md`, `DEMO_SCRIPT.md`, `DEVPOST.md`).
 - P12: Comprehensive Independent Release Review & Audit (manual 56.41 vibe-code audit, 56.44 prove-it gate claim mapping, 56.36 fresh-machine installation test, Apache-2.0 license check, Bandit AST 0-issue security scan, git history credential scan, pinned `requirements.txt` / `requirements-dev.txt`, and publication of `docs/FINAL_REPORT.md` with Release Status `QUALIFIED_FOR_SUBMISSION` and Assessment Confidence `HIGH`).
 - Hostile Security Review & P0/P1 Remediation: Remediated F-01 unmandated agent fallback (strictly returns None -> DENY), F-02 approval execution rechecks live mandate active status and expiry, F-03 cross-tenant approver IDOR and demo principal alignment, F-04 MCP impersonation guard, F-05 restricted ledger tamper endpoint. Added 6 redteam regression tests in `tests/redteam/test_redteam.py`.
+- Concurrency & Transaction Boundary Audit (R2): Remediated F1 (step-up approval final idempotency caching), F2 (`confirm_reservation` state guard against terminal/illegal states), F3 (`release_reservation` state guard against CONFIRMED and duplicate RELEASED states), F4 (reservation/idempotency key atomicity check prior to insertion), F5 (per-agent/per-mandate budget tracking dicts preventing cross-agent contamination), F6 (`RECONCILE` state and ambiguous rail outcome state machine transitions), F7 (row-level locking with `with_for_update` on step-up approvals). Added 7 concurrency audit regression tests in `tests/concurrency/test_transaction_audit.py`.
 
 Test status:
-- Backend: 230/230 pytest tests passed in 22.66s (including external failure, concurrency, LLM safety, FastMCP tools, parity, and 67 red-team tests)
+- Backend: 237/237 pytest tests passed in 12.51s (including external failure, concurrency, LLM safety, FastMCP tools, parity, 67 red-team tests, and 7 transaction audit tests)
 - Red Team: 67/67 red-team tests passed (catalog A1-H2, B-Crypto 1-5, G1-G6, 30 prompt injection corpus vectors, and F01-F05 hostile review regressions)
+- Concurrency / Transaction Boundary Suite: 7/7 passed in `tests/concurrency/test_transaction_audit.py`
 - Security Audit: bandit -r app reports 0 issues (0 High, 0 Medium, 0 Low across 4,936 lines)
 - Static Analysis: ruff check clean (0 errors), ruff format clean, mypy app clean (0 errors across 38 source files)
 - Frontend: ESLint clean (0 errors), TypeScript clean (`npx tsc --noEmit`), Vitest passed (6/6), Playwright smoke tests passed (4/4 on Chromium), Vite production build clean (0 errors)

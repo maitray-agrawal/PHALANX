@@ -18,6 +18,7 @@ class RequestState(str, Enum):
     REJECTED = "REJECTED"
     DENIED = "DENIED"
     EXECUTING = "EXECUTING"
+    RECONCILE = "RECONCILE"
     SETTLED = "SETTLED"
     FAILED = "FAILED"
     VOIDED = "VOIDED"
@@ -84,6 +85,14 @@ _ALLOWABLE_TRANSITIONS: dict[RequestState, frozenset[RequestState]] = {
         {
             RequestState.SETTLED,  # Payment captured/completed
             RequestState.FAILED,  # Payment rail rejected/failed
+            RequestState.RECONCILE,  # Ambiguous outcome / timeout
+        }
+    ),
+    RequestState.RECONCILE: frozenset(
+        {
+            RequestState.SETTLED,  # Reconciled to success
+            RequestState.FAILED,  # Reconciled to confirmed failure
+            RequestState.CLOSED,  # Manually resolved/closed
         }
     ),
     RequestState.SETTLED: frozenset(

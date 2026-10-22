@@ -374,8 +374,8 @@ class AuthorizationService:
         self._mandate_service = mandate_service or MandateService(clock=clock)
         self._payment_rail = payment_rail or FakePaymentRail()
         self._lock = Lock()
-        self._lifetime_spent: int = 0
-        self._rolling_spent: int = 0
+        self._lifetime_spent: dict[str, int] = {}
+        self._rolling_spent: dict[str, int] = {}
         self._idempotency_records: dict[str, tuple[str, DecisionOutcome]] = {}
         self._pending_step_ups: dict[str, dict[str, Any]] = {}
         self._responses_by_id: dict[str, AuthorizationResponseDTO] = {}
@@ -432,9 +432,11 @@ class AuthorizationService:
         with self._lock:
             return self._pending_step_ups.get(request_id)
 
-    def get_lifetime_spent(self) -> int:
+    def get_lifetime_spent(self, agent_id: str | None = None) -> int:
         with self._lock:
-            return self._lifetime_spent
+            if agent_id:
+                return self._lifetime_spent.get(agent_id, 0)
+            return sum(self._lifetime_spent.values())
 
     def authorize(self, command: AuthorizeTransactionCommand) -> AuthorizationResponseDTO:
         now_utc = self._clock.now_utc()
@@ -475,9 +477,11 @@ class AuthorizationService:
                     final_decision = DecisionOutcome.DENY
                     base_decision = DecisionOutcome.DENY
                 else:
+                    agent_lifetime = self._lifetime_spent.get(command.agent_id, 0)
+                    agent_rolling = self._rolling_spent.get(command.agent_id, 0)
                     state = PolicyState(
-                        lifetime_spent_minor=self._lifetime_spent,
-                        rolling_24h_spent_minor=self._rolling_spent,
+                        lifetime_spent_minor=agent_lifetime,
+                        rolling_24h_spent_minor=agent_rolling,
                         idempotency_records=dict(self._idempotency_records),
                     )
                     eval_res: PolicyDecision = evaluate_policy(
@@ -502,15 +506,27 @@ class AuthorizationService:
             )
 
             payout_id: str | None = None
-            if final_decision == DecisionOutcome.ALLOW:
-                # Reserve budget
-                self._lifetime_spent += intent.money.amount_minor
-                self._rolling_spent += intent.money.amount_minor
-                # Dispatch payment rail
-                rail_res = self._payment_rail.pay(intent)
-                payout_id = rail_res.transaction_id
+            is_replay = PolicyReasonCode.IDEMPOTENCY_REPLAY in codes
 
-            elif final_decision == DecisionOutcome.STEP_UP:
+            if final_decision == DecisionOutcome.ALLOW:
+                if not is_replay:
+                    # Reserve budget
+                    agent_lifetime = self._lifetime_spent.get(command.agent_id, 0)
+                    agent_rolling = self._rolling_spent.get(command.agent_id, 0)
+                    self._lifetime_spent[command.agent_id] = (
+                        agent_lifetime + intent.money.amount_minor
+                    )
+                    self._rolling_spent[command.agent_id] = (
+                        agent_rolling + intent.money.amount_minor
+                    )
+                    # Dispatch payment rail
+                    rail_res = self._payment_rail.pay(intent)
+                    payout_id = rail_res.transaction_id
+                else:
+                    prev_resp = self._responses_by_id.get(request_id)
+                    payout_id = prev_resp.payout_id if prev_resp else None
+
+            elif final_decision == DecisionOutcome.STEP_UP and not is_replay:
                 # Store pending approval record bound to intent digest
                 self._pending_step_ups[request_id] = {
                     "intent": intent,
@@ -606,9 +622,11 @@ class AuthorizationService:
                     codes.append(PolicyReasonCode.MANDATE_NOT_YET_VALID)
                 else:
                     # 2. Re-evaluate policy against current state and current mandate
+                    agent_lifetime = self._lifetime_spent.get(intent.agent_id, 0)
+                    agent_rolling = self._rolling_spent.get(intent.agent_id, 0)
                     state = PolicyState(
-                        lifetime_spent_minor=self._lifetime_spent,
-                        rolling_24h_spent_minor=self._rolling_spent,
+                        lifetime_spent_minor=agent_lifetime,
+                        rolling_24h_spent_minor=agent_rolling,
                         idempotency_records=dict(self._idempotency_records),
                     )
                     eval_res = evaluate_policy(
@@ -625,12 +643,22 @@ class AuthorizationService:
                         codes.extend(eval_res.reason_codes)
                     else:
                         final_decision = DecisionOutcome.ALLOW
-                        self._lifetime_spent += intent.money.amount_minor
-                        self._rolling_spent += intent.money.amount_minor
+                        self._lifetime_spent[intent.agent_id] = (
+                            agent_lifetime + intent.money.amount_minor
+                        )
+                        self._rolling_spent[intent.agent_id] = (
+                            agent_rolling + intent.money.amount_minor
+                        )
                         rail_res = self._payment_rail.pay(intent)
                         payout_id = rail_res.transaction_id
             else:
                 final_decision = DecisionOutcome.DENY
+
+            # F1: Update idempotency cache with final approved decision
+            self._idempotency_records[intent.idempotency_key] = (
+                stored_digest,
+                final_decision,
+            )
 
             domain_result = PolicyEvaluationResult(
                 outcome=final_decision,
@@ -673,8 +701,8 @@ class AuthorizationService:
 
     def reset_state(self) -> None:
         with self._lock:
-            self._lifetime_spent = 0
-            self._rolling_spent = 0
+            self._lifetime_spent.clear()
+            self._rolling_spent.clear()
             self._idempotency_records.clear()
             self._pending_step_ups.clear()
             self._responses_by_id.clear()

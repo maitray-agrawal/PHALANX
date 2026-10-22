@@ -173,4 +173,31 @@ Manual section references: 36, 37, 56.25.
   - **Validity**: Short-lived (`expires_in: 32400` seconds / 9 hours).
   - **Adapter Architecture**: PHALANX `PayPalPaymentRailAdapter` dynamically acquires and refreshes OAuth tokens using the persistent Client ID and Secret, ensuring autonomous operations never stall due to expired Bearer tokens.
 
+---
+
+## 9. Concurrency, Locks & Transaction Boundary Audit Evidence (Date: 2026-10-23)
+
+Audit conducted per manual sections 56.13, 56.14, 56.17 covering transaction boundaries, pessimistic locks, unique constraints, and state transitions.
+
+### 9.1 Remediated Findings Matrix
+| Finding | Subsystem | Severity | Invariant Enforced | Empirical Test Case | Status |
+|---|---|---|---|---|---|
+| **F1** | `AuthorizationService` | High | Step-up final idempotency: executed approvals cache final decision; replays skip payment dispatch and budget re-deduction | `test_f1_step_up_replay_idempotency_cached` | **Verified** |
+| **F2** | `DatabaseBudgetRepository` | High | Reservation confirmation guard: rejects non-PENDING/RECONCILE reservations (`InvalidApprovalStateError`) | `test_f2_confirm_reservation_state_guard` | **Verified** |
+| **F3** | `DatabaseBudgetRepository` | High | Reservation release guard: rejects CONFIRMED reservations (`ValueError`) and double-release | `test_f3_release_reservation_state_guard` | **Verified** |
+| **F4** | `DatabaseBudgetRepository` | Medium | Pre-emptive idempotency replay check prior to DB reservation insert (`IdempotencyReplayError`) | `test_f4_reservation_idempotency_atomicity` | **Verified** |
+| **F5** | `AuthorizationService` | High | Per-agent/per-mandate budget tracking: `_lifetime_spent` and `_rolling_spent` segregated by `agent_id` | `test_f5_per_agent_lifetime_budget_isolation` | **Verified** |
+| **F6** | `RequestStateMachine` | Medium | Ambiguous rail outcome handling: `RequestState.RECONCILE` state and transitions | `test_f6_reconcile_state_transitions` | **Verified** |
+| **F7** | `DatabaseBudgetRepository` | High | Row-level locking: `with_for_update` on step-up approvals under PostgreSQL | `test_f7_step_up_row_lock` | **Verified** |
+
+### 9.2 Complete Test Suite Execution Proof (2026-10-23)
+- **Pytest Full Suite**: **237 passed** in 12.51s (`uv run pytest -q`)
+- **Red Team Suite**: **67 passed**, 170 deselected in 4.32s (`uv run pytest -q -m redteam`)
+- **Transaction Audit Suite**: **7 passed** in 0.52s (`uv run pytest tests/concurrency/test_transaction_audit.py -q`)
+- **Static Typing**: Success: no issues found in 38 source files (`uv run mypy app`)
+- **Linting & Code Style**: All checks passed, 76 files already formatted (`uv run ruff check . && uv run ruff format --check .`)
+- **Security AST Audit**: 0 High, 0 Medium, 0 Low across 4,936 LOC (`uv run bandit -r app`)
+- **Frontend Quality Gate**: ESLint clean (0 errors), TypeScript clean (`npx tsc --noEmit`), Vitest passed (6/6 in 490ms), Vite production build clean (dist generated in 9.12s)
+
+
 

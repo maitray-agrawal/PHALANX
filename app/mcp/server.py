@@ -120,7 +120,7 @@ def execute_get_mandate_status(
     if not mandate:
         return {"error": "Mandate not found", "mandate_id": mandate_id}
 
-    spent = authz_service.get_lifetime_spent()
+    spent = authz_service.get_lifetime_spent(mandate.agent_id)
     remaining = max(0, mandate.lifetime_budget_minor - spent)
 
     return {
