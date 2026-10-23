@@ -4,8 +4,8 @@ services:
     container_name: phalanx-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: phalanx_admin
-      POSTGRES_PASSWORD: phalanx_dev_password
+      POSTGRES_USER: phalanx_app
+      POSTGRES_PASSWORD: Maitray@7979
       POSTGRES_DB: phalanx_db
     ports:
       - "5432:5432"
@@ -13,7 +13,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U phalanx_admin -d phalanx_db"]
+      test: ["CMD-SHELL", "pg_isready -U phalanx_app -d phalanx_db"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -32,7 +32,7 @@ services:
     environment:
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
-      - DATABASE_URL=postgresql+psycopg://phalanx_app:phalanx_app_password@db:5432/phalanx_db
+      - DATABASE_URL=postgresql+psycopg://phalanx_app:Maitray%407979@db:5432/phalanx_db
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
       interval: 10s
