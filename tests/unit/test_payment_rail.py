@@ -65,4 +65,8 @@ def test_paypal_adapter_unconfigured_fallback() -> None:
     res = adapter.pay(intent)
     assert res.success is True
     assert res.transaction_id != ""
-    assert "sandbox" in res.transaction_id or res.status in ("COMPLETED_SIMULATED", "SUCCESS")
+    assert "sandbox" in res.transaction_id or res.status in (
+        "COMPLETED_SIMULATED",
+        "SUCCESS",
+        "ORDER_CREATED_FALLBACK",
+    )

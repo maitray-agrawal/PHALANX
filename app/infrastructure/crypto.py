@@ -57,11 +57,21 @@ def load_or_generate_keypair(
         path = Path(key_file_path.strip())
         if path.is_file():
             try:
-                content = path.read_text(encoding="utf-8").strip()
-                priv_bytes = bytes.fromhex(content)
-                if len(priv_bytes) != 32:
-                    raise ValueError("Key file content must be 32 bytes hex")
-                priv_key = Ed25519PrivateKey.from_private_bytes(priv_bytes)
+                raw_data = path.read_bytes()
+                if b"BEGIN" in raw_data:
+                    from cryptography.hazmat.primitives import serialization
+
+                    loaded_key = serialization.load_pem_private_key(raw_data, password=None)
+                    if not isinstance(loaded_key, Ed25519PrivateKey):
+                        raise ValueError("PEM file must contain an Ed25519 private key")
+                    priv_key = loaded_key
+                    priv_bytes = loaded_key.private_bytes_raw()
+                else:
+                    content = raw_data.decode("utf-8").strip()
+                    priv_bytes = bytes.fromhex(content)
+                    if len(priv_bytes) != 32:
+                        raise ValueError("Key file content must be 32 bytes hex")
+                    priv_key = Ed25519PrivateKey.from_private_bytes(priv_bytes)
                 pub_bytes = priv_key.public_key().public_bytes_raw()
                 return priv_bytes, pub_bytes, get_key_id(pub_bytes)
             except Exception as e:
