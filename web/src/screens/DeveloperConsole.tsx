@@ -54,7 +54,7 @@ print("Authorization Outcome:", decision["decision"]) # ALLOW | STEP_UP | DENY`}
           Inspect current Ed25519 mandate limits, remaining budget balances, and allowlisted payees.
         </p>
         <pre className="code-block">
-{`curl -X GET "http://localhost:8000/v1/mandates/mandate_default_astra" \\
+{`curl -X GET "http://localhost:8000/v1/mandates/mandate_default_sandbox" \\
   -H "Authorization: Bearer <principal_token>" \\
   -H "X-Phalanx-Role: principal"`}
         </pre>

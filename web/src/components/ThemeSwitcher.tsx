@@ -54,7 +54,7 @@ export const ThemeSwitcher: React.FC = () => {
         type="button"
         className={`theme-btn ${theme === "light" ? "active" : ""}`}
         onClick={() => setTheme("light")}
-        title="Light Mode (AstraX Ivory & Sandstone)"
+        title="Light Mode (Ivory & Sandstone)"
         aria-checked={theme === "light"}
         role="radio"
       >

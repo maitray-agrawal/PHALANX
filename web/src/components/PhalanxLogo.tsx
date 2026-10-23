@@ -163,11 +163,11 @@ export const PhalanxHeaderBrand: React.FC<PhalanxHeaderBrandProps> = ({
       <div className="phalanx-brand-text">
         <div className="phalanx-brand-row">
           <span className="phalanx-title">PHALANX</span>
-          <span className="phalanx-system-badge">ASTRAX INTELLIGENCE</span>
+          <span className="phalanx-system-badge">PAYMENT SECURITY LAYER</span>
         </div>
         {showTagline && (
           <span className="phalanx-subtitle">
-            AGENT PAYMENTS UNDER CONTROL
+            LET AGENTS ACT. KEEP POLICY IN CONTROL.
           </span>
         )}
       </div>

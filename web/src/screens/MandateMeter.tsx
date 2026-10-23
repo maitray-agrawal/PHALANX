@@ -23,7 +23,7 @@ export const MandateMeter: React.FC<MandateMeterProps> = ({ mandate, isLoadingMa
         <span className="status-pill active">ACTIVE</span>
       </div>
       <p className="card-subtitle">
-        Cryptographically signed authority parameters issued by AstraX Treasury Principal.
+        Cryptographically signed authority parameters issued by Authorized Treasury Principal.
         Defines operational envelope and budget constraints for autonomous agents.
       </p>
 

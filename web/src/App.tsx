@@ -45,9 +45,9 @@ interface ChatMessage {
 }
 
 const INITIAL_MANDATE: MandateResponse = {
-  mandate_id: "mandate_default_astra",
+  mandate_id: "mandate_default_sandbox",
   version: 1,
-  principal_id: "principal_astra_treasury",
+  principal_id: "principal_treasury",
   agent_id: "agent-auto-1",
   single_limit_minor: 500000,
   instant_threshold_minor: 50000,
@@ -297,7 +297,7 @@ export const App: React.FC = () => {
     setIsLoadingMandate(true);
     setGlobalError(null);
     try {
-      const m = await api.getMandate("mandate_default_astra", token, role);
+      const m = await api.getMandate("mandate_default_sandbox", token, role);
       setMandate(m);
     } catch (err) {
       setGlobalError(err instanceof Error ? err.message : "Failed to load active mandate");

@@ -254,6 +254,20 @@ class PayPalPaymentRailAdapter(PaymentRail):
                     status=data.get("batch_header", {}).get("batch_status", "UNKNOWN"),
                     details=data,
                 )
+
+            # If not found in payouts (e.g. order fallback), query Orders v2 API
+            if resp.status_code == 404 or "INVALID_RESOURCE_ID" in resp.text:
+                order_url = f"{self._base_url}/v2/checkout/orders/{transaction_id}"
+                order_resp = httpx.get(order_url, headers=headers, timeout=10.0)
+                if order_resp.status_code == 200:
+                    order_data = order_resp.json()
+                    return PaymentResult(
+                        success=True,
+                        transaction_id=transaction_id,
+                        status=order_data.get("status", "CREATED"),
+                        details=order_data,
+                    )
+
             return PaymentResult(
                 success=False,
                 transaction_id=transaction_id,

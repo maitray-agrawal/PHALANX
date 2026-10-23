@@ -70,3 +70,45 @@ def test_paypal_adapter_unconfigured_fallback() -> None:
         "SUCCESS",
         "ORDER_CREATED_FALLBACK",
     )
+
+
+def test_paypal_adapter_lookup_simulation_when_no_token(monkeypatch) -> None:
+    adapter = PayPalPaymentRailAdapter()
+    monkeypatch.setattr(adapter, "_get_access_token", lambda: "")
+    res = adapter.lookup("mock-tx-12345")
+    assert res.success is True
+    assert res.status == "COMPLETED"
+    assert res.transaction_id == "mock-tx-12345"
+    assert res.details == {"lookup": "simulated"}
+
+
+def test_paypal_adapter_lookup_order_fallback_mocked(monkeypatch) -> None:
+    adapter = PayPalPaymentRailAdapter()
+    monkeypatch.setattr(adapter, "_get_access_token", lambda: "fake-jwt-token")
+
+    class FakePayoutResponse:
+        status_code = 404
+        text = '{"name":"INVALID_RESOURCE_ID","message":"Not found"}'
+
+    class FakeOrderResponse:
+        status_code = 200
+        text = '{"id":"ORDER-999","status":"APPROVED"}'
+
+        def json(self):
+            return {"id": "ORDER-999", "status": "APPROVED"}
+
+    def fake_get(url: str, **kwargs: object) -> object:
+        _ = kwargs
+        if "payouts" in url:
+            return FakePayoutResponse()
+        if "orders" in url:
+            return FakeOrderResponse()
+        raise ValueError(f"Unexpected url {url}")
+
+    import httpx
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    res = adapter.lookup("ORDER-999")
+    assert res.success is True
+    assert res.transaction_id == "ORDER-999"
+    assert res.status == "APPROVED"

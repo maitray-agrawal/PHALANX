@@ -40,7 +40,7 @@ export const CockpitOverview: React.FC<CockpitOverviewProps> = ({
           </div>
           <div className="metric-value">1 Active</div>
           <div className="metric-meta">
-            <span className="metric-badge-blue">mandate_default_astra</span>
+            <span className="metric-badge-blue">mandate_default_sandbox</span>
             <span className="subtext">Ed25519 Signed</span>
           </div>
         </div>
@@ -115,7 +115,7 @@ export const CockpitOverview: React.FC<CockpitOverviewProps> = ({
         <div className="pipeline-header">
           <div className="pipeline-title">
             <ShieldCheck size={22} className="card-icon" />
-            <span>AstraX Operational Authorization Pipeline</span>
+            <span>PHALANX Operational Authorization Pipeline</span>
           </div>
           <span className="phalanx-system-badge">DETERMINISTIC ZERO-IO ENGINE</span>
         </div>

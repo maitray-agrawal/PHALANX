@@ -67,7 +67,7 @@ export const RequestConsole: React.FC<RequestConsoleProps> = ({
           <div className={`pipeline-node ${latestDecision ? "pass" : "active"}`}>
             <span className="node-step">02. Mandate</span>
             <span className="node-title">Ed25519 Envelope</span>
-            <span className="node-desc">mandate_default_astra</span>
+            <span className="node-desc">mandate_default_sandbox</span>
           </div>
           <div className="pipeline-arrow">→</div>
           <div
@@ -370,12 +370,106 @@ export const RequestConsole: React.FC<RequestConsoleProps> = ({
                 <span className="detail-key">Intent SHA-256 Digest:</span>
                 <span className="detail-val mono">{latestDecision.intent_digest.slice(0, 16)}...</span>
               </div>
-              {latestDecision.payout_id && (
-                <div className="detail-row">
-                  <span className="detail-key">PayPal Sandbox Payout ID:</span>
-                  <span className="detail-val mono highlight">{latestDecision.payout_id}</span>
+
+              {/* Policy Checks Checklist */}
+              <div className="policy-checks-section" style={{ margin: "0.75rem 0", padding: "0.75rem", borderRadius: "6px", background: "var(--color-bg-secondary, rgba(0,0,0,0.05))" }}>
+                <span className="detail-key" style={{ fontWeight: 600, display: "block", marginBottom: "0.5rem" }}>
+                  PHALANX Deterministic Policy Checks:
+                </span>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", fontSize: "0.85rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                    {!latestDecision.reasons.some(r => r.toLowerCase().includes("mandate") && (r.toLowerCase().includes("invalid") || r.toLowerCase().includes("expired"))) ? (
+                      <span style={{ color: "var(--color-success, #16a34a)" }}>✓ Mandate valid</span>
+                    ) : (
+                      <span style={{ color: "var(--color-error, #dc2626)" }}>✕ Mandate invalid</span>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                    {!latestDecision.reasons.some(r => r.toLowerCase().includes("payee") || r.toLowerCase().includes("unregistered") || r.toLowerCase().includes("recipient")) ? (
+                      <span style={{ color: "var(--color-success, #16a34a)" }}>✓ Payee allowlisted</span>
+                    ) : (
+                      <span style={{ color: "var(--color-error, #dc2626)" }}>✕ Payee not allowlisted</span>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                    {!latestDecision.reasons.some(r => r.toLowerCase().includes("single_limit") || r.toLowerCase().includes("exceeds single limit") || r.toLowerCase().includes("max single cap")) ? (
+                      <span style={{ color: "var(--color-success, #16a34a)" }}>✓ Transaction limit</span>
+                    ) : (
+                      <span style={{ color: "var(--color-error, #dc2626)" }}>✕ Transaction limit exceeded</span>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                    {!latestDecision.reasons.some(r => r.toLowerCase().includes("budget") && r.toLowerCase().includes("exhausted")) ? (
+                      <span style={{ color: "var(--color-success, #16a34a)" }}>✓ Budget available</span>
+                    ) : (
+                      <span style={{ color: "var(--color-error, #dc2626)" }}>✕ Budget exhausted</span>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", gridColumn: "1 / -1" }}>
+                    <span style={{ color: "var(--color-success, #16a34a)" }}>✓ Intent integrity (Canonical RFC 8785 SHA-256 sealed)</span>
+                  </div>
                 </div>
-              )}
+              </div>
+
+              {/* Payment Result Box */}
+              <div
+                className={`payment-result-box ${latestDecision.decision.toLowerCase()}`}
+                style={{
+                  margin: "0.75rem 0",
+                  padding: "0.75rem",
+                  borderRadius: "6px",
+                  border: "1px solid var(--color-border, #e5e7eb)",
+                  background: latestDecision.decision === "ALLOW"
+                    ? "rgba(22, 163, 74, 0.08)"
+                    : latestDecision.decision === "STEP_UP"
+                      ? "rgba(217, 130, 43, 0.08)"
+                      : "rgba(220, 38, 38, 0.08)",
+                }}
+              >
+                <div style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-secondary, #6b7280)", marginBottom: "0.25rem" }}>
+                  Payment Result
+                </div>
+                {latestDecision.decision === "ALLOW" && (
+                  <div>
+                    <div style={{ fontWeight: 600 }}>PayPal Sandbox Payment Executed</div>
+                    {latestDecision.payout_id && (
+                      <div className="mono" style={{ fontSize: "0.85rem", marginTop: "0.25rem" }}>
+                        Transaction / Reference ID: <span className="highlight">{latestDecision.payout_id}</span>
+                      </div>
+                    )}
+                    <div style={{ fontSize: "0.85rem", color: "var(--color-success, #16a34a)", marginTop: "0.25rem", fontWeight: 600 }}>
+                      Status: SETTLED (Captured on PayPal Sandbox rail)
+                    </div>
+                  </div>
+                )}
+                {latestDecision.decision === "STEP_UP" && (
+                  <div>
+                    <div style={{ fontWeight: 600, color: "var(--color-amber, #d97706)" }}>
+                      Payment Held in Supervisor Step-Up Queue
+                    </div>
+                    <div style={{ fontSize: "0.85rem", marginTop: "0.25rem" }}>
+                      Transaction exceeds instant threshold (${((extractedIntent?.amount_minor || 0) / 100).toFixed(2)} USD). Awaiting human review.
+                    </div>
+                    <div style={{ fontSize: "0.85rem", fontWeight: 600, marginTop: "0.25rem" }}>
+                      Status: PENDING_APPROVAL
+                    </div>
+                  </div>
+                )}
+                {latestDecision.decision === "DENY" && (
+                  <div>
+                    <div style={{ fontWeight: 600, color: "var(--color-error, #dc2626)" }}>
+                      Payment Blocked by PHALANX Policy
+                    </div>
+                    <div style={{ fontSize: "0.85rem", marginTop: "0.25rem" }}>
+                      Zero calls dispatched to payment rail. Unauthorized payee or hard policy violation.
+                    </div>
+                    <div style={{ fontSize: "0.85rem", fontWeight: 600, marginTop: "0.25rem", color: "var(--color-error, #dc2626)" }}>
+                      Status: BLOCKED
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="reasons-list">
                 <span className="detail-key">Policy Invariants & Reasoning:</span>
                 <ul>

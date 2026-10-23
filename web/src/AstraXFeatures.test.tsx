@@ -2,13 +2,13 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
 import App from "./App";
 
-describe("AstraX Intelligence & Operational Extensions", () => {
+describe("PHALANX Security & Operational Features", () => {
   it("renders Overview tab with cockpit metrics and architecture pipeline", () => {
     render(<App />);
     const overviewTab = screen.getByRole("tab", { name: "Overview" });
     fireEvent.click(overviewTab);
 
-    expect(screen.getByText("AstraX Operational Authorization Pipeline")).toBeInTheDocument();
+    expect(screen.getByText("PHALANX Operational Authorization Pipeline")).toBeInTheDocument();
     expect(screen.getByText("Intent Delimiters")).toBeInTheDocument();
     expect(screen.getByText("Pure Policy Core")).toBeInTheDocument();
     expect(screen.getByText("Autonomous Allow")).toBeInTheDocument();

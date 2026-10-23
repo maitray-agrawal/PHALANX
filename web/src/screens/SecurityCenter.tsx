@@ -20,7 +20,7 @@ export const SecurityCenter: React.FC = () => {
         </span>
       </div>
       <p className="card-subtitle">
-        Strict defense-in-depth architecture adhering to AstraX engineering principles. Every
+        Strict defense-in-depth architecture adhering to PHALANX zero-trust engineering principles. Every
         financial transaction requires positive authorization and leaves immutable audit evidence.
       </p>
 

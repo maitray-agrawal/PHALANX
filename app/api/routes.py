@@ -194,6 +194,11 @@ def create_payment_request(
     response_model=AuthorizationResponseDTO,
     status_code=status.HTTP_200_OK,
 )
+@router.get(
+    "/api/v1/requests/{request_id}",
+    response_model=AuthorizationResponseDTO,
+    status_code=status.HTTP_200_OK,
+)
 def get_payment_request(
     request_id: str,
     identity: Annotated[Identity, Depends(get_current_identity)],
@@ -250,6 +255,11 @@ def create_mandate(
 
 @router.get(
     "/v1/mandates/{mandate_id}",
+    response_model=MandateResponseDTO,
+    status_code=status.HTTP_200_OK,
+)
+@router.get(
+    "/api/v1/mandates/{mandate_id}",
     response_model=MandateResponseDTO,
     status_code=status.HTTP_200_OK,
 )
@@ -321,6 +331,11 @@ def get_decision(
     response_model=list[PendingStepUpDTO],
     status_code=status.HTTP_200_OK,
 )
+@router.get(
+    "/api/v1/approvals",
+    response_model=list[PendingStepUpDTO],
+    status_code=status.HTTP_200_OK,
+)
 def list_pending_approvals(
     identity: Annotated[Identity, Depends(get_current_identity)],
     service: Annotated[AuthorizationService, Depends(get_authorization_service)],
@@ -383,6 +398,40 @@ def submit_approval(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
 
+@router.post(
+    "/api/v1/approvals/{request_id}/approve",
+    response_model=AuthorizationResponseDTO,
+    status_code=status.HTTP_200_OK,
+)
+def approve_request_api(
+    request_id: str,
+    payload: dict[str, Any],
+    identity: Annotated[Identity, Depends(get_current_identity)],
+    service: Annotated[AuthorizationService, Depends(get_authorization_service)],
+) -> AuthorizationResponseDTO:
+    """Direct approve endpoint binding human approval to exact intent."""
+    payload_copy = dict(payload)
+    payload_copy["decision"] = "ALLOW"
+    return submit_approval(request_id, payload_copy, identity, service)
+
+
+@router.post(
+    "/api/v1/approvals/{request_id}/reject",
+    response_model=AuthorizationResponseDTO,
+    status_code=status.HTTP_200_OK,
+)
+def reject_request_api(
+    request_id: str,
+    payload: dict[str, Any],
+    identity: Annotated[Identity, Depends(get_current_identity)],
+    service: Annotated[AuthorizationService, Depends(get_authorization_service)],
+) -> AuthorizationResponseDTO:
+    """Direct reject endpoint for human rejection."""
+    payload_copy = dict(payload)
+    payload_copy["decision"] = "DENY"
+    return submit_approval(request_id, payload_copy, identity, service)
+
+
 # ---------------------------------------------------------------------------
 # Ledger & Verification Endpoints (GET /v1/ledger, GET /v1/ledger/verify)
 # ---------------------------------------------------------------------------
@@ -390,6 +439,11 @@ def submit_approval(
 
 @router.get(
     "/v1/ledger",
+    response_model=list[LedgerEventDTO],
+    status_code=status.HTTP_200_OK,
+)
+@router.get(
+    "/api/v1/ledger",
     response_model=list[LedgerEventDTO],
     status_code=status.HTTP_200_OK,
 )
@@ -407,6 +461,11 @@ def list_ledger_events(
 
 @router.get(
     "/v1/ledger/verify",
+    response_model=LedgerVerificationDTO,
+    status_code=status.HTTP_200_OK,
+)
+@router.get(
+    "/api/v1/ledger/verify",
     response_model=LedgerVerificationDTO,
     status_code=status.HTTP_200_OK,
 )

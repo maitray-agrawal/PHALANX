@@ -80,7 +80,7 @@ describe("PHALANX Dashboard App", () => {
     fireEvent.click(mandateTab);
 
     expect(screen.getByText("Active Ed25519 Authority Mandate")).toBeInTheDocument();
-    expect(screen.getByText(/mandate_default_astra/i)).toBeInTheDocument();
+    expect(screen.getByText(/mandate_default_sandbox/i)).toBeInTheDocument();
     expect(screen.getByText("Remaining Budget")).toBeInTheDocument();
     expect(screen.getByText(/Single Transaction Cap/i)).toBeInTheDocument();
     expect(screen.getByText(/Instant Autonomous Threshold/i)).toBeInTheDocument();

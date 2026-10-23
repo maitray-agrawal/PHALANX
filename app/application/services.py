@@ -151,7 +151,9 @@ class MandateService:
             signature=sig,
         )
         self._mandates[mandate_id] = mandate
+        self._mandates["mandate_default_sandbox"] = mandate
         self._history[mandate_id] = [mandate]
+        self._history["mandate_default_sandbox"] = [mandate]
 
     def get_active_mandate_for_agent(self, agent_id: str) -> Mandate | None:
         with self._lock:

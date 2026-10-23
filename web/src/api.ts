@@ -237,7 +237,7 @@ export const api = {
       role
     ),
 
-  getMandate: (mandateId = "mandate_default_astra", token?: string, role = "principal") =>
+  getMandate: (mandateId = "mandate_default_sandbox", token?: string, role = "principal") =>
     request<MandateResponse>(`/v1/mandates/${mandateId}`, { method: "GET" }, token, role),
 
   getReconcileItems: (token?: string, role = "approver") =>

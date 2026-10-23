@@ -1,12 +1,13 @@
 # PHALANX
-### Authorization & Governance Layer for Autonomous Financial Agents
+### Agentic Payment Authorization & Security Layer
 
 [![CI](https://github.com/maitray-agrawal/PHALANX/actions/workflows/ci.yml/badge.svg)](https://github.com/maitray-agrawal/PHALANX/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
 [![Frontend React](https://img.shields.io/badge/frontend-React%20%2B%20TS-61DAFB.svg)](web/)
 
-> **AstraX product. PayPal AI Hackathon 2026 entry. Sandbox only, no real money.**
+> **PayPal AI Hackathon 2026 entry. Sandbox only, no real money.**  
+> *Let agents act. Keep humans and policy in control.*
 
 ---
 
@@ -63,7 +64,7 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 ## Running Verification & Tests
 
 ```bash
-# Run all 245 backend tests (unit, integration, concurrency, and red-team)
+# Run all 247 backend tests (unit, integration, concurrency, and red-team)
 pytest -q
 
 # Run adversarial red-team suite only (67 threat catalog tests)
