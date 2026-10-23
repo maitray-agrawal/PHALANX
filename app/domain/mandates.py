@@ -86,6 +86,10 @@ class Mandate(BaseModel):
         default=False,
         description="Whether payments under this mandate require a non-empty invoice reference",
     )
+    allow_unregistered_payees: bool = Field(
+        default=False,
+        description="Whether payees outside allowed_payees are permitted",
+    )
 
     @field_validator("valid_from_utc", "valid_until_utc")
     @classmethod
@@ -124,6 +128,8 @@ class Mandate(BaseModel):
         }
         if self.require_invoice_reference:
             payload["require_invoice_reference"] = True
+        if self.allow_unregistered_payees:
+            payload["allow_unregistered_payees"] = True
         return payload
 
     def signable_bytes(self) -> bytes:
@@ -149,6 +155,7 @@ class Mandate(BaseModel):
         allowed_purposes: tuple[str, ...] | None = None,
         valid_from_utc: datetime | None = None,
         valid_until_utc: datetime | None = None,
+        allow_unregistered_payees: bool | None = None,
     ) -> tuple["Mandate", "Mandate"]:
         """Create a new version of the mandate and supersede the old one.
 
@@ -185,6 +192,11 @@ class Mandate(BaseModel):
             valid_from_utc=valid_from_utc if valid_from_utc is not None else self.valid_from_utc,
             valid_until_utc=(
                 valid_until_utc if valid_until_utc is not None else self.valid_until_utc
+            ),
+            allow_unregistered_payees=(
+                allow_unregistered_payees
+                if allow_unregistered_payees is not None
+                else self.allow_unregistered_payees
             ),
             status=MandateStatus.ACTIVE,
             key_id=key_id,

@@ -134,28 +134,10 @@ class BudgetRepository:
 
         Uses SELECT ... FOR UPDATE (on dialects supporting row locking) or serial locks.
         Guarantees spent_minor + reserved_minor + amount_minor <= allocated_minor.
+        Deterministic parent-to-child lock ordering prevents PostgreSQL deadlocks
+        under parallel load.
         """
-        # 1. Idempotency check inside transaction
-        self.check_idempotency(idempotency_key, intent_digest)
-
-        # 1b. Check if reservation with this idempotency key already exists (F4)
-        stmt_res = select(BudgetReservationModel).where(
-            BudgetReservationModel.idempotency_key == idempotency_key
-        )
-        existing_res = self.session.scalar(stmt_res)
-        if existing_res:
-            raise IdempotencyReplayError(
-                IdempotencyModel(
-                    idempotency_key=idempotency_key,
-                    agent_id=agent_id,
-                    intent_digest=intent_digest,
-                    decision="PENDING",
-                    response_payload="",
-                    created_at_utc=existing_res.created_at_utc,
-                )
-            )
-
-        # 2. Lock budget row
+        # 1. Deterministic lock ordering: Acquire parent budget row lock FIRST
         dialect = self.session.bind.dialect.name if self.session.bind else ""
         stmt = select(AgentBudgetModel).where(AgentBudgetModel.agent_id == agent_id)
         if dialect in ("postgresql", "postgres"):
@@ -170,6 +152,26 @@ class BudgetRepository:
                 f"Currency mismatch: budget is {budget.currency}, requested {currency}"
             )
 
+        # 2. Idempotency check inside transaction
+        self.check_idempotency(idempotency_key, intent_digest)
+
+        # 2b. Check if reservation with this idempotency key already exists (F4)
+        stmt_res = select(BudgetReservationModel).where(
+            BudgetReservationModel.idempotency_key == idempotency_key
+        )
+        existing_res = self.session.scalar(stmt_res)
+        if existing_res:
+            raise IdempotencyReplayError(
+                IdempotencyModel(
+                    idempotency_key=idempotency_key,
+                    agent_id=agent_id,
+                    intent_digest=intent_digest,
+                    decision="PROCESSING",
+                    response_payload="",
+                    created_at_utc=existing_res.created_at_utc,
+                )
+            )
+
         # 3. Invariant check: spent + reserved + amount <= allocated
         if budget.spent_minor + budget.reserved_minor + amount_minor > budget.allocated_minor:
             raise InsufficientBudgetError(
@@ -178,7 +180,7 @@ class BudgetRepository:
                 f"cap {budget.allocated_minor}"
             )
 
-        # 4. Atomic increment and savepoint-protected reservation insert (F4)
+        # 4. Atomic increment, reservation insert, and initial PROCESSING idempotency record
         reservation_id = f"res_{uuid.uuid4().hex[:16]}"
         now = datetime.now(UTC)
         reservation = BudgetReservationModel(
@@ -191,12 +193,21 @@ class BudgetRepository:
             created_at_utc=now,
             updated_at_utc=now,
         )
+        idem_processing = IdempotencyModel(
+            idempotency_key=idempotency_key,
+            agent_id=agent_id,
+            intent_digest=intent_digest,
+            decision="PROCESSING",
+            response_payload="",
+            created_at_utc=now,
+        )
 
         try:
             with self.session.begin_nested():
                 budget.reserved_minor += amount_minor
                 budget.updated_at_utc = now
                 self.session.add(reservation)
+                self.session.add(idem_processing)
                 self.session.flush()
             return reservation
         except IntegrityError as err:
@@ -223,7 +234,7 @@ class BudgetRepository:
                         idempotency_key=idempotency_key,
                         agent_id=agent_id,
                         intent_digest=intent_digest,
-                        decision="PENDING",
+                        decision="PROCESSING",
                         response_payload="",
                         created_at_utc=existing_res_concurrent.created_at_utc,
                     )
@@ -349,6 +360,15 @@ class BudgetRepository:
         response_payload: str,
     ) -> IdempotencyModel:
         """Persist authorization decision for replay deduplication."""
+        existing = self.session.scalar(
+            select(IdempotencyModel).where(IdempotencyModel.idempotency_key == idempotency_key)
+        )
+        if existing:
+            existing.decision = decision
+            existing.response_payload = response_payload
+            self.session.flush()
+            return existing
+
         record = IdempotencyModel(
             idempotency_key=idempotency_key,
             agent_id=agent_id,
@@ -367,6 +387,9 @@ class BudgetRepository:
                 select(IdempotencyModel).where(IdempotencyModel.idempotency_key == idempotency_key)
             )
             if existing:
+                existing.decision = decision
+                existing.response_payload = response_payload
+                self.session.flush()
                 return existing
             raise
 

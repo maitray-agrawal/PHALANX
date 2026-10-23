@@ -279,6 +279,7 @@ def test_b1_policy_engine_escalates_despite_allow_signal() -> None:
         lifetime_budget_minor=10000,
         currency="USD",
         allowed_payees=(),
+        allow_unregistered_payees=True,
         allowed_purposes=(),
         valid_from_utc=now,
         valid_until_utc=now + timedelta(days=30),
@@ -937,6 +938,7 @@ def test_h1_host_clock_drift_cannot_bypass_policy_window() -> None:
         lifetime_budget_minor=50000,
         currency="USD",
         allowed_payees=(),
+        allow_unregistered_payees=True,
         allowed_purposes=(),
         valid_from_utc=t0,
         valid_until_utc=t1,
@@ -1078,6 +1080,7 @@ def test_f02_approval_rejected_if_mandate_revoked() -> None:
             instant_threshold_minor=5000,
             lifetime_budget_minor=500000,
             valid_days=1,
+            allow_unregistered_payees=True,
         )
     )
 
@@ -1150,6 +1153,7 @@ def test_f02_approval_rejected_if_mandate_expired() -> None:
             instant_threshold_minor=5000,
             lifetime_budget_minor=500000,
             valid_days=1,
+            allow_unregistered_payees=True,
         )
     )
 
@@ -1202,6 +1206,7 @@ def test_f03_cross_tenant_approver_cannot_approve(client: TestClient) -> None:
             instant_threshold_minor=5000,
             lifetime_budget_minor=500000,
             valid_days=90,
+            allow_unregistered_payees=True,
         )
     )
 

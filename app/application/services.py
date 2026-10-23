@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from threading import Lock, RLock
 from typing import Any
 
+from fastapi import HTTPException, status
 from sqlalchemy import select
 
 from app.application.dtos import (
@@ -123,6 +124,7 @@ class MandateService:
             "lifetime_budget_minor": 2_500_000,  # $25,000 lifetime cap
             "currency": "USD",
             "allowed_payees": [],
+            "allow_unregistered_payees": True,
             "allowed_purposes": [],
             "valid_from_utc": (now - timedelta(days=1)).isoformat(),
             "valid_until_utc": valid_until.isoformat(),
@@ -140,6 +142,7 @@ class MandateService:
             lifetime_budget_minor=2_500_000,
             currency="USD",
             allowed_payees=(),
+            allow_unregistered_payees=True,
             allowed_purposes=(),
             valid_from_utc=now - timedelta(days=1),
             valid_until_utc=valid_until,
@@ -174,6 +177,7 @@ class MandateService:
             "lifetime_budget_minor": cmd.lifetime_budget_minor,
             "currency": cmd.currency,
             "allowed_payees": cmd.allowed_payees,
+            "allow_unregistered_payees": cmd.allow_unregistered_payees,
             "allowed_purposes": cmd.allowed_purposes,
             "valid_from_utc": now.isoformat(),
             "valid_until_utc": valid_until.isoformat(),
@@ -191,6 +195,7 @@ class MandateService:
             lifetime_budget_minor=cmd.lifetime_budget_minor,
             currency=cmd.currency,
             allowed_payees=tuple(cmd.allowed_payees),
+            allow_unregistered_payees=cmd.allow_unregistered_payees,
             allowed_purposes=tuple(cmd.allowed_purposes),
             valid_from_utc=now,
             valid_until_utc=valid_until,
@@ -212,6 +217,7 @@ class MandateService:
             lifetime_budget_minor=mandate.lifetime_budget_minor,
             currency=mandate.currency,
             allowed_payees=list(mandate.allowed_payees),
+            allow_unregistered_payees=mandate.allow_unregistered_payees,
             allowed_purposes=list(mandate.allowed_purposes),
             valid_from_utc=mandate.valid_from_utc,
             valid_until_utc=mandate.valid_until_utc,
@@ -228,6 +234,7 @@ class MandateService:
         instant_threshold_minor: int | None = None,
         lifetime_budget_minor: int | None = None,
         allowed_payees: list[str] | None = None,
+        allow_unregistered_payees: bool | None = None,
         allowed_purposes: list[str] | None = None,
         valid_days: int | None = None,
     ) -> MandateResponseDTO:
@@ -257,6 +264,11 @@ class MandateService:
             effective_payees = (
                 allowed_payees if allowed_payees is not None else list(current.allowed_payees)
             )
+            effective_allow_unregistered = (
+                allow_unregistered_payees
+                if allow_unregistered_payees is not None
+                else current.allow_unregistered_payees
+            )
             effective_purposes = (
                 allowed_purposes if allowed_purposes is not None else list(current.allowed_purposes)
             )
@@ -283,6 +295,7 @@ class MandateService:
                 ),
                 "currency": current.currency,
                 "allowed_payees": effective_payees,
+                "allow_unregistered_payees": effective_allow_unregistered,
                 "allowed_purposes": effective_purposes,
                 "valid_from_utc": now.isoformat(),
                 "valid_until_utc": valid_until.isoformat(),
@@ -299,6 +312,7 @@ class MandateService:
                 instant_threshold_minor=instant_threshold_minor,
                 lifetime_budget_minor=lifetime_budget_minor,
                 allowed_payees=tuple(effective_payees),
+                allow_unregistered_payees=effective_allow_unregistered,
                 allowed_purposes=tuple(effective_purposes),
                 valid_from_utc=now,
                 valid_until_utc=valid_until,
@@ -319,6 +333,7 @@ class MandateService:
                 lifetime_budget_minor=active_new.lifetime_budget_minor,
                 currency=active_new.currency,
                 allowed_payees=list(active_new.allowed_payees),
+                allow_unregistered_payees=active_new.allow_unregistered_payees,
                 allowed_purposes=list(active_new.allowed_purposes),
                 valid_from_utc=active_new.valid_from_utc,
                 valid_until_utc=active_new.valid_until_utc,
@@ -349,6 +364,7 @@ class MandateService:
                 lifetime_budget_minor=revoked.lifetime_budget_minor,
                 currency=revoked.currency,
                 allowed_payees=list(revoked.allowed_payees),
+                allow_unregistered_payees=revoked.allow_unregistered_payees,
                 allowed_purposes=list(revoked.allowed_purposes),
                 valid_from_utc=revoked.valid_from_utc,
                 valid_until_utc=revoked.valid_until_utc,
@@ -526,11 +542,15 @@ class AuthorizationService:
                                     request_state=RequestState.DENIED,
                                 )
                             except IdempotencyReplayError as e:
-                                cached_dec = (
-                                    DecisionOutcome(e.record.decision)
-                                    if e.record.decision in DecisionOutcome._value2member_map_
-                                    else DecisionOutcome.ALLOW
-                                )
+                                if (
+                                    e.record.decision in ("PROCESSING", "PENDING")
+                                    or e.record.decision not in DecisionOutcome._value2member_map_
+                                ):
+                                    raise HTTPException(
+                                        status_code=status.HTTP_409_CONFLICT,
+                                        detail="Transaction currently executing",
+                                    ) from e
+                                cached_dec = DecisionOutcome(e.record.decision)
                                 return AuthorizationResponseDTO(
                                     request_id=request_id,
                                     decision=cached_dec,
@@ -632,12 +652,15 @@ class AuthorizationService:
                                     request_state=RequestState.DENIED,
                                 )
                             except IdempotencyReplayError as replay_err:
-                                cached_dec = (
-                                    DecisionOutcome(replay_err.record.decision)
-                                    if replay_err.record.decision
-                                    in DecisionOutcome._value2member_map_
-                                    else DecisionOutcome.ALLOW
-                                )
+                                if replay_err.record.decision in ("PROCESSING", "PENDING") or (
+                                    replay_err.record.decision
+                                    not in DecisionOutcome._value2member_map_
+                                ):
+                                    raise HTTPException(
+                                        status_code=status.HTTP_409_CONFLICT,
+                                        detail="Transaction currently executing",
+                                    ) from replay_err
+                                cached_dec = DecisionOutcome(replay_err.record.decision)
                                 return AuthorizationResponseDTO(
                                     request_id=request_id,
                                     decision=cached_dec,

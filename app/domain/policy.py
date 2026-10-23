@@ -150,7 +150,21 @@ def evaluate_policy(
         )
 
     # 5. Payee allowlist check
-    if mandate.allowed_payees and intent.recipient_id not in mandate.allowed_payees:
+    if not mandate.allowed_payees:
+        if not mandate.allow_unregistered_payees:
+            return PolicyDecision(
+                outcome=DecisionOutcome.DENY,
+                reasons=(
+                    "Mandate requires an authorized payee from allowlist; "
+                    "unregistered payees are prohibited",
+                ),
+                reason_codes=(PolicyReasonCode.PAYEE_UNAUTHORIZED,),
+                escalated_from=None,
+                evaluated_at_utc=now_utc,
+            )
+    elif (
+        not mandate.allow_unregistered_payees and intent.recipient_id not in mandate.allowed_payees
+    ):
         return PolicyDecision(
             outcome=DecisionOutcome.DENY,
             reasons=(f"Payee '{intent.recipient_id}' not in mandate allowed_payees",),

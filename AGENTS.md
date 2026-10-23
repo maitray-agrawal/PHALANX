@@ -35,8 +35,9 @@ web: cd web && npm ci && npm run lint && npx tsc --noEmit && npm test -- --run &
 - Any change to crypto, auth, money movement or CI needs a test that fails without it.
 
 ## Git rules
-Branch per prompt (feat/..., fix/...). Never commit to main. Never force-push. Small commits,
-plain messages (see docs/TESTING.md commit style). Push the branch, open a PR, merge on green CI.
+Always work and commit directly on `main`. Never create feature/fix branches. Never checkout
+new branches. All work, incremental commits, tests, and pushes target `origin main` only. Run
+`git pull origin main` before starting. Commit early and often on `main` once tests pass.
 
 ## Truthfulness
 Never invent endpoints, headers, flags or versions. Facts about PayPal or libraries go in

@@ -841,3 +841,104 @@ def test_policy_escalation_in_evaluation(
     assert decision.outcome == DecisionOutcome.STEP_UP
     assert decision.escalated_from == DecisionOutcome.ALLOW
     assert PolicyReasonCode.RISK_ESCALATED in decision.reason_codes
+
+
+def test_payee_allowlist_security_invariants() -> None:
+    """Gate 3A: Enforce payee allowlist security invariants:
+    - Empty allowlist + allow_unregistered_payees=False -> immediate DENY (PAYEE_UNAUTHORIZED)
+    - Empty allowlist + allow_unregistered_payees=True -> ALLOW
+    - Populated allowlist + allow_unregistered_payees=False:
+      allowlist member ALLOW, outside member DENY
+    """
+    now = datetime(2026, 10, 22, 12, 0, 0, tzinfo=UTC)
+    state = PolicyState(lifetime_spent_minor=0, rolling_24h_spent_minor=0, idempotency_records={})
+    intent = TransactionIntent(
+        agent_id="agent_1",
+        recipient_id="unregistered_vendor",
+        money=Money(amount_minor=5000, currency="USD"),
+        purpose="General",
+        idempotency_key="tx_payee_test_1",
+        occurred_at_utc=now,
+    )
+
+    # 1. Empty allowlist, allow_unregistered_payees=False -> DENY
+    mandate_strict_empty = Mandate(
+        mandate_id="man_strict_empty",
+        version=1,
+        principal_id="p1",
+        agent_id="agent_1",
+        single_limit_minor=100_000,
+        instant_threshold_minor=50_000,
+        lifetime_budget_minor=500_000,
+        currency="USD",
+        allowed_payees=(),
+        allow_unregistered_payees=False,
+        allowed_purposes=(),
+        valid_from_utc=now - timedelta(days=1),
+        valid_until_utc=now + timedelta(days=30),
+        status=MandateStatus.ACTIVE,
+        key_id="k1",
+        signature="s1",
+    )
+    dec1 = evaluate(intent, mandate_strict_empty, state, now)
+    assert dec1.outcome == DecisionOutcome.DENY
+    assert PolicyReasonCode.PAYEE_UNAUTHORIZED in dec1.reason_codes
+    assert "unregistered payees are prohibited" in dec1.reasons[0]
+
+    # 2. Empty allowlist, allow_unregistered_payees=True -> ALLOW
+    mandate_open = Mandate(
+        mandate_id="man_open",
+        version=1,
+        principal_id="p1",
+        agent_id="agent_1",
+        single_limit_minor=100_000,
+        instant_threshold_minor=50_000,
+        lifetime_budget_minor=500_000,
+        currency="USD",
+        allowed_payees=(),
+        allow_unregistered_payees=True,
+        allowed_purposes=(),
+        valid_from_utc=now - timedelta(days=1),
+        valid_until_utc=now + timedelta(days=30),
+        status=MandateStatus.ACTIVE,
+        key_id="k1",
+        signature="s1",
+    )
+    dec2 = evaluate(intent, mandate_open, state, now)
+    assert dec2.outcome == DecisionOutcome.ALLOW
+
+    # 3. Explicit allowlist: authorized payee succeeds, unauthorized payee denied
+    mandate_allowlist = Mandate(
+        mandate_id="man_allowlist",
+        version=1,
+        principal_id="p1",
+        agent_id="agent_1",
+        single_limit_minor=100_000,
+        instant_threshold_minor=50_000,
+        lifetime_budget_minor=500_000,
+        currency="USD",
+        allowed_payees=("vendor_paypal_1",),
+        allow_unregistered_payees=False,
+        allowed_purposes=(),
+        valid_from_utc=now - timedelta(days=1),
+        valid_until_utc=now + timedelta(days=30),
+        status=MandateStatus.ACTIVE,
+        key_id="k1",
+        signature="s1",
+    )
+    # Unauthorized payee
+    dec3_unauth = evaluate(intent, mandate_allowlist, state, now)
+    assert dec3_unauth.outcome == DecisionOutcome.DENY
+    assert PolicyReasonCode.PAYEE_UNAUTHORIZED in dec3_unauth.reason_codes
+
+    # Authorized payee
+    intent_auth = TransactionIntent(
+        agent_id="agent_1",
+        recipient_id="vendor_paypal_1",
+        money=Money(amount_minor=5000, currency="USD"),
+        purpose="General",
+        idempotency_key="tx_payee_test_2",
+        occurred_at_utc=now,
+    )
+    dec3_auth = evaluate(intent_auth, mandate_allowlist, state, now)
+    assert dec3_auth.outcome == DecisionOutcome.ALLOW

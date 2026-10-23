@@ -370,6 +370,7 @@ def test_finding_5_cross_agent_budget_collision() -> None:
             lifetime_budget_minor=1_000_000,
             currency="USD",
             allowed_payees=[],
+            allow_unregistered_payees=True,
             allowed_purposes=[],
             valid_days=30,
         )
@@ -385,6 +386,7 @@ def test_finding_5_cross_agent_budget_collision() -> None:
             lifetime_budget_minor=200_000,
             currency="USD",
             allowed_payees=[],
+            allow_unregistered_payees=True,
             allowed_purposes=[],
             valid_days=30,
         )
@@ -488,6 +490,7 @@ def test_f6_timeout_transitions_to_reconcile() -> None:
             instant_threshold_minor=50_000,
             lifetime_budget_minor=500_000,
             valid_days=7,
+            allow_unregistered_payees=True,
         )
     )
     authz = AuthorizationService(
@@ -537,6 +540,7 @@ def test_f6_5xx_ambiguous_outcome_transitions_to_reconcile() -> None:
             instant_threshold_minor=50_000,
             lifetime_budget_minor=500_000,
             valid_days=7,
+            allow_unregistered_payees=True,
         )
     )
     authz = AuthorizationService(
@@ -609,6 +613,7 @@ def test_f6_reconcile_confirmed_success_transitions_to_confirmed(db_session_fact
             instant_threshold_minor=50_000,
             lifetime_budget_minor=500_000,
             valid_days=7,
+            allow_unregistered_payees=True,
         )
     )
     rail = ConfigurableRail(
@@ -692,6 +697,7 @@ def test_f6_reconcile_confirmed_failure_transitions_to_released(db_session_facto
             instant_threshold_minor=50_000,
             lifetime_budget_minor=500_000,
             valid_days=7,
+            allow_unregistered_payees=True,
         )
     )
     rail = ConfigurableRail(
@@ -774,6 +780,7 @@ def test_f6_reconcile_still_unknown_remains_reconcile(db_session_factory: Any) -
             instant_threshold_minor=50_000,
             lifetime_budget_minor=500_000,
             valid_days=7,
+            allow_unregistered_payees=True,
         )
     )
     rail = ConfigurableRail(
@@ -857,6 +864,7 @@ def test_f6_ambiguous_outcome_does_not_release_budget(db_session_factory: Any) -
             instant_threshold_minor=50_000,
             lifetime_budget_minor=60_000,  # 60,000 budget cap
             valid_days=7,
+            allow_unregistered_payees=True,
         )
     )
     rail = ConfigurableRail(
@@ -925,6 +933,7 @@ def test_r2_2_concurrent_duplicate_idempotency(db_session_factory: Any) -> None:
             instant_threshold_minor=50_000,
             lifetime_budget_minor=200_000,
             valid_days=7,
+            allow_unregistered_payees=True,
         )
     )
     rail = MockPaymentRail()
@@ -963,21 +972,30 @@ def test_r2_2_concurrent_duplicate_idempotency(db_session_factory: Any) -> None:
     t1.join()
     t2.join()
 
-    # 1. No raw IntegrityError or uncaught DB exceptions
-    assert len(exceptions) == 0, f"Unexpected exceptions during concurrent execution: {exceptions}"
-    assert len(responses) == 2
+    # 1. No raw IntegrityError or unhandled database exceptions
+    unexpected_exceptions = [e for e in exceptions if getattr(e, "status_code", None) != 409]
+    assert len(unexpected_exceptions) == 0, (
+        f"Unexpected exceptions during concurrent execution: {exceptions}"
+    )
+    assert len(responses) + len(exceptions) == 2
+    assert len(responses) >= 1
 
-    # 2. Both callers receive an ALLOW decision
+    # 2. Executed callers receive an ALLOW decision
     assert all(r.decision == DecisionOutcome.ALLOW for r in responses)
 
     # 3. Exactly one payment rail dispatch executed
     assert len(rail.dispatched) == 1
 
-    # 4. Exactly one response marked as idempotent replay
-    replay_count = sum(
-        1 for r in responses if PolicyReasonCode.IDEMPOTENCY_REPLAY in r.reason_codes
-    )
-    assert replay_count == 1
+    # 4. If second caller finished after completion, marked replay; if concurrent, returned 409
+    if len(responses) == 2:
+        replay_count = sum(
+            1 for r in responses if PolicyReasonCode.IDEMPOTENCY_REPLAY in r.reason_codes
+        )
+        assert replay_count == 1
+    else:
+        assert len(exceptions) == 1
+        assert getattr(exceptions[0], "status_code", None) == 409
+        assert "currently executing" in str(getattr(exceptions[0], "detail", ""))
 
     # 5. Exactly one budget deduction recorded (30,000, not double 60,000)
     assert authz.get_lifetime_spent("agent-r22") == 30_000
@@ -1000,6 +1018,7 @@ def test_r2_3_persistent_database_budget_accounting(db_session_factory: Any) -> 
             instant_threshold_minor=50_000,
             lifetime_budget_minor=100_000,  # Cap: $1,000
             valid_days=7,
+            allow_unregistered_payees=True,
         )
     )
 
@@ -1075,3 +1094,74 @@ def test_r2_3_persistent_database_budget_accounting(db_session_factory: Any) -> 
     assert decisions == ["ALLOW", "DENY"]
     # Total spent in database is exactly 80,000 (40,000 original + 40,000 successful concurrent)
     assert authz_restarted.get_lifetime_spent("agent-r23") == 80_000
+
+
+def test_idempotency_replay_processing_raises_409_conflict(db_session_factory: Any) -> None:
+    """Gate 3C: When an idempotency replay encounters a 'PROCESSING' or non-terminal record,
+    services.py must return HTTP 409 Conflict ('Transaction currently executing')
+    instead of defaulting to DecisionOutcome.ALLOW.
+    """
+    from fastapi import HTTPException
+
+    from app.application.services import compute_intent_digest
+    from app.infrastructure.models import IdempotencyModel
+
+    clock = MockClock()
+    mandates = MandateService(clock=clock)
+    mandates.create_mandate(
+        CreateMandateCommand(
+            mandate_id="mandate-409",
+            principal_id="principal-409",
+            agent_id="agent-409",
+            single_limit_minor=100_000,
+            instant_threshold_minor=50_000,
+            lifetime_budget_minor=200_000,
+            valid_days=7,
+            allow_unregistered_payees=True,
+        )
+    )
+
+    cmd = AuthorizeTransactionCommand(
+        agent_id="agent-409",
+        recipient_id="vendor-409",
+        amount_minor=10_000,
+        currency="USD",
+        purpose="In-flight batch execution",
+        idempotency_key="key-409-in-flight",
+    )
+    digest = compute_intent_digest(
+        agent_id=cmd.agent_id,
+        recipient_id=cmd.recipient_id,
+        amount_minor=cmd.amount_minor,
+        currency=cmd.currency,
+        purpose=cmd.purpose,
+        idempotency_key=cmd.idempotency_key,
+    )
+
+    # Seed an idempotency record in PROCESSING state in the database
+    with db_session_factory() as session, session.begin():
+        session.add(
+            IdempotencyModel(
+                idempotency_key=cmd.idempotency_key,
+                agent_id=cmd.agent_id,
+                intent_digest=digest,
+                decision="PROCESSING",
+                response_payload="",
+                created_at_utc=clock.now_utc(),
+            )
+        )
+
+    authz = AuthorizationService(
+        clock=clock,
+        ledger=MemoryLedger(),
+        mandate_service=mandates,
+        payment_rail=MockPaymentRail(),
+        db_session_factory=db_session_factory,
+    )
+
+    # Calling authorize with the same key while PROCESSING must raise HTTP 409 Conflict
+    with pytest.raises(HTTPException) as exc_info:
+        authz.authorize(cmd)
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Transaction currently executing"

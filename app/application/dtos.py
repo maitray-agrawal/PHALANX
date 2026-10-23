@@ -69,6 +69,7 @@ class CreateMandateCommand(BaseModel):
     allowed_payees: list[str] = Field(default_factory=list)
     allowed_purposes: list[str] = Field(default_factory=list)
     valid_days: int = Field(default=90, ge=1, le=365)
+    allow_unregistered_payees: bool = Field(default=False)
 
 
 class MandateResponseDTO(BaseModel):
@@ -91,6 +92,7 @@ class MandateResponseDTO(BaseModel):
     status: MandateStatus
     key_id: str
     signature: str
+    allow_unregistered_payees: bool = Field(default=False)
     spent_budget_minor: int = Field(default=0)
     remaining_budget_minor: int = Field(default=0)
 
