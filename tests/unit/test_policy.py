@@ -66,9 +66,7 @@ def empty_state() -> PolicyState:
     )
 
 
-# ---------------------------------------------------------------------------
 # 1. Table-driven tests per individual rule
-# ---------------------------------------------------------------------------
 
 
 def test_rule_1_idempotency_replay_returns_cached_decision(
@@ -302,9 +300,7 @@ def test_rule_10_instant_threshold_exceeded_steps_up(
     assert PolicyReasonCode.INSTANT_THRESHOLD_EXCEEDED in decision.reason_codes
 
 
-# ---------------------------------------------------------------------------
 # 2. Table-driven tests per precedence pair
-# ---------------------------------------------------------------------------
 
 
 def test_precedence_rule1_over_rule2(baseline_mandate: Mandate) -> None:
@@ -467,9 +463,7 @@ def test_precedence_rule9_over_rule10(baseline_mandate: Mandate, empty_state: Po
     assert PolicyReasonCode.SINGLE_LIMIT_EXCEEDED in decision.reason_codes
 
 
-# ---------------------------------------------------------------------------
 # 3. Boundary Value Analysis (cap - 1, cap, cap + 1 minor units)
-# ---------------------------------------------------------------------------
 
 
 def test_boundary_instant_threshold(baseline_mandate: Mandate, empty_state: PolicyState) -> None:
@@ -645,9 +639,7 @@ def test_boundary_lifetime_budget(baseline_mandate: Mandate) -> None:
     assert PolicyReasonCode.LIFETIME_BUDGET_EXCEEDED in d_over.reason_codes
 
 
-# ---------------------------------------------------------------------------
 # 4. Advisory Escalation Guard Matrix
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -676,9 +668,7 @@ def test_advisory_escalation_guard_matrix(
     assert guard_advisory_escalation(base, advisory) == expected
 
 
-# ---------------------------------------------------------------------------
 # 5. Hypothesis Property: A failed hard constraint is never ALLOW
-# ---------------------------------------------------------------------------
 
 
 @given(
@@ -747,9 +737,7 @@ def test_hypothesis_failed_hard_constraint_is_never_allow(
         assert decision.outcome != DecisionOutcome.ALLOW
 
 
-# ---------------------------------------------------------------------------
 # 6. Request Lifecycle State Machine Tests (Gate 56.17)
-# ---------------------------------------------------------------------------
 
 
 def test_state_machine_valid_autonomous_flow() -> None:

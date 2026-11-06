@@ -17,12 +17,10 @@ from app.application.intent_extractor import (
     MandateSummary,
     TransactionIntentDraft,
 )
-from app.application.memory import PrincipalSessionMemory
 
 __all__ = [
     "DELIMITER_END",
     "DELIMITER_START",
-    "ConversationMemory",
     "GroundedExplanationValidator",
     "HeuristicRiskScanner",
     "IntentExtractor",
@@ -31,12 +29,9 @@ __all__ = [
     "TransactionIntentDraft",
 ]
 
-# Legacy alias for backward compatibility
-ConversationMemory = PrincipalSessionMemory
-
 
 class MockLLMProposer:
-    """Compatibility wrapper around IntentExtractor and HeuristicRiskScanner."""
+    """Extraction and advisory scan wrapper around IntentExtractor and HeuristicRiskScanner."""
 
     def __init__(self) -> None:
         self.scanner = HeuristicRiskScanner()

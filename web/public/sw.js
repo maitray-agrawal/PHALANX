@@ -1,27 +1,13 @@
 /**
  * PHALANX Service Worker
  *
- * Invariant (manual rule):
- * - NO service worker caching for API endpoints (/v1/*) or authenticated responses.
- * - Caches ONLY hashed static assets and application shell.
- * - Always passes financial API requests directly to the network without interception.
+ * Caches strictly hashed immutable static assets (/assets/*).
+ * Never caches HTML documents, shell navigation, or API responses.
  */
 
 const CACHE_NAME = "phalanx-static-v1";
-const STATIC_ASSETS = [
-  "/",
-  "/manifest.json",
-  "/favicon.svg",
-  "/favicon.ico",
-  "/icon-192.png",
-  "/icon-512.png",
-  "/apple-touch-icon.png",
-];
 
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
-  );
+self.addEventListener("install", () => {
   self.skipWaiting();
 });
 
@@ -39,17 +25,20 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
-  // 1. Never intercept or cache API requests, mutations, or non-GET requests
+  // Never intercept or cache API requests, HTML navigation documents, mutations, or non-GET requests
   if (
     url.pathname.startsWith("/v1/") ||
     url.pathname.startsWith("/api/") ||
+    url.pathname === "/" ||
+    url.pathname.endsWith(".html") ||
+    event.request.mode === "navigate" ||
     event.request.method !== "GET" ||
     event.request.headers.has("Authorization")
   ) {
-    return; // Pass through to network
+    return;
   }
 
-  // 2. Cache-first strategy for hashed immutable static assets
+  // Cache only immutable hashed static assets under /assets/
   if (url.pathname.startsWith("/assets/")) {
     event.respondWith(
       caches.match(event.request).then((cached) => {
@@ -62,14 +51,6 @@ self.addEventListener("fetch", (event) => {
           return networkResponse;
         });
       })
-    );
-    return;
-  }
-
-  // 3. Network-first strategy for shell navigation documents
-  if (event.request.mode === "navigate") {
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match("/"))
     );
   }
 });

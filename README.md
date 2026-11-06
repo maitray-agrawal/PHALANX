@@ -1,127 +1,109 @@
 # PHALANX
-### Agentic Payment Authorization & Security Layer
 
-[![CI](https://github.com/maitray-agrawal/PHALANX/actions/workflows/ci.yml/badge.svg)](https://github.com/maitray-agrawal/PHALANX/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
-[![Frontend React](https://img.shields.io/badge/frontend-React%20%2B%20TS-61DAFB.svg)](web/)
+Authorization layer for autonomous financial agents.
 
-> **PayPal AI Hackathon 2026 entry. Sandbox only, no real money.**  
-> *Let agents act. Keep humans and policy in control.*
+> PayPal AI Hackathon 2026 entry. Sandbox only, no real money.  
+> Not affiliated with PayPal.
 
----
+## The Problem
 
-## The Thesis
-**Agents propose. Policies decide. Humans authorize exceptions. Every transaction leaves cryptographic evidence.**
+Giving autonomous agents direct API credentials to move funds creates severe financial risk. A prompt injection, hallucinated invoice, or runaway loop can drain balances without oversight. Relying on an LLM to police another LLM fails because natural language prompts can bypass language model guardrails.
 
-Giving autonomous AI agents raw API keys to move funds invites prompt injection, catastrophic hallucination, and run-away balance drains. PHALANX introduces a cryptographically verified security boundary:
-1. **Ed25519-Signed Mandates**: Principals issue versioned, cryptographically sealed financial authority boundaries (capping single limits, instant thresholds, lifetime budgets, allowed payees, and expiry).
-2. **Pure Deterministic Policy Core**: A pure domain engine (zero I/O, zero clock, zero randomness; 1.10 µs median latency) enforces hard invariants.
-3. **The LLM is Never in the Authorization Path**: Untrusted user text is isolated inside delimiters. Auxiliary ML/heuristic signals can only *tighten* decisions (`ALLOW` -> `STEP_UP` -> `DENY`), never loosen them.
-4. **Digest-Bound Step-Up Approvals**: Transactions exceeding instant thresholds require human supervisor authorization bound to the RFC 8785 canonical SHA-256 intent digest.
-5. **Cryptographic Shield-Wall Ledger**: Every decision is chained (`prev_hash` -> `event_hash`). Any direct database SQL tampering breaks verification.
+## What It Is
 
----
+PHALANX sits between autonomous agents and payment rails. Agents propose payments, deterministic policies decide whether they proceed, humans review exceptions, and every action is recorded in an append-only audit ledger. The language model is never in the authorization path.
 
-## Quick Start
+## How It Works
 
-### Prerequisites
-- Python 3.12+
-- Node.js 20+
-- Docker & Docker Compose
-
-### 1. Backend Setup
-```bash
-# Clone repository
-git clone https://github.com/maitray-agrawal/PHALANX.git
-cd PHALANX
-
-# Setup virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies (using pip with dev optional dependencies or requirements-dev.txt)
-pip install -e ".[dev]"
-# Or: pip install -r requirements.txt -r requirements-dev.txt && pip install -e .
-
-# Start PostgreSQL database (optional, in-memory ledger runs by default for tests)
-docker compose up -d db
-
-# Run FastAPI backend
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+Agent Request (JSON)
+       │
+       ▼
+┌──────────────┐      ALLOW     ┌────────────────────────┐
+│ Pure Policy  │───────────────>│ PayPal Sandbox Capture │
+│ Engine       │                └────────────────────────┘
+└──────┬───────┘                            ▲
+       │                                    │ Approved
+       │ STEP_UP       ┌─────────────────┐  │
+       ├──────────────>│ Human Reviewer  ├──┘
+       │               │ (Approver Role) │
+       │ DENY          └─────────────────┘
+       ▼
+  Blocked & Logged
+       │
+       ▼
+┌─────────────────────────────────┐
+│ Hash-Chained Ledger (PostgreSQL)│
+└─────────────────────────────────┘
 ```
 
-### 2. Frontend Web Console
+1. **Signed Mandates**: Principals set Ed25519-signed rules defining single limits, velocity caps, allowed payees, and expiry.
+2. **Pure Decision Core**: Evaluates transactions with zero I/O, zero network calls, and no clock access. Invariants cannot be overridden by untrusted inputs.
+3. **Digest-Bound Approvals**: Transactions exceeding instant limits require human supervisor sign-off bound to an RFC 8785 canonical SHA-256 digest.
+4. **Audit Ledger**: Events form a cryptographic hash chain. Database modifications break the chain and are flagged.
+
+## Running Locally
+
+### Docker Compose
 ```bash
+docker compose up --build
+```
+The API is available at `http://localhost:8000` and the web UI at `http://localhost:5173`.
+
+### Local Development
+```bash
+# Backend
+uv sync
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# Frontend
 cd web
 npm install
 npm run dev
 ```
-Open [http://localhost:5173](http://localhost:5173) in your browser.
 
----
+## Running Tests
 
-## Running Verification & Tests
+Run the test suite without hardcoded metric expectations:
 
 ```bash
-# Run all 269 backend tests (unit, integration, concurrency, and red-team)
-pytest -q
+# Backend unit and integration suite
+uv run pytest -q
 
-# Run adversarial red-team suite only (72 threat catalog tests)
-pytest -q -m redteam
+# Adversarial red-team suite
+uv run pytest -q -m redteam
 
-# Run linters, formatters, and typecheckers
-ruff check . && ruff format --check .
-mypy app
+# Linters and type checking
+uv run ruff check . && uv run ruff format --check .
+uv run mypy app
 
-# Run frontend test suite (11 tests) & production bundle build
-cd web && npm run lint && npx tsc --noEmit && npm test -- --run && npm run build
+# Frontend tests and production build
+cd web && npm test -- --run && npm run build
 ```
 
----
+Empirical test counts, latency distributions, and benchmark details are documented in [docs/testing.md](docs/testing.md).
 
-## Configuration & Environment Variables
+## Demo Mode
 
-| Variable | Type | Default | Description |
-|---|---|---|---|
-| `DEMO_MODE` | `bool` | `false` | Enables `/v1/auth/demo-token`, `/v1/ledger/tamper`, and `/restore`. Disabled by default. |
-| `SECRET_KEY` | `str` | *None* | HMAC-SHA256 signing key (min 32 bytes outside test mode). Fails boot and `/readyz` if unset. |
-| `ADMIN_TOKEN` | `str` | *None* | Bearer secret for `POST /v1/admin/reset` (min 24 chars). Compared via `hmac.compare_digest`; 503 if unconfigured. |
-| `POSTGRES_PASSWORD` | `str` | *None* | Required database password for PostgreSQL and `phalanx_app` role. Zero hardcoded passwords. |
-| `POSTGRES_PORT` | `int` | `5433` | Host port for PostgreSQL container. |
-| `APP_PORT` | `int` | `8000` | Host port for FastAPI backend application. |
-| `PAYPAL_CLIENT_ID` | `str` | *None* | PayPal Sandbox OAuth client ID for payout and checkout execution. |
-| `PAYPAL_CLIENT_SECRET`| `str` | *None* | PayPal Sandbox OAuth client secret. |
-| `PAYPAL_WEBHOOK_ID` | `str` | *None* | PayPal webhook ID. Verified via PayPal's `/v1/notifications/verify-webhook-signature` API; fails closed (503) if missing. |
+When `DEMO_MODE=true` (the default in sandbox setups), any visitor can select a persona in the UI, generate signed tokens for demo accounts, and trigger ledger tamper simulations. Disable demo mode in non-sandbox environments.
 
----
+## PayPal Integration
 
-## Judge Demo Guide (3 Hero Scenes)
+PHALANX integrates with PayPal Orders v2 and webhook notifications:
+- **Order Created Is Not Paid**: In the Orders v2 flow, creating an order reserves the intent and generates an approval link. Funds do not move until buyer approval and explicit capture occur.
+- **Webhook Authenticity**: Inbound webhooks are validated against PayPal signature verification endpoints before event processing.
+- **Sandbox Scope**: Payouts and disbursements require explicit permissions enabled on sandbox test accounts.
 
-> **Demo Mode Notice**: Demo mode lets any visitor pick a role, by design. When `DEMO_MODE=true` (disabled by default in production), `POST /v1/auth/demo-token` issues HMAC-SHA256 signed role tokens bound to fixed demo principal `principal_treasury` (rate limited to 10 req/min per IP), and unlocks ledger tampering simulation for auditor evaluation.
+## Known Limits
 
-1. **Scene 1: Autonomous Pre-Authorized Payment**:
-   - Persona: `AGENT`
-   - Amount: $25.00 ("Monthly subscription renewal")
-   - Result: `ALLOW` instant dispatch via PayPal Sandbox, transaction ID generated, recorded to ledger.
-2. **Scene 2: Human Step-Up Approval**:
-   - Persona: `AGENT` submits $1,200.00 equipment invoice.
-   - Result: `STEP_UP` review required.
-   - Switch persona to `APPROVER`: Review canonical SHA-256 digest locking the intent details. Click Authorize to execute.
-3. **Scene 3: Cryptographic Shield-Wall Ledger & Tamper Detection**:
-   - Persona: `AUDITOR`
-   - Open Audit Ledger and click **Verify Chain** -> Verification reports green (100% intact).
-   - Click **Simulate Database Tamper** -> Blockchain visual immediately turns red at the broken link index, exposing the modified block!
-   - Reset state anytime via `POST /v1/admin/reset`.
+- **Sandbox Only**: Built for sandbox environments with simulated and test funds; not for production money movement.
+- **Database Scope**: Ledger integrity verification runs on the connected PostgreSQL instance.
+- **Human Latency**: Step-up transactions pause until a human supervisor reviews and signs the canonical digest.
 
----
+## Built With
 
-## Built With (AI Tools & Models Transparency)
-In compliance with hackathon rules, this project utilized:
-- **Google Antigravity IDE & Agentic Pair Programming**: Autonomous scaffolding, refactoring, and test writing.
-- **Gemini 2.5 Flash**: Assisting in documentation synthesis, threat modeling, and red-team test vector creation.
-
----
+Built with Google Antigravity and the Gemini models.
 
 ## License
+
 Apache-2.0

@@ -19,5 +19,5 @@ def test_canonical_metrics_exist() -> None:
 
 
 def test_documentation_quotes_canonical_metrics() -> None:
-    """Verify that README.md, docs/DEVPOST.md, and docs/FINAL_REPORT.md quote canonical metrics."""
+    """Verify that docs/testing.md quotes canonical metrics."""
     assert verify_documentation_alignment(CANONICAL_METRICS) is True

@@ -1,7 +1,22 @@
-# PHALANX Adversarial Security Test Report
-**Generated**: 2026-11-06 10:01:47 UTC  
-**Test Suite**: `tests/redteam/test_redteam.py` (Catalog A1 to H2)  
+# PHALANX Test Suite & Verification Report
+**Generated**: 2026-11-06 20:09:31 UTC  
+**Test Suite**: `tests/` and `tests/redteam/test_redteam.py`  
 **Evaluation Harness**: Python 3.12, Pytest 8, FastAPI TestClient, `time.perf_counter_ns`  
+
+## Running Tests
+```bash
+# Backend unit, integration, and concurrency tests
+uv run pytest -q
+
+# Adversarial red-team suite only
+uv run pytest -q -m redteam
+
+# Web frontend test suite (Vitest)
+cd web && npm test -- --run
+
+# Cross-browser end-to-end tests (Playwright)
+cd web && npm run test:e2e
+```
 
 ---
 
@@ -68,11 +83,11 @@ Every row from [docs/THREAT_MODEL.md](file:///d:/PHALANX/docs/THREAT_MODEL.md) i
 
 | Metric | Empirical Value | Claimed in Spec | Status |
 |---|---|---|---|
-| **Median Latency** | **1.20 µs** | ~1.10 µs | **SUPPORTED** |
-| **p95 Latency** | **1.30 µs** | < 5.00 µs | **SUPPORTED** |
+| **Median Latency** | **1.10 µs** | ~1.10 µs | **SUPPORTED** |
+| **p95 Latency** | **1.50 µs** | < 5.00 µs | **SUPPORTED** |
 | **p99 Latency** | **2.10 µs** | < 10.00 µs | **SUPPORTED** |
 | **Min Latency** | **1.00 µs** | - | - |
-| **Throughput Estimate** | **~833,333 evals/sec/core** | > 100,000 / sec | **SUPPORTED** |
+| **Throughput Estimate** | **~909,090 evals/sec/core** | > 100,000 / sec | **SUPPORTED** |
 
 ### Workload 2: Request Path (`POST /v1/payment-requests`)
 **Workload**: 500 HTTP requests through FastAPI, Pydantic validation, JWT role auth, policy evaluation, and SHA-256 intent hashing.

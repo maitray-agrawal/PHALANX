@@ -1,5 +1,5 @@
 # context.md
-Phase: R13 Live PayPal Sandbox Verification (Orders v2 Two-Phase Flow, Payouts 403 Restriced Proof, Webhook Verification)   Branches: main, dev   Last green CI: local-verified
+Phase: R13 Live PayPal Sandbox (Orders v2 Two-Phase Flow, Payouts 403 Restricted Proof, Webhook Verification)   Branches: main, dev   Last green CI: local-tested
 Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
 - app/domain: Pure deterministic policy engine, Ed25519 mandate invariants, canonical RFC 8785 JSON, cryptographic hash-chained ledger. AST purity test enforced.
 - app/application: AuthorizationService, MandateService, LedgerService, ProviderAgnosticLLMClient (quotas, timeouts, retries), IntentExtractor (delimiter isolation, strict Pydantic draft), GroundedExplanationValidator, PrincipalSessionMemory, DeterministicKnowledgeBase, CompositeAdvisoryPipeline. SubmitApprovalRequestDTO enforces strict mass-assignment prevention (`extra="forbid"`).
@@ -13,7 +13,7 @@ Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
   3. Approvals: Step-up queue, exact request, RFC 8785 canonical digest, inspect diff, Approve/Decline bound to digest, Agent role locking. Stored XSS rendered inertly. Persistent demo step-up fallback.
   4. Activity: Ledger journal, windowed visual chain strip (latest 20 blocks with total count indicator), honest provider states, Verify chain trigger, receipt links. Stored XSS rendered inertly.
   5. Mandates: Read-only Ed25519 limits, lifetime budget meter with accessible ARIA progressbar, allowed payees, authorized purposes, signature status.
-  6. Attack Lab: 6 canned threat vectors (prompt injection, payee swap, amount tamper after approval, replay, forged webhook, agent self-approval), Run suite trigger, 100% defense verification proof.
+  6. Attack Lab: 6 canned threat vectors (prompt injection, payee swap, amount tamper after approval, replay, forged webhook, agent self-approval), Run suite trigger, 100% defense check.
   7. Receipt & Verify: Cryptographic receipt card, public SHA-256 hash chain proof verifier, search input. Stored XSS rendered inertly.
 - ux, accessibility & multi-browser quality:
   - Playwright E2E: 38/38 passing tests (30 cross-device tests across Chromium with slow 4G throttling, WebKit, Firefox, iPhone SE, Pixel 7, iPad; 8 cognitive walkthrough tests across APPROVER, AGENT, AUDITOR, PRINCIPAL personas).
@@ -26,10 +26,10 @@ Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
 Test status:
 - Backend: 317 passed, 7 skipped (324 total backend tests across 22 test files)
 - Red Team: 105/105 red-team tests passed
-- Performance & Invariants: All 4 accounting and ledger invariants verified across 13,345 events
+- Performance & Invariants: All 4 accounting and ledger invariants tested across 13,345 events
 - Static Analysis: ruff check clean (0 errors), ruff format clean, mypy app clean (0 errors across 38 source files)
 - Frontend: Vitest passed (28/28 tests across 3 suites), ESLint clean (0 errors, 0 warnings), TypeScript clean (0 errors), build clean
 - E2E: Playwright passed (38/38 tests across 6 browsers/viewports)
-- Documentation: docs/UX_REVIEW.md authored and published.
+- Documentation: docs/testing.md generated.
 
 Next recommended action: Commit all changes directly to main and push.

@@ -14,10 +14,6 @@ from typing import Any
 
 from app.domain.models import DecisionOutcome, escalate_decision
 
-# ---------------------------------------------------------------------------
-# 1. Regex Heuristic Patterns
-# ---------------------------------------------------------------------------
-
 INJECTION_PATTERNS = [
     r"(?i)ignore\s+(all\s+)?(previous|prior)\s+instructions",
     r"(?i)system\s+override",
@@ -43,11 +39,6 @@ class HeuristicRiskScanner:
             if re.search(pattern, text):
                 return DecisionOutcome.STEP_UP
         return None
-
-
-# ---------------------------------------------------------------------------
-# 2. Median / MAD Velocity Anomaly Detector
-# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -117,10 +108,6 @@ class VelocityAnomalyDetector:
             interpretation=interp,
         )
 
-
-# ---------------------------------------------------------------------------
-# 3. Pure Python TF-IDF + Logistic Regression Synthetic Classifier
-# ---------------------------------------------------------------------------
 
 SYNTHETIC_DATASET: list[tuple[str, int]] = [
     # Benign transaction descriptions (label = 0)
@@ -315,11 +302,6 @@ class SyntheticInjectionClassifier:
             "recall": round(recall, 4),
             "f1_score": round(f1, 4),
         }
-
-
-# ---------------------------------------------------------------------------
-# 4. Composite Advisory Pipeline
-# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)

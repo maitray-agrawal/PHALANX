@@ -1,6 +1,6 @@
 """Adversarial and red-team security tests covering threat catalog A1 to H2.
 
-Every row from docs/THREAT_MODEL.md is explicitly implemented and verified:
+Every row from docs/security.md is explicitly implemented and verified:
 - A1: Direct Prompt Injection
 - A2: Indirect Prompt Injection
 - B1: Risk Signal Downgrade (DENY -> ALLOW)
@@ -88,9 +88,7 @@ TEST_APPROVER_TOKEN = create_role_token(
     principal_id="principal_treasury",
 )
 
-# ==============================================================================
 # FAMILY A: Prompt Injections (Catalog A1, A2)
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -266,9 +264,7 @@ def test_a5_grounding_rejects_hallucinated_payee() -> None:
     assert "evil-attacker-crypto-wallet" not in text
 
 
-# ==============================================================================
 # FAMILY B: Risk Signal Escalation & Tampering (Catalog B1, B2)
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -426,9 +422,7 @@ def test_b_mandate_malformed_signature_hex_fails() -> None:
     assert verify_mandate_seal(pub, msg, "deadbeef", key_id) is False
 
 
-# ==============================================================================
 # FAMILY C: Numeric & Precision Injections (Catalog C1, C2)
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -471,9 +465,7 @@ def test_c2_float_or_subcent_precision_tampering_rejected_at_boundary(
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
-# ==============================================================================
 # FAMILY D: Webhook Replay & Forgery (Catalog D1, D2)
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -522,9 +514,7 @@ def test_d2_unsigned_paypal_webhook_rejected(client: TestClient) -> None:
     assert resp.status_code == status.HTTP_401_UNAUTHORIZED
 
 
-# ==============================================================================
 # FAMILY E: Idempotency & Concurrency Double Spend (Catalog E1, E2)
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -674,9 +664,7 @@ def test_e2_high_concurrency_double_spend_race() -> None:
         os.remove(db_path)
 
 
-# ==============================================================================
 # FAMILY F: Ledger Immutability & DB Privileges (Catalog F1, F2)
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -751,9 +739,7 @@ def test_f2_ledger_event_sql_delete_attempt_raises() -> None:
         os.remove(db_path)
 
 
-# ==============================================================================
 # FAMILY G: Schema Boundary & Authorization Controls (Catalog G1, G2)
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -937,9 +923,7 @@ def test_g6_agent_identity_cannot_approve_step_up(client: TestClient) -> None:
     assert resp.status_code == status.HTTP_403_FORBIDDEN
 
 
-# ==============================================================================
 # FAMILY H: Temporal & State Machine Integrity (Catalog H1, H2)
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -1314,9 +1298,7 @@ def test_f05_agent_cannot_simulate_ledger_tamper(client: TestClient) -> None:
         settings.demo_mode = orig_demo
 
 
-# ==============================================================================
 # FAMILY I: Security Probes (Regression Verification for Vulnerability Fixes)
-# ==============================================================================
 
 
 @pytest.mark.redteam

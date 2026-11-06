@@ -1,13 +1,11 @@
 """Benchmark runner, test count collector, and canonical source of truth for test metrics.
 
-Generates docs/TEST_REPORT.md and synchronizes test counts and latency numbers across
-README.md, docs/DEVPOST.md, and docs/FINAL_REPORT.md.
+Generates docs/testing.md with empirical test counts and latency numbers.
 """
 
 import math
 import os
 import platform
-import re
 import statistics
 import time
 from datetime import UTC, datetime, timedelta
@@ -236,13 +234,28 @@ def generate_report(
     def add(line: str = "") -> None:
         lines.append(line)
 
-    add("# PHALANX Adversarial Security Test Report")
+    add("# PHALANX Test Suite & Verification Report")
     add(f"**Generated**: {now_utc}  ")
-    add("**Test Suite**: `tests/redteam/test_redteam.py` (Catalog A1 to H2)  ")
+    add("**Test Suite**: `tests/` and `tests/redteam/test_redteam.py`  ")
     add(
         "**Evaluation Harness**: Python 3.12, Pytest 8, FastAPI TestClient, "
         "`time.perf_counter_ns`  "
     )
+    add()
+    add("## Running Tests")
+    add("```bash")
+    add("# Backend unit, integration, and concurrency tests")
+    add("uv run pytest -q")
+    add()
+    add("# Adversarial red-team suite only")
+    add("uv run pytest -q -m redteam")
+    add()
+    add("# Web frontend test suite (Vitest)")
+    add("cd web && npm test -- --run")
+    add()
+    add("# Cross-browser end-to-end tests (Playwright)")
+    add("cd web && npm run test:e2e")
+    add("```")
     add()
     add("---")
     add()
@@ -262,9 +275,7 @@ def generate_report(
     add()
     add("## 1. Threat Catalog Coverage & Defense Summary (A1 to H2)")
     add()
-    add(
-        "Every row from [docs/THREAT_MODEL.md](file:///d:/PHALANX/docs/THREAT_MODEL.md) is covered:"
-    )
+    add("Every row from [docs/security.md](file:///d:/PHALANX/docs/security.md) is covered:")
     add()
     add(
         "| Code | Threat Vector | Attack Scenario | Denominator | "
@@ -495,196 +506,27 @@ def generate_report(
     )
     add()
 
-    report_path = Path("docs/TEST_REPORT.md")
+    report_path = Path("docs/testing.md")
     report_path.write_text("\n".join(lines), encoding="utf-8")
     return report_path
 
 
 def sync_documentation(metrics: dict[str, Any] | None = None) -> list[str]:
-    """Synchronize test counts and latency numbers across README, DEVPOST, and FINAL_REPORT."""
-    m = metrics or CANONICAL_METRICS
-    updated_files: list[str] = []
-
-    # 1. README.md
-    readme_path = Path("README.md")
-    if readme_path.exists():
-        content = readme_path.read_text(encoding="utf-8")
-        # Line 19: median latency
-        latency_str = f"{m['policy_eval_median_us']:.2f} µs median latency"
-        content = re.sub(
-            r"\(zero I/O, zero clock, zero randomness; [0-9.]+ µs median latency\)",
-            f"(zero I/O, zero clock, zero randomness; {latency_str})",
-            content,
-        )
-        # Line 67: # Run all N backend tests
-        content = re.sub(
-            r"# Run all \d+ backend tests",
-            f"# Run all {m['total_backend_tests']} backend tests",
-            content,
-        )
-        # Line 70: redteam count
-        content = re.sub(
-            r"# Run adversarial red-team suite only \(\d+ threat catalog tests\)",
-            f"# Run adversarial red-team suite only ({m['redteam_tests']} threat catalog tests)",
-            content,
-        )
-        # Line 77: frontend tests
-        content = re.sub(
-            r"# Run frontend test suite \(\d+ tests\)",
-            f"# Run frontend test suite ({m['frontend_tests']} tests)",
-            content,
-        )
-        readme_path.write_text(content, encoding="utf-8")
-        updated_files.append(str(readme_path))
-
-    # 2. docs/DEVPOST.md
-    devpost_path = Path("docs/DEVPOST.md")
-    if devpost_path.exists():
-        content = devpost_path.read_text(encoding="utf-8")
-        eval_latency_str = f"{m['policy_eval_median_us']:.2f} µs evaluation latency"
-        content = re.sub(
-            r"\(zero I/O, zero clock, zero randomness, [0-9.]+ µs evaluation latency\)",
-            f"(zero I/O, zero clock, zero randomness, {eval_latency_str})",
-            content,
-        )
-        devpost_test_pattern = (
-            r"\b\d+ automated backend unit, integration, concurrency, "
-            r"and red-team tests plus \d+ frontend Vitest tests"
-        )
-        devpost_test_replacement = (
-            f"{m['total_backend_tests']} automated backend unit, integration, concurrency, "
-            f"and red-team tests plus {m['frontend_tests']} frontend Vitest tests"
-        )
-        content = re.sub(devpost_test_pattern, devpost_test_replacement, content)
-        devpost_path.write_text(content, encoding="utf-8")
-        updated_files.append(str(devpost_path))
-
-    # 3. docs/FINAL_REPORT.md
-    final_report_path = Path("docs/FINAL_REPORT.md")
-    if final_report_path.exists():
-        content = final_report_path.read_text(encoding="utf-8")
-        # Assessment confidence row
-        conf_pattern = (
-            r"\b\d+/\d+ automated backend tests.*?; \d+/\d+ red-team adversarial tests passed; "
-            r"\d+/\d+ concurrency/transaction audit tests passed;"
-        )
-        conf_replacement = (
-            f"{m['total_backend_tests']}/{m['total_backend_tests']} automated backend tests "
-            f"({m['passed_backend_tests']} passed, {m['skipped_backend_tests']} skipped without "
-            f"PostgreSQL container); {m['redteam_tests']}/{m['redteam_tests']} red-team "
-            f"adversarial tests passed; {m['concurrency_tests']}/{m['concurrency_tests']} "
-            "concurrency/transaction audit tests passed;"
-        )
-        content = re.sub(conf_pattern, conf_replacement, content)
-        # Unsupported claims row
-        content = re.sub(
-            r"Actual automated test suite contains \d+ tests \(\d+ red-team\)\.",
-            f"Actual automated test suite contains {m['total_backend_tests']} tests "
-            f"({m['redteam_tests']} red-team).",
-            content,
-        )
-        # Latency rows
-        policy_claim_pattern = (
-            r"\| \*\*Policy Evaluation Latency \(~[0-9.]+ µs median\)\*\* \| "
-            r"docs/TEST_REPORT\.md Section 2 \| Benchmark: median [0-9.]+ µs, p95 [0-9.]+ µs "
-            r"across 10,000 runs \|"
-        )
-        policy_claim_replacement = (
-            f"| **Policy Evaluation Latency (~{m['policy_eval_median_us']:.2f} µs median)** | "
-            "docs/TEST_REPORT.md Section 2 | "
-            f"Benchmark: median {m['policy_eval_median_us']:.2f} µs, "
-            f"p95 {m['policy_eval_p95_us']:.2f} µs across 10,000 runs |"
-        )
-        content = re.sub(policy_claim_pattern, policy_claim_replacement, content)
-
-        http_claim_pattern = (
-            r"\| \*\*End-to-End HTTP Request Latency \(< 200 ms\)\*\* \| "
-            r"docs/TEST_REPORT\.md Section 2 \| Benchmark: median [0-9.]+ ms, p95 [0-9.]+ ms "
-            r"across 500 requests \|"
-        )
-        http_claim_replacement = (
-            "| **End-to-End HTTP Request Latency (< 200 ms)** | docs/TEST_REPORT.md Section 2 | "
-            f"Benchmark: median {m['http_request_median_ms']:.2f} ms, "
-            f"p95 {m['http_request_p95_ms']:.2f} ms across 500 requests |"
-        )
-        content = re.sub(http_claim_pattern, http_claim_replacement, content)
-
-        # Fresh-machine clone section
-        content = re.sub(
-            r"uv run pytest -q`: \*\*Passed\*\* \(\d+/\d+ passed.*?\)",
-            f"uv run pytest -q`: **Passed** ({m['passed_backend_tests']} passed, "
-            f"{m['skipped_backend_tests']} skipped without PostgreSQL container)",
-            content,
-        )
-        content = re.sub(
-            r"uv run pytest -q -m redteam`: \*\*Passed\*\* \(\d+/\d+ passed.*?\)",
-            f"uv run pytest -q -m redteam`: **Passed** "
-            f"({m['redteam_tests']}/{m['redteam_tests']} passed in 2.34s)",
-            content,
-        )
-        update_claim_pattern = (
-            r"- Updated `README\.md` and `docs/DEVPOST\.md` to reflect true test count "
-            r"\(\d+ automated tests, \d+ red-team tests, \d+ transaction audit tests\)"
-        )
-        update_claim_replacement = (
-            "- Updated `README.md` and `docs/DEVPOST.md` to reflect true test count "
-            f"({m['total_backend_tests']} automated tests, {m['redteam_tests']} red-team tests, "
-            f"{m['concurrency_tests']} transaction audit tests)"
-        )
-        content = re.sub(update_claim_pattern, update_claim_replacement, content)
-
-        content = re.sub(
-            r"- `uv run pytest -q`: \d+/\d+ tests passing.*",
-            f"- `uv run pytest -q`: {m['passed_backend_tests']} passed, "
-            f"{m['skipped_backend_tests']} skipped "
-            f"({m['total_backend_tests']} total backend tests).",
-            content,
-        )
-        content = re.sub(
-            r"- `uv run pytest -q -m redteam`: \d+/\d+ red-team tests passing.*",
-            f"- `uv run pytest -q -m redteam`: {m['redteam_tests']}/{m['redteam_tests']} "
-            "red-team tests passing in 2.34s.",
-            content,
-        )
-        final_report_path.write_text(content, encoding="utf-8")
-        updated_files.append(str(final_report_path))
-
-    return updated_files
+    """Synchronize test counts and latency numbers to docs/testing.md."""
+    _ = metrics
+    path = generate_report()
+    return [str(path)]
 
 
 def verify_documentation_alignment(metrics: dict[str, Any] | None = None) -> bool:
-    """Verify that README, DEVPOST, and FINAL_REPORT align with canonical metrics."""
+    """Verify that docs/testing.md contains the canonical test metrics."""
     m = metrics or CANONICAL_METRICS
-
-    # Check README
-    readme = Path("README.md").read_text(encoding="utf-8")
-    assert f"{m['total_backend_tests']} backend tests" in readme, "README test count mismatch"
-    assert f"({m['redteam_tests']} threat catalog tests)" in readme, "README redteam mismatch"
-    assert f"{m['policy_eval_median_us']:.2f} µs median latency" in readme, (
-        "README latency mismatch"
-    )
-
-    # Check DEVPOST
-    devpost = Path("docs/DEVPOST.md").read_text(encoding="utf-8")
-    assert f"{m['total_backend_tests']} automated backend" in devpost, "DEVPOST test count mismatch"
-    assert f"{m['policy_eval_median_us']:.2f} µs evaluation latency" in devpost, (
-        "DEVPOST latency mismatch"
-    )
-
-    # Check FINAL_REPORT
-    final_report = Path("docs/FINAL_REPORT.md").read_text(encoding="utf-8")
-    expected_total = (
-        f"{m['total_backend_tests']}/{m['total_backend_tests']} automated backend tests"
-    )
-    assert expected_total in final_report, "FINAL_REPORT count mismatch"
-    expected_redteam = (
-        f"{m['redteam_tests']}/{m['redteam_tests']} red-team adversarial tests passed"
-    )
-    assert expected_redteam in final_report, "FINAL_REPORT redteam mismatch"
-    assert f"~{m['policy_eval_median_us']:.2f} µs median" in final_report, (
-        "FINAL_REPORT latency mismatch"
-    )
-
+    testing_path = Path("docs/testing.md")
+    assert testing_path.exists(), "docs/testing.md does not exist"
+    content = testing_path.read_text(encoding="utf-8")
+    assert f"{m['total_backend_tests']}" in content, "testing.md total_backend_tests mismatch"
+    assert f"{m['redteam_tests']}" in content, "testing.md redteam_tests mismatch"
+    assert f"{m['policy_eval_median_us']:.2f}" in content, "testing.md latency mismatch"
     return True
 
 

@@ -200,7 +200,7 @@ def get_mandate_status(
 
 
 class PhalanxMcpServer:
-    """Wrapper class providing backward-compatible programmatic interface."""
+    """Programmatic interface for in-process testing and direct invocation."""
 
     def __init__(self, mcp: FastMCP | None = None) -> None:
         self.mcp = mcp or mcp_server

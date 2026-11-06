@@ -88,9 +88,7 @@ from app.infrastructure.tokens import (
 router = APIRouter()
 
 
-# ---------------------------------------------------------------------------
 # Health and Diagnostics Endpoints (Public)
-# ---------------------------------------------------------------------------
 
 
 @router.get("/healthz", status_code=status.HTTP_200_OK)
@@ -123,9 +121,7 @@ def health_check(
     return service.check_health()
 
 
-# ---------------------------------------------------------------------------
 # Demo Authentication Token Dispenser (No-Signup Demo Mode)
-# ---------------------------------------------------------------------------
 
 
 _demo_token_rate_limits: dict[str, list[float]] = {}
@@ -208,9 +204,7 @@ def get_demo_token(
     )
 
 
-# ---------------------------------------------------------------------------
 # Payment Request Authorization Endpoints (POST /v1/payment-requests)
-# ---------------------------------------------------------------------------
 
 
 @router.post(
@@ -273,9 +267,7 @@ def get_payment_request(
     return res
 
 
-# ---------------------------------------------------------------------------
 # Mandate Management Endpoints (POST /v1/mandates, GET /v1/mandates/{id})
-# ---------------------------------------------------------------------------
 
 
 @router.post(
@@ -379,9 +371,7 @@ def get_mandate(
     )
 
 
-# ---------------------------------------------------------------------------
 # Decision & Approval Endpoints (GET /v1/decisions/{id}, POST /v1/approvals/{id})
-# ---------------------------------------------------------------------------
 
 
 @router.get(
@@ -525,9 +515,7 @@ def reject_request_api(
     return submit_approval(request_id, approval_dto, identity, service)
 
 
-# ---------------------------------------------------------------------------
 # Ledger & Verification Endpoints (GET /v1/ledger, GET /v1/ledger/verify)
-# ---------------------------------------------------------------------------
 
 
 @router.get(
@@ -674,9 +662,7 @@ def restore_ledger(
     }
 
 
-# ---------------------------------------------------------------------------
 # Ambiguous-Outcome Reconciliation Endpoints (GET /v1/reconcile, POST /v1/reconcile/{id})
-# ---------------------------------------------------------------------------
 
 
 @router.get("/v1/reconcile", response_model=list[dict[str, Any]], status_code=status.HTTP_200_OK)
@@ -707,9 +693,7 @@ def reconcile_request(
     return {"request_id": request_id, "state": new_state.value}
 
 
-# ---------------------------------------------------------------------------
 # PayPal Webhook Ingestion (POST /v1/webhooks/paypal)
-# ---------------------------------------------------------------------------
 
 
 processed_webhook_events: set[str] = set()
@@ -759,9 +743,7 @@ async def paypal_webhook(
     return {"status": "processed", "event_id": event_id or "unknown"}
 
 
-# ---------------------------------------------------------------------------
 # Orders v2 Live Management Endpoints
-# ---------------------------------------------------------------------------
 
 
 @router.get("/v1/orders/{order_id}", status_code=status.HTTP_200_OK)
@@ -807,9 +789,7 @@ def capture_order(
     }
 
 
-# ---------------------------------------------------------------------------
 # Demo Reset Endpoint (POST /v1/admin/reset)
-# ---------------------------------------------------------------------------
 
 
 def verify_admin_reset_access(
@@ -865,9 +845,7 @@ def admin_reset(
     return {"status": "reset_completed", "message": "Demo state reset successfully."}
 
 
-# ---------------------------------------------------------------------------
 # Cockpit Overview & Activity Feed Endpoints (GET /v1/overview, GET /v1/activity)
-# ---------------------------------------------------------------------------
 
 
 @router.get(
@@ -988,9 +966,7 @@ def get_activity(
     )
 
 
-# ---------------------------------------------------------------------------
 # Cryptographic Receipts & Verification Endpoints
-# ---------------------------------------------------------------------------
 
 
 def _find_ledger_event_for_receipt(
@@ -1125,9 +1101,7 @@ def verify_receipt(
     )
 
 
-# ---------------------------------------------------------------------------
 # Adversarial Attack Lab (POST /v1/attack-lab/run)
-# ---------------------------------------------------------------------------
 
 
 @router.post(

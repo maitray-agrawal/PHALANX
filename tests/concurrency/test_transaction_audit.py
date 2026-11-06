@@ -134,9 +134,7 @@ def db_session_factory() -> Any:
         os.remove(path)
 
 
-# -------------------------------------------------------------------------
 # Finding 1: Double Spend via Non-Idempotent Step-Up Retry
-# -------------------------------------------------------------------------
 def test_finding_1_double_spend_on_step_up_retry() -> None:
     """Proves that retrying an authorized step-up payment executes the payment a second time.
 
@@ -196,9 +194,7 @@ def test_finding_1_double_spend_on_step_up_retry() -> None:
     assert len(rail.dispatched) == 1, "Payment rail must not execute a second time on retry"
 
 
-# -------------------------------------------------------------------------
 # Finding 2: Double Spend & Lost Updates in confirm_reservation
-# -------------------------------------------------------------------------
 def test_finding_2_confirm_reservation_double_deduction(db_session_factory: Any) -> None:
     """Proves that confirm_reservation() has no state validation and double-deducts on replay.
 
@@ -248,9 +244,7 @@ def test_finding_2_confirm_reservation_double_deduction(db_session_factory: Any)
             repo.confirm_reservation(res_id)
 
 
-# -------------------------------------------------------------------------
 # Finding 3: Phantom Budget Leakage in release_reservation
-# -------------------------------------------------------------------------
 def test_finding_3_release_already_confirmed_reservation(db_session_factory: Any) -> None:
     """Proves that release_reservation() can release an already CONFIRMED reservation.
 
@@ -296,9 +290,7 @@ def test_finding_3_release_already_confirmed_reservation(db_session_factory: Any
             repo.release_reservation(reservation_id=res_id, confirmed_failure=True)
 
 
-# -------------------------------------------------------------------------
 # Finding 4: Non-Idempotent Retry Crash in reserve_budget
-# -------------------------------------------------------------------------
 def test_finding_4_reserve_budget_integrity_error_on_retry(db_session_factory: Any) -> None:
     """Proves reserve_budget crashes with IntegrityError on client retry before decision recorded.
 
@@ -345,9 +337,7 @@ def test_finding_4_reserve_budget_integrity_error_on_retry(db_session_factory: A
             )
 
 
-# -------------------------------------------------------------------------
 # Finding 5: Cross-Agent Budget Collision in AuthorizationService
-# -------------------------------------------------------------------------
 def test_finding_5_cross_agent_budget_collision() -> None:
     """Proves AuthorizationService tracks spent budget globally rather than per-agent.
 
@@ -433,9 +423,7 @@ def test_finding_5_cross_agent_budget_collision() -> None:
     )
 
 
-# -------------------------------------------------------------------------
 # Finding 6: Missing RECONCILE State & Ambiguous Failure Transition
-# -------------------------------------------------------------------------
 def test_finding_6_missing_reconcile_state_in_lifecycle() -> None:
     """Proves RequestState lacks the RECONCILE state required by Manual 56.13 and 56.17.
 
@@ -453,9 +441,7 @@ def test_finding_6_missing_reconcile_state_in_lifecycle() -> None:
     )
 
 
-# -------------------------------------------------------------------------
 # Finding 7: Missing Row Lock (FOR UPDATE) in approve_step_up
-# -------------------------------------------------------------------------
 def test_finding_7_missing_row_lock_on_step_up_approval() -> None:
     """Proves approve_step_up lacks row-level locking (SELECT ... FOR UPDATE).
 
@@ -474,9 +460,7 @@ def test_finding_7_missing_row_lock_on_step_up_approval() -> None:
     )
 
 
-# -------------------------------------------------------------------------
 # F6 Ambiguous Rail Outcome & Reconciliation Lifecycle Tests (10a - 10f)
-# -------------------------------------------------------------------------
 def test_f6_timeout_transitions_to_reconcile() -> None:
     """10a: Payment rail timeout must transition authorization lifecycle to RECONCILE."""
     rail = ConfigurableRail(
@@ -919,9 +903,7 @@ def test_f6_ambiguous_outcome_does_not_release_budget(db_session_factory: Any) -
     assert "Lifetime budget cap exceeded" in res2.reasons[0]
 
 
-# -------------------------------------------------------------------------
 # R2.2 & R2.3: Concurrent Duplicate Idempotency & Database Budget Tests
-# -------------------------------------------------------------------------
 def test_r2_2_concurrent_duplicate_idempotency(db_session_factory: Any) -> None:
     """R2.2: Two concurrent identical requests must result in exactly one reservation,
     one payment rail dispatch, and the second receiving replay without raw IntegrityError.

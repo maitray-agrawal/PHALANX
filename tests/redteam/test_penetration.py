@@ -120,9 +120,7 @@ def pen_client(
     return TestClient(app)
 
 
-# ==============================================================================
 # 1. TOKEN TAMPERING
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -285,9 +283,7 @@ def test_pen_token_replay_after_key_rotation(pen_client: TestClient) -> None:
         settings.secret_key = original_key
 
 
-# ==============================================================================
 # 2. IDOR ACROSS PRINCIPALS AND AGENTS
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -341,9 +337,7 @@ def test_pen_idor_agent_cannot_read_approvals_queue(pen_client: TestClient) -> N
     assert "Autonomous agents cannot access the supervisor approval queue" in resp.json()["detail"]
 
 
-# ==============================================================================
 # 3. MASS ASSIGNMENT AND EXTRA FIELDS
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -387,9 +381,7 @@ def test_pen_mass_assignment_extra_fields_in_approval(pen_client: TestClient) ->
     assert resp.status_code == 422
 
 
-# ==============================================================================
 # 4. ROLE ESCALATION
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -449,9 +441,7 @@ def test_pen_role_escalation_admin_reset_requires_secret(pen_client: TestClient)
     assert "cannot reset admin state" in resp.json()["detail"]
 
 
-# ==============================================================================
 # 5. AGENT SELF-APPROVAL
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -494,9 +484,7 @@ def test_pen_agent_self_approval_strictly_blocked(pen_client: TestClient) -> Non
     assert "Autonomous agents cannot approve transactions" in resp_approve.json()["detail"]
 
 
-# ==============================================================================
 # 6. APPROVAL DIGEST SWAP AND TOCTOU
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -536,9 +524,7 @@ def test_pen_approval_digest_swap_detected_and_rejected(pen_client: TestClient) 
     assert resp_approve.status_code in (400, 409)
 
 
-# ==============================================================================
 # 7. IDEMPOTENCY-KEY ABUSE
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -600,9 +586,7 @@ def test_pen_idempotency_key_empty_or_whitespace_rejected(pen_client: TestClient
     assert resp.status_code == 422
 
 
-# ==============================================================================
 # 8. RATE-LIMIT BYPASS ATTEMPTS
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -637,9 +621,7 @@ def test_pen_rate_limit_bypass_spoofed_x_forwarded_for_fails(pen_client: TestCli
     assert "Rate limit exceeded" in blocked_resp.json()["detail"]
 
 
-# ==============================================================================
 # 9. OVERSIZED, DEEPLY NESTED, AND UNICODE-CONFUSABLE PAYLOADS
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -764,9 +746,7 @@ def test_pen_zero_width_space_in_payee_does_not_match_allowlist(
     assert any("RECIPIENT_NOT_ALLOWED" in c or "MANDATE" in c for c in resp.json()["reason_codes"])
 
 
-# ==============================================================================
 # 10. LOG-INJECTION STRINGS
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -800,9 +780,7 @@ def test_pen_log_injection_crlf_and_ansi_escaped(
     assert matching[0].payload["purpose"] == malicious_purpose
 
 
-# ==============================================================================
 # 11. SSRF ATTEMPTS THROUGH ANY URL FIELD
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -835,9 +813,7 @@ def test_pen_ssrf_webhook_cert_url_attacker_domain_rejected(pen_client: TestClie
     assert resp.status_code in (400, 401)
 
 
-# ==============================================================================
 # 12. FORGED, REPLAYED, AND OUT-OF-ORDER WEBHOOKS
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -881,9 +857,7 @@ def test_pen_webhook_replayed_event_id_deduplicated(pen_client: TestClient) -> N
     assert resp2.json()["status"] == "duplicate_ignored"
 
 
-# ==============================================================================
 # 13. CORS PREFLIGHT ABUSE
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -915,9 +889,7 @@ def test_pen_cors_authorized_origin_permitted(pen_client: TestClient) -> None:
     assert resp.headers.get("access-control-allow-origin") == "http://localhost:5173"
 
 
-# ==============================================================================
 # 14. CLICKJACKING AND DEFENSIVE HEADERS
-# ==============================================================================
 
 
 @pytest.mark.redteam
@@ -932,9 +904,7 @@ def test_pen_clickjacking_defense_headers_present(pen_client: TestClient) -> Non
     assert "default-src 'self'" in csp
 
 
-# ==============================================================================
 # 15. CONSTANT-TIME TIMING SAFETY
-# ==============================================================================
 
 
 @pytest.mark.redteam

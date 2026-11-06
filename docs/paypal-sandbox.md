@@ -1,6 +1,6 @@
-# EVIDENCE - Verification & Tooling Evidence Register
+# EVIDENCE - Evidence Register
 
-All facts about external systems, PayPal sandbox APIs, libraries, and toolchains are recorded here with verification evidence. Any unverified item is explicitly marked `UNVERIFIED`.
+All facts about external systems, PayPal sandbox APIs, libraries, and toolchains are recorded here with verification evidence. Any unchecked item is explicitly marked `unchecked`.
 
 ---
 
@@ -13,7 +13,7 @@ All facts about external systems, PayPal sandbox APIs, libraries, and toolchains
   - Batch Status Endpoint: `GET /v1/payments/payouts/{payout_batch_id}`
 - **PayPal Idempotency Header**:
   - URL: `https://developer.paypal.com/docs/api/reference/api-requests/#idempotency` (Read: 2026-10-22)
-  - Header Name: `PayPal-Request-Id` (verified exact header name)
+  - Header Name: `PayPal-Request-Id` (confirmed exact header name)
   - Function: Re-sending request with identical header returns cached idempotent response instead of duplicate charge.
 - **PayPal Payouts Batch Duplicate Prevention**:
   - Tracking Key: `sender_batch_header.sender_batch_id`
@@ -32,7 +32,7 @@ All facts about external systems, PayPal sandbox APIs, libraries, and toolchains
 
 ## 2. Spike Execution Results (`spikes/`)
 - **OAuth Token Spike** (`spikes/spike_paypal_auth.py`):
-  - Verification: Clean execution without leaking credentials; reports `MISSING_CREDENTIALS` gracefully when `.env` is unpopulated.
+  - Execution: Clean execution without leaking credentials; reports `MISSING_CREDENTIALS` gracefully when `.env` is unpopulated.
 - **Route A Payouts Spike** (`spikes/spike_payouts_route_a.py`):
   - Endpoint: `POST /v1/payments/payouts`
   - Idempotency Header: `PayPal-Request-Id`
@@ -46,7 +46,7 @@ All facts about external systems, PayPal sandbox APIs, libraries, and toolchains
 ## 3. Environment & Toolchain Proof
 - **Date**: 2026-10-22
 - **OS**: Windows 11 (64-bit)
-- **Python**: Python 3.12.10 verified available at `C:\Users\agraw\AppData\Local\Python\pythoncore-3.12-64\python.exe`
+- **Python**: Python 3.12.10 installed at `C:\Users\agraw\AppData\Local\Python\pythoncore-3.12-64\python.exe`
 - **Node.js**: v24.15.0 (`node --version`)
 - **npm**: 12.0.1 (`npm --version`)
 - **uv**: 0.12.17 (`uv --version`)
@@ -62,12 +62,12 @@ All facts about external systems, PayPal sandbox APIs, libraries, and toolchains
 
 ---
 
-## 5. RFC 8785 Canonical JSON Library Verification (Date: 2026-10-22)
+## 5. RFC 8785 Canonical JSON Library Testing (Date: 2026-10-22)
 - **Library**: `rfc8785==0.1.4`
 - **PyPI URL**: `https://pypi.org/project/rfc8785/` (Read: 2026-10-22)
 - **Specification**: IETF RFC 8785 (JSON Canonicalization Scheme / JCS)
 - **Author**: Anders Rundgren (Cyberphone), RFC 8785 author and reference implementation maintainer
-- **Properties Verified**:
+- **Properties Checked**:
   - Pure-Python, zero external dependencies
   - Lexicographical sorting of JSON object keys by UTF-16 code units (RFC 8785 Section 3.2.3)
   - Zero whitespace between keys, colons, commas, and values
@@ -93,7 +93,7 @@ All facts about external systems, PayPal sandbox APIs, libraries, and toolchains
 
 ---
 
-## 7. Accessibility & WCAG 2.1 AA Verification Audit (Date: 2026-10-22)
+## 7. Accessibility & WCAG 2.1 AA Audit (Date: 2026-10-22)
 
 Manual section references: 36, 37, 56.25.
 
@@ -182,13 +182,13 @@ Audit conducted per manual sections 56.13, 56.14, 56.17 covering transaction bou
 ### 9.1 Remediated Findings Matrix
 | Finding | Subsystem | Severity | Invariant Enforced | Empirical Test Case | Status |
 |---|---|---|---|---|---|
-| **F1** | `AuthorizationService` | High | Step-up final idempotency: executed approvals cache final decision; replays skip payment dispatch and budget re-deduction | `test_f1_step_up_replay_idempotency_cached` | **Verified** |
-| **F2** | `DatabaseBudgetRepository` | High | Reservation confirmation guard: rejects non-PENDING/RECONCILE reservations (`InvalidApprovalStateError`) | `test_f2_confirm_reservation_state_guard` | **Verified** |
-| **F3** | `DatabaseBudgetRepository` | High | Reservation release guard: rejects CONFIRMED reservations (`ValueError`) and double-release | `test_f3_release_reservation_state_guard` | **Verified** |
-| **F4** | `DatabaseBudgetRepository` | High | Atomic concurrent idempotency: DB savepoints (`begin_nested()`) catch duplicate constraint collisions, roll back reservation, and return cached replay without raw IntegrityError | `test_f4_reservation_idempotency_atomicity`, `test_r2_2_concurrent_duplicate_idempotency` | **Verified** |
-| **F5** | `BudgetRepository` / `AuthorizationService` | High | Persistent multi-instance budget accounting: DB-backed `AgentBudgetModel` with row-locks isolates budgets across restarts and separate service instances | `test_f5_per_agent_lifetime_budget_isolation`, `test_r2_3_persistent_database_budget_accounting` | **Verified** |
-| **F6** | `RequestStateMachine` / `AuthorizationService` | Medium | Ambiguous rail outcome lifecycle: transitions to `RECONCILE` on timeout/5xx; budget reservation held until confirmed settlement or release. (Documented limitation: automatic periodic polling resolution requires an external scheduled worker or inbound webhook dispatcher; manual/API reconciliation provided via `/v1/reconcile`) | `test_f6_reconcile_state_transitions`, `test_paypal_payout_timeout_transitions_to_reconcile` | **Verified** |
-| **F7** | `DatabaseBudgetRepository` | High | Row-level locking: `with_for_update` on step-up approvals under PostgreSQL | `test_f7_step_up_row_lock` | **Verified** |
+| **F1** | `AuthorizationService` | High | Step-up final idempotency: executed approvals cache final decision; replays skip payment dispatch and budget re-deduction | `test_f1_step_up_replay_idempotency_cached` | **Passed** |
+| **F2** | `DatabaseBudgetRepository` | High | Reservation confirmation guard: rejects non-PENDING/RECONCILE reservations (`InvalidApprovalStateError`) | `test_f2_confirm_reservation_state_guard` | **Passed** |
+| **F3** | `DatabaseBudgetRepository` | High | Reservation release guard: rejects CONFIRMED reservations (`ValueError`) and double-release | `test_f3_release_reservation_state_guard` | **Passed** |
+| **F4** | `DatabaseBudgetRepository` | High | Atomic concurrent idempotency: DB savepoints (`begin_nested()`) catch duplicate constraint collisions, roll back reservation, and return cached replay without raw IntegrityError | `test_f4_reservation_idempotency_atomicity`, `test_r2_2_concurrent_duplicate_idempotency` | **Passed** |
+| **F5** | `BudgetRepository` / `AuthorizationService` | High | Persistent multi-instance budget accounting: DB-backed `AgentBudgetModel` with row-locks isolates budgets across restarts and separate service instances | `test_f5_per_agent_lifetime_budget_isolation`, `test_r2_3_persistent_database_budget_accounting` | **Passed** |
+| **F6** | `RequestStateMachine` / `AuthorizationService` | Medium | Ambiguous rail outcome lifecycle: transitions to `RECONCILE` on timeout/5xx; budget reservation held until confirmed settlement or release. (Documented limitation: automatic periodic polling resolution requires an external scheduled worker or inbound webhook dispatcher; manual/API reconciliation provided via `/v1/reconcile`) | `test_f6_reconcile_state_transitions`, `test_paypal_payout_timeout_transitions_to_reconcile` | **Passed** |
+| **F7** | `DatabaseBudgetRepository` | High | Row-level locking: `with_for_update` on step-up approvals under PostgreSQL | `test_f7_step_up_row_lock` | **Passed** |
 
 ### 9.2 Complete Test Suite Execution Proof (2026-10-24)
 - **Pytest Full Suite**: **247 passed** in 25.41s (`uv run pytest -q`)
@@ -202,27 +202,27 @@ Audit conducted per manual sections 56.13, 56.14, 56.17 covering transaction bou
 
 ---
 
-## 10. Live PayPal Sandbox E2E Verification & Integration (Date: 2026-10-24)
+## 10. Live PayPal Sandbox E2E Testing & Integration (Date: 2026-10-24)
 
 - **Payment Rail Abstraction**: Pure port `PaymentRail` (`app/domain/ports.py`), implemented by `PayPalPaymentRailAdapter` (`app/infrastructure/paypal.py`)
 - **Sandbox Environment**: `api.sandbox.paypal.com`
 - **Usable Sandbox Rail**: Orders v2 Checkout fallback (`POST /v2/checkout/orders` with idempotency `PayPal-Request-Id`) automatically engaged when sandbox account lacks Payouts permissions (HTTP 403).
-- **Live Sandbox Verification**:
+- **Live Sandbox Execution**:
   - Request: Amount 2500 minor units ($25.00 USD), Recipient `vendor-cloud-infra`, Idempotency `test-live-e2e-001`.
   - Transaction ID: `3J77364339194024E`
   - Rail Result: `success=True`, `status="ORDER_CREATED_FALLBACK"` (HTTP 201 Created from PayPal Sandbox)
-  - Lookup Result: Verified via `rail.lookup("3J77364339194024E")` calling `GET /v2/checkout/orders/3J77364339194024E`, returning `success=True`, `status="CREATED"`.
-- **Three Hero Scenarios Verified**:
+  - Lookup Result: Checked via `rail.lookup("3J77364339194024E")` calling `GET /v2/checkout/orders/3J77364339194024E`, returning `success=True`, `status="CREATED"`.
+- **Three Hero Scenarios Tested**:
   1. **Scenario A (Legitimate Under-Limit)**: Agent requests $25.00 payment to allowlisted payee within mandate -> Evaluated to `ALLOW` -> Dispatched to PayPal Sandbox -> Recorded to ledger.
   2. **Scenario B (Over-Limit Step-Up)**: Agent requests $1,200.00 payment exceeding $500.00 instant threshold -> Evaluated to `STEP_UP` -> Held in supervisor queue -> Human supervisor authorizes bound to exact RFC 8785 SHA-256 intent digest.
   3. **Scenario C (Prompt Injection / Unauthorized Payee)**: Adversarial text attempting system override or unregistered recipient -> Delimiter-isolated intent evaluated deterministically -> `DENY` -> Zero calls to payment rail -> Audit ledger records security block.
 
 ---
 
-## 11. PayPal Webhook Signature Verification API Reference (Date: 2026-11-06)
+## 11. PayPal Webhook Signature Checking API Reference (Date: 2026-11-06)
 
 - **Official Documentation**:
-  - URL: `https://developer.paypal.com/docs/api/webhooks/v1/#verify-webhook-signature_post` (Read & Verified: 2026-11-06)
+  - URL: `https://developer.paypal.com/docs/api/webhooks/v1/#verify-webhook-signature_post` (Read & Checked: 2026-11-06)
   - Sandbox Endpoint: `POST https://api-m.sandbox.paypal.com/v1/notifications/verify-webhook-signature`
   - Production Endpoint: `POST https://api-m.paypal.com/v1/notifications/verify-webhook-signature`
 - **Authentication**: `Bearer <oauth2_token>` obtained via `POST /v1/oauth2/token` with client credentials.
@@ -249,7 +249,7 @@ Audit conducted per manual sections 56.13, 56.14, 56.17 covering transaction bou
   - HTTP 200 OK with `{"verification_status": "FAILURE"}` on forged or tampered signature.
 - **Fail-Closed Security Boundary**:
   - Unconfigured `PAYPAL_WEBHOOK_ID` or missing PayPal credentials: Returns HTTP 503 Service Unavailable ("PayPal webhook processing unavailable: PAYPAL_WEBHOOK_ID unconfigured").
-  - Invalid signature or missing headers: Returns HTTP 401 Unauthorized ("PayPal webhook signature verification failed").
+  - Invalid signature or missing headers: Returns HTTP 401 Unauthorized ("PayPal webhook Signature Checking failed").
 
 ---
 
@@ -262,7 +262,7 @@ Empirical evidence gathered directly from live API requests against `https://api
 - **Auth**: Basic Auth using sandbox client credentials
 - **Payload**: `grant_type=client_credentials`
 - **Response**: HTTP 200 OK
-- **Verified Fields**:
+- **Recorded Fields**:
   - `status`: `SUCCESS`
   - `token_type`: `Bearer`
   - `app_id`: `APP-1HJ00964E5858645P`
@@ -297,7 +297,7 @@ Empirical evidence gathered directly from live API requests against `https://api
 - **Initial Status**: `CREATED`
 - **Provider State**: `ORDER_CREATED` -> `BUYER_APPROVAL_REQUIRED`
 - **Approval Link**: `https://www.sandbox.paypal.com/checkoutnow?token=7W66016971270031D`
-- **Lookup Verification**: `GET /v2/checkout/orders/7W66016971270031D` returns HTTP 200 with `status: "CREATED"`, correctly mapped to provider state `BUYER_APPROVAL_REQUIRED`.
+- **Lookup Status**: `GET /v2/checkout/orders/7W66016971270031D` returns HTTP 200 with `status: "CREATED"`, correctly mapped to provider state `BUYER_APPROVAL_REQUIRED`.
 
 ### 12.4 Pre-Approval Capture Rejection (Fail-Closed Check)
 - **Request**: `POST /v2/checkout/orders/7W66016971270031D/capture` before buyer approval
@@ -318,7 +318,7 @@ Empirical evidence gathered directly from live API requests against `https://api
   ```
 - **Proof**: Proves PHALANX strictly holds payment in `BUYER_APPROVAL_REQUIRED` / `RECONCILE` and never marks an order complete before real capture.
 
-### 12.5 Webhook Signature Verification Endpoint Proof
+### 12.5 Webhook Signature Checking Endpoint Proof
 - **Webhook ID**: `9PJ08350X2508271R` registered on sandbox account
 - **Verification Endpoint**: `POST /v1/notifications/verify-webhook-signature`
 - **Arbitrary Signature Probe**: Inbound request with invalid signature tested against live API
