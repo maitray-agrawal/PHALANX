@@ -9,10 +9,11 @@ from app.api.dependencies import (
     get_authorization_service,
     get_clock,
     get_ledger,
+    get_ledger_service,
     get_mandate_service,
     get_payment_rail,
 )
-from app.application.services import AuthorizationService, MandateService
+from app.application.services import AuthorizationService, LedgerService, MandateService
 from app.domain.ports import ClockPort
 from app.infrastructure.config import settings
 from app.infrastructure.ledger import InMemoryLedgerAdapter
@@ -117,6 +118,7 @@ def client(
     app = create_app()
     app.dependency_overrides[get_clock] = lambda: test_clock
     app.dependency_overrides[get_ledger] = lambda: test_ledger
+    app.dependency_overrides[get_ledger_service] = lambda: LedgerService(ledger=test_ledger)
     app.dependency_overrides[get_payment_rail] = lambda: test_payment_rail
     app.dependency_overrides[get_mandate_service] = lambda: test_mandate_service
     app.dependency_overrides[get_authorization_service] = lambda: test_authorization_service

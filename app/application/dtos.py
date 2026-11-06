@@ -216,3 +216,117 @@ class DemoTokenResponseDTO(BaseModel):
     token_type: str = "bearer"
     role: str
     expires_in_seconds: int
+
+
+class OverviewResponseDTO(BaseModel):
+    """Cockpit high-level operational overview metrics (three values only)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    remaining_authority: int = Field(
+        ...,
+        description="Remaining lifetime authorization budget in minor units (e.g. cents).",
+    )
+    pending_approval_count: int = Field(
+        ...,
+        description="Count of transactions currently pending human supervisor step-up review.",
+    )
+    last_activity: str | None = Field(
+        default=None,
+        description="ISO-8601 UTC timestamp of the most recent ledger activity, or None.",
+    )
+
+
+class ActivityItemDTO(BaseModel):
+    """Single transaction item in the paginated activity feed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    receipt_id: str
+    decision: str
+    amount: int = Field(..., description="Transaction amount in integer minor units.")
+    payee: str = Field(..., description="Recipient identifier.")
+    reason_code: str = Field(..., description="Primary policy reason code.")
+    provider_state: str = Field(..., description="Real payment provider execution state.")
+    timestamp_utc: str | None = Field(default=None, description="ISO-8601 timestamp.")
+
+
+class PaginatedActivityResponseDTO(BaseModel):
+    """Paginated ledger activity feed response."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[ActivityItemDTO]
+    next_cursor: str | None = None
+    has_more: bool = False
+
+
+class HashChainProofDTO(BaseModel):
+    """Cryptographic linkage proof for a specific ledger sequence block."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str
+    event_seq: int
+    prev_hash: str
+    event_hash: str
+    canonical_payload_hash: str
+    is_valid: bool
+
+
+class ReceiptResponseDTO(BaseModel):
+    """Detailed transaction receipt containing cryptographic governance proofs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    receipt_id: str
+    intent_digest: str
+    mandate_id: str
+    mandate_version: int
+    decision: str
+    reason_codes: list[str]
+    ledger_sequence: int
+    hash_chain_proof: HashChainProofDTO
+    amount_minor: int
+    currency: str
+    payee: str
+    created_at_utc: str
+
+
+class ReceiptVerificationResponseDTO(BaseModel):
+    """Public verification outcome for a transaction receipt."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: str = Field(..., description="PASS or FAIL")
+    is_valid: bool
+    receipt_id: str
+    decision: str
+    ledger_sequence: int
+    event_hash: str
+    broken_block: int | None = None
+    message: str
+
+
+class AttackLabItemDTO(BaseModel):
+    """Outcome of an individual canned adversarial attack."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    attack_name: str
+    target: str
+    blocked: bool
+    decision: str
+    reason_code: str
+    description: str
+    reached_paypal: bool = False
+
+
+class AttackLabResponseDTO(BaseModel):
+    """Summary response of all executed canned attack vectors."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    attacks_run: int
+    all_defended: bool
+    results: list[AttackLabItemDTO]

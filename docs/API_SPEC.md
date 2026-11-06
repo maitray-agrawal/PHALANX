@@ -143,3 +143,85 @@ Verifies incoming PayPal webhook headers (`PAYPAL-AUTH-ALGO`, `PAYPAL-TRANSMISSI
 
 ### 3.9 Admin Reset (`POST /v1/admin/reset`)
 Resets sandbox state, clearing spent budget tables and idempotency cache. Principal only.
+
+### 3.10 Authority Overview (`GET /v1/overview`)
+Lightweight summary endpoint returning exactly three values for executive and agent dashboards. Authenticated only.
+- Response (200 OK):
+```json
+{
+  "remaining_authority": 2497500,
+  "pending_approval_count": 0,
+  "last_activity": "2026-10-22T12:00:00Z"
+}
+```
+
+### 3.11 Activity Feed (`GET /v1/activity?cursor=&limit=`)
+Paginated ledger feed for transaction tracking screens.
+- Query parameters:
+  - `cursor`: Optional opaque receipt ID cursor (`rcpt_<event_id>`) from previous page.
+  - `limit`: Integer between 1 and 100 (default: 20).
+- Response (200 OK):
+```json
+{
+  "items": [
+    {
+      "receipt_id": "rcpt_evt_000001_8a12f901",
+      "decision": "ALLOW",
+      "amount": 2500,
+      "payee": "vendor-paypal-sandbox-1",
+      "reason_code": "PRE_AUTHORIZED",
+      "provider_state": "COMPLETED",
+      "timestamp_utc": "2026-10-22T12:00:00Z"
+    }
+  ],
+  "next_cursor": "rcpt_evt_000001_8a12f901",
+  "has_more": false
+}
+```
+
+### 3.12 Cryptographic Receipts & Verification (`GET /v1/receipts/{id}`, `GET /v1/receipts/{id}/verify`)
+- `GET /v1/receipts/{id}`: Detailed transaction receipt containing intent digest, mandate ID and version, decision, reason codes, ledger sequence, and cryptographic hash chain proof. Requires authentication.
+```json
+{
+  "receipt_id": "rcpt_evt_000001_8a12f901",
+  "intent_digest": "7a89f302b1c4e8590d9a62310188ef4a9b7e12f0a1d401ec8891000b0188992a",
+  "mandate_id": "mandate_default_sandbox",
+  "mandate_version": 1,
+  "decision": "ALLOW",
+  "reason_codes": ["PRE_AUTHORIZED"],
+  "ledger_sequence": 1,
+  "hash_chain_proof": {
+    "event_id": "evt_000001_8a12f901",
+    "event_seq": 1,
+    "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "event_hash": "b2c3d4e5f60718...",
+    "canonical_payload_hash": "c3d4e5f60718...",
+    "is_valid": true
+  },
+  "amount_minor": 2500,
+  "currency": "USD",
+  "payee": "vendor-paypal-sandbox-1",
+  "created_at_utc": "2026-10-22T12:00:00Z"
+}
+```
+- `GET /v1/receipts/{id}/verify`: Public read-only verification endpoint exposing only non-sensitive cryptographic proof details. Recomputes SHA-256 block hash and chain continuity. Returns `status: "PASS"` or `status: "FAIL"` with `broken_block`.
+
+### 3.13 Adversarial Attack Lab (`POST /v1/attack-lab/run`)
+Executes 6 canned adversarial attacks through the real application layer:
+1. `prompt_injection`: Heuristic extraction scan detects override phrases and escalates/denies.
+2. `payee_swap`: Unregistered payee rejected by mandate recipient whitelist.
+3. `amount_tamper_after_approval`: Tampered amount detected via canonical intent digest mismatch.
+4. `replay`: Duplicate idempotency key returns idempotent cached result without duplicate execution.
+5. `forged_webhook`: Forged signature headers fail closed on signature verification.
+6. `agent_self_approval`: Autonomous agent identity strictly forbidden (403) from approving step-ups.
+- Available only when `DEMO_MODE=true` (returns 404 when disabled).
+- Attacks never reach PayPal sandbox (`reached_paypal: false`).
+
+---
+
+## 4. Caching Rules & Conditional Headers
+
+1. **Authenticated Responses**: Emits `Cache-Control: no-store, no-cache, must-revalidate` and `Vary: Authorization`.
+2. **Mandate Reads (`GET /v1/mandates/{id}`)**: Returns deterministic strong `ETag` (derived from mandate ID, version, signature seal, and spent budget). Supports conditional GET via `If-None-Match`, returning `304 Not Modified` when unchanged.
+3. **Static Assets**: Hashed production bundles under `/assets/*` return `Cache-Control: public, max-age=31536000, immutable`.
+4. **HTML Shell**: `/` and `index.html` return `Cache-Control: no-cache`.

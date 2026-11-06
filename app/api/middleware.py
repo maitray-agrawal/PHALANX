@@ -60,7 +60,22 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Content-Security-Policy"] = "default-src 'self'"
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         response.headers["Referrer-Policy"] = "no-referrer"
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+
+        # Cache-Control rules per P10:
+        # - Immutable caching for hashed static assets (/assets/*)
+        # - No-cache for index.html / root /
+        # - No-store on authenticated and API responses
+        path = request.url.path
+        if path.startswith("/assets/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        elif path == "/" or path.endswith("index.html"):
+            response.headers["Cache-Control"] = "no-cache"
+        else:
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+
+        if "authorization" in request.headers:
+            response.headers["Vary"] = "Authorization"
+
         return response
 
 

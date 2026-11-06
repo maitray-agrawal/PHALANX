@@ -3,6 +3,9 @@
 import os
 import sys
 from functools import lru_cache
+from typing import Annotated
+
+from fastapi import Depends
 
 from app.application.services import (
     AuthorizationService,
@@ -44,21 +47,17 @@ def get_ledger() -> LedgerPort:
     from app.infrastructure.db_ledger_repo import DatabaseLedgerAdapter
 
     is_test_or_fake = is_test_environment() or is_fake_rail()
-    is_ready, err = check_database_readiness()
-    if not is_ready:
-        if not is_test_or_fake:
-            msg = f"PostgreSQL database is mandatory outside test/fake mode: {err}"
-            raise RuntimeError(msg)
+    if is_test_or_fake:
         ledger = InMemoryLedgerAdapter()
         ledger.seed_demo_events()
         return ledger
 
-    db_factory = get_session_factory()
-    if is_test_or_fake and "sqlite" in settings.database_url:
-        mem_ledger = InMemoryLedgerAdapter(db_session_factory=db_factory)
-        mem_ledger.seed_demo_events()
-        return mem_ledger
+    is_ready, err = check_database_readiness()
+    if not is_ready:
+        msg = f"PostgreSQL database is mandatory outside test/fake mode: {err}"
+        raise RuntimeError(msg)
 
+    db_factory = get_session_factory()
     return DatabaseLedgerAdapter(session_factory=db_factory)
 
 
@@ -80,13 +79,13 @@ def get_authorization_service() -> AuthorizationService:
     from app.infrastructure.database import check_database_readiness, get_session_factory
 
     is_test_or_fake = is_test_environment() or is_fake_rail()
-    is_ready, err = check_database_readiness()
-    if not is_ready:
-        if not is_test_or_fake:
-            msg = f"PostgreSQL database is mandatory outside test/fake mode: {err}"
-            raise RuntimeError(msg)
+    if is_test_or_fake:
         db_factory = None
     else:
+        is_ready, err = check_database_readiness()
+        if not is_ready:
+            msg = f"PostgreSQL database is mandatory outside test/fake mode: {err}"
+            raise RuntimeError(msg)
         db_factory = get_session_factory()
 
     return AuthorizationService(
@@ -98,9 +97,11 @@ def get_authorization_service() -> AuthorizationService:
     )
 
 
-@lru_cache(maxsize=1)
-def get_ledger_service() -> LedgerService:
-    return LedgerService(ledger=get_ledger())
+def get_ledger_service(
+    ledger: Annotated[LedgerPort | None, Depends(get_ledger)] = None,
+) -> LedgerService:
+    actual_ledger = ledger if ledger is not None else get_ledger()
+    return LedgerService(ledger=actual_ledger)
 
 
 def get_health_service() -> HealthService:
