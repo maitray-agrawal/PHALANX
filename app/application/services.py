@@ -931,6 +931,7 @@ class AuthorizationService:
                                     currency=intent.money.currency,
                                     idempotency_key=intent.idempotency_key,
                                     intent_digest=stored_digest,
+                                    is_approval=True,
                                 )
                                 db_res_id = res_model.reservation_id
                         else:

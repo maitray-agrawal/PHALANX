@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import re
 import time
 import uuid
@@ -16,9 +17,9 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 # Max request body size: 64 KB (manual 23 size limits)
 MAX_REQUEST_BODY_BYTES = 64 * 1024
 
-# Per-identity rate limit: 120 requests per minute
-RATE_LIMIT_MAX_REQUESTS = 120
-RATE_LIMIT_WINDOW_SECONDS = 60
+# Per-identity rate limit: 120 req/min by default (configurable via env for load testing)
+RATE_LIMIT_MAX_REQUESTS = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "120"))
+RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 
 
 class RequestIdAndStructuredLoggingMiddleware(BaseHTTPMiddleware):

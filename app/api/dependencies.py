@@ -46,15 +46,14 @@ def get_ledger() -> LedgerPort:
     from app.infrastructure.database import check_database_readiness, get_session_factory
     from app.infrastructure.db_ledger_repo import DatabaseLedgerAdapter
 
-    is_test_or_fake = is_test_environment() or is_fake_rail()
-    if is_test_or_fake:
+    if is_test_environment():
         ledger = InMemoryLedgerAdapter()
         ledger.seed_demo_events()
         return ledger
 
     is_ready, err = check_database_readiness()
     if not is_ready:
-        msg = f"PostgreSQL database is mandatory outside test/fake mode: {err}"
+        msg = f"PostgreSQL database is mandatory outside test mode: {err}"
         raise RuntimeError(msg)
 
     db_factory = get_session_factory()
@@ -63,8 +62,7 @@ def get_ledger() -> LedgerPort:
 
 @lru_cache(maxsize=1)
 def get_payment_rail() -> PaymentRail:
-    is_test_or_fake = is_test_environment() or is_fake_rail()
-    if is_test_or_fake:
+    if is_fake_rail():
         return FakePaymentRail()
     return PayPalPaymentRailAdapter()
 
@@ -78,13 +76,12 @@ def get_mandate_service() -> MandateService:
 def get_authorization_service() -> AuthorizationService:
     from app.infrastructure.database import check_database_readiness, get_session_factory
 
-    is_test_or_fake = is_test_environment() or is_fake_rail()
-    if is_test_or_fake:
+    if is_test_environment():
         db_factory = None
     else:
         is_ready, err = check_database_readiness()
         if not is_ready:
-            msg = f"PostgreSQL database is mandatory outside test/fake mode: {err}"
+            msg = f"PostgreSQL database is mandatory outside test mode: {err}"
             raise RuntimeError(msg)
         db_factory = get_session_factory()
 

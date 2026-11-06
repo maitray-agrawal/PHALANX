@@ -119,7 +119,7 @@ class PayPalPaymentRailAdapter(PaymentRail):
         load_env_if_present()
         self._client_id = os.getenv("PAYPAL_CLIENT_ID")
         self._client_secret = os.getenv("PAYPAL_CLIENT_SECRET")
-        self._base_url = "https://api-m.sandbox.paypal.com"
+        self._base_url = os.getenv("PAYPAL_API_BASE_URL", "https://api-m.sandbox.paypal.com")
         self._counter = 0
 
     def _get_access_token(self) -> str | None:

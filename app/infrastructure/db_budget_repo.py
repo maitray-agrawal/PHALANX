@@ -129,6 +129,7 @@ class BudgetRepository:
         currency: str,
         idempotency_key: str,
         intent_digest: str,
+        is_approval: bool = False,
     ) -> BudgetReservationModel:
         """Atomically reserve funds inside the database transaction.
 
@@ -153,7 +154,23 @@ class BudgetRepository:
             )
 
         # 2. Idempotency check inside transaction
-        self.check_idempotency(idempotency_key, intent_digest)
+        existing_idem: IdempotencyModel | None = None
+        if is_approval:
+            stmt_idem = select(IdempotencyModel).where(
+                IdempotencyModel.idempotency_key == idempotency_key
+            )
+            existing_idem = self.session.scalar(stmt_idem)
+            if existing_idem:
+                if existing_idem.intent_digest != intent_digest:
+                    raise IdempotencyMismatchError(
+                        f"Idempotency key '{idempotency_key}' reused with mutated parameters."
+                    )
+                if existing_idem.decision == "STEP_UP":
+                    existing_idem.decision = "PROCESSING"
+                else:
+                    raise IdempotencyReplayError(existing_idem)
+        else:
+            self.check_idempotency(idempotency_key, intent_digest)
 
         # 2b. Check if reservation with this idempotency key already exists (F4)
         stmt_res = select(BudgetReservationModel).where(
@@ -207,7 +224,8 @@ class BudgetRepository:
                 budget.reserved_minor += amount_minor
                 budget.updated_at_utc = now
                 self.session.add(reservation)
-                self.session.add(idem_processing)
+                if existing_idem is None:
+                    self.session.add(idem_processing)
                 self.session.flush()
             return reservation
         except IntegrityError as err:
