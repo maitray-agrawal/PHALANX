@@ -1,16 +1,13 @@
 # Render Blueprint configuration for PHALANX
 # Purpose: Authorization & Governance layer for Autonomous Financial Agents (PayPal AI Hackathon 2026)
-# Note on Render Free Tier vs Starter Plan:
-# Render Free Web Services sleep after 15 minutes of inactivity (mitigated by scripts/pinger.py keepalive).
-# Render Free PostgreSQL databases expire after 30 days and are permanently deleted.
-# For long-running evaluation through judging (1-15 Dec), use plan: starter ($7/mo) or external persistent PostgreSQL (e.g. Supabase/Neon).
+# Database & Web Service Plan: Starter (persists through evaluation & judging through 15 Dec 2026)
 
 services:
   - type: web
     name: phalanx-governance
     runtime: python
     region: oregon
-    plan: free
+    plan: starter
     branch: main
     buildCommand: "pip install uv && uv sync && cd web && npm ci && npm run build"
     startCommand: "uv run python scripts/boot.py && uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT"
@@ -31,12 +28,11 @@ services:
       - key: LOG_LEVEL
         value: INFO
       - key: ALLOWED_HOSTS
-        value: "*"
+        value: "phalanx-governance.onrender.com,localhost,127.0.0.1"
 
 databases:
   - name: phalanx-postgres
     databaseName: phalanx_db
     user: phalanx_app
     region: oregon
-    # Set to 'starter' ($7/mo) for judging survival beyond 30 days, or 'free' for initial 30-day trial
     plan: starter

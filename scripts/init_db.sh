@@ -21,7 +21,7 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
   \$\$;
 
   GRANT CONNECT ON DATABASE $POSTGRES_DB TO phalanx_app;
-  GRANT USAGE ON SCHEMA public TO phalanx_app;
+  GRANT ALL ON SCHEMA public TO phalanx_app;
 
   -- Default grants for future tables created by migrations
   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO phalanx_app;

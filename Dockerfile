@@ -19,17 +19,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv for fast, reliable package installation
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
-COPY pyproject.toml .
+COPY pyproject.toml README.md ./
 RUN uv pip install --system --no-cache-dir .
 
 # Stage 3: Production runtime
 FROM python:3.12-slim AS runtime
 
 WORKDIR /app
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app \
+    PORT=8000
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
@@ -45,7 +45,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Copy compiled frontend assets from frontend-builder
 COPY --from=frontend-builder /web/dist /app/web/dist
 
-# Copy application source code and scripts
+# Copy application source code, scripts, migrations
 COPY app /app/app
 COPY scripts /app/scripts
 COPY alembic /app/alembic
@@ -60,4 +60,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/healthz || exit 1
 
-CMD ["sh", "-c", "python scripts/boot.py; exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "python scripts/boot.py && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

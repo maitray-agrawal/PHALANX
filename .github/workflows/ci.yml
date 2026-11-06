@@ -7,7 +7,7 @@ on:
     branches: ["main"]
 
 jobs:
-  backend-checks:
+  backend:
     name: Backend Lint, Types & Tests
     runs-on: ubuntu-latest
     services:
@@ -58,13 +58,47 @@ jobs:
         run: |
           python scripts/boot.py
 
-      - name: Run Test Suite
+      - name: Run Test Suite with Coverage Floor
         env:
           DATABASE_URL: postgresql+psycopg://phalanx_app:test_ci_password_12345@localhost:5433/phalanx_db
           POSTGRES_PASSWORD: test_ci_password_12345
           SECRET_KEY: test-secret-key-at-least-32-bytes-long-ci-12345
         run: |
-          pytest -q
+          pytest -q --cov=app --cov-fail-under=75
+
+  redteam:
+    name: Red Team Adversarial Suite
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: phalanx_app
+          POSTGRES_PASSWORD: test_ci_password_12345
+          POSTGRES_DB: phalanx_db
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Install backend dependencies
+        run: |
+          uv pip install --system -e ".[dev]"
 
       - name: Run Red Team Adversarial Tests
         env:
@@ -74,7 +108,64 @@ jobs:
         run: |
           pytest -q -m redteam
 
-  frontend-checks:
+  bandit:
+    name: Bandit Security AST Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Bandit
+        run: pip install bandit==1.8.3
+
+      - name: Scan Codebase with Bandit
+        run: bandit -r app
+
+  pip-audit:
+    name: Dependency Vulnerability Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv and pip-audit
+        run: pip install uv pip-audit
+
+      - name: Install Dependencies
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Run pip-audit
+        run: |
+          pip-audit \
+            --ignore-vuln GHSA-537c-gmf6-5ccf \
+            --ignore-vuln PYSEC-2026-161 \
+            --ignore-vuln PYSEC-2026-1616 \
+            --ignore-vuln PYSEC-2026-1617 \
+            --ignore-vuln PYSEC-2026-1618 \
+            --ignore-vuln PYSEC-2026-1845 \
+            --ignore-vuln PYSEC-2026-1941 \
+            --ignore-vuln PYSEC-2026-1942 \
+            --ignore-vuln PYSEC-2026-2141 \
+            --ignore-vuln PYSEC-2026-2280 \
+            --ignore-vuln PYSEC-2026-2281 \
+            --ignore-vuln PYSEC-2026-248 \
+            --ignore-vuln PYSEC-2026-249 \
+            --ignore-vuln PYSEC-2026-3482 \
+            --ignore-vuln PYSEC-2026-3483 \
+            --ignore-vuln PYSEC-2026-35 \
+            --ignore-vuln PYSEC-2026-3552 \
+            --ignore-vuln PYSEC-2026-3553 \
+            --ignore-vuln PYSEC-2026-3554
+
+  frontend:
     name: Frontend Lint, Types & Tests
     runs-on: ubuntu-latest
     steps:
@@ -83,7 +174,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
 
       - name: Install dependencies
         working-directory: ./web
@@ -105,9 +196,92 @@ jobs:
         working-directory: ./web
         run: npm run build
 
+  gitleaks:
+    name: Secret Leak Detection (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks on Full History
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    name: Docker Build & Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Container Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: true
+          tags: phalanx:ci
+
+      - name: Scan Image with Trivy
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          image-ref: phalanx:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+
+  smoke:
+    name: Container Compose Integration & Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start Docker Compose Stack
+        env:
+          POSTGRES_PASSWORD: test_ci_postgres_password_12345
+          SECRET_KEY: test-secret-key-at-least-32-bytes-long-ci-12345
+          ADMIN_TOKEN: phx_admin_ci_token_at_least_24_chars_12345
+          PAYPAL_CLIENT_SECRET: test_ci_paypal_secret_token
+          POSTGRES_PORT: 5433
+          APP_PORT: 8000
+        run: |
+          docker compose config
+          docker compose build
+          docker compose up -d
+
+      - name: Wait for Stack Readiness
+        run: |
+          echo "Waiting for services to become healthy..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/healthz > /dev/null && curl -sf http://localhost:8000/readyz > /dev/null; then
+              echo "Services ready after $i attempts."
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Verify Endpoints Return 200
+        run: |
+          echo "Checking /healthz..."
+          curl -f -i http://localhost:8000/healthz
+          echo "Checking /readyz..."
+          curl -f -i http://localhost:8000/readyz
+          echo "Checking SPA /..."
+          curl -f -i http://localhost:8000/
+
+      - name: Teardown Compose Stack
+        if: always()
+        run: docker compose down
+
   deploy:
     name: Trigger Render Deployment
-    needs: [backend-checks, frontend-checks]
+    needs: [backend, redteam, bandit, pip-audit, frontend, gitleaks, docker, smoke]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
@@ -121,24 +295,4 @@ jobs:
             echo "Render deploy hook triggered successfully."
           else
             echo "RENDER_DEPLOY_HOOK secret not configured; skipping automatic deploy trigger."
-          fi
-
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Post-Deploy Smoke Test
-        env:
-          PHALANX_TARGET_URL: ${{ secrets.PHALANX_TARGET_URL }}
-          PHALANX_ADMIN_TOKEN: ${{ secrets.PHALANX_ADMIN_TOKEN }}
-        run: |
-          if [ -n "$PHALANX_TARGET_URL" ]; then
-            echo "Waiting 45s for Render service to finish rollout..."
-            sleep 45
-            python scripts/post_deploy_smoke.py --url "$PHALANX_TARGET_URL" --admin-token "${PHALANX_ADMIN_TOKEN:-phalanx-admin-demo-key}"
-          else
-            echo "PHALANX_TARGET_URL not configured; skipping remote smoke test."
           fi

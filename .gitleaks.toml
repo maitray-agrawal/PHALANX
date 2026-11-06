@@ -1,0 +1,8 @@
+[allowlist]
+description = "Allowlist for test fixtures, docs examples, and CI mock configuration"
+paths = [
+    '''tests/.*''',
+    '''docs/.*''',
+    '''\.github/workflows/.*''',
+]
+
