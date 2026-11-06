@@ -13,7 +13,7 @@
 | Assessment Dimension | Rating / Status | Detail |
 |---|---|---|
 | **Release Status** | **QUALIFIED_FOR_SUBMISSION** | Verified production-grade sandbox architecture with mathematical policy purity, cryptographic seals, and zero unbacked claims. |
-| **Assessment Confidence** | **HIGH** | 258/258 automated backend tests (254 passed, 4 skipped without PostgreSQL container); 67/67 red-team adversarial tests passed; 15/15 concurrency/transaction audit tests passed; 0 security vulnerabilities in Bandit AST audit; 0 console logs in frontend. |
+| **Assessment Confidence** | **HIGH** | 263/263 automated backend tests (259 passed, 4 skipped without PostgreSQL container); 72/72 red-team adversarial tests passed; 15/15 concurrency/transaction audit tests passed; 0 security vulnerabilities in Bandit AST audit; 0 console logs in frontend. |
 | **Purity & Safety Boundary** | **VERIFIED** | Pure domain core has zero I/O, zero clock, zero randomness, and zero non-domain imports enforced by AST test. LLM is isolated from authorization path. |
 | **Cryptographic Integrity** | **VERIFIED** | Ed25519 mandates, RFC 8785 canonical JSON, and SHA-256 hash-chained ledger are mathematically locked and tamper-evident. |
 
@@ -32,7 +32,7 @@ An exhaustive code audit was conducted across all files in `app/`, `web/src/`, a
 | **Placeholder Functions** | **VERIFIED ABSENT** | Scanned codebase for `TODO`, `FIXME`, and empty `pass` blocks in `app/`. Zero unhandled placeholder stubs found. All service, domain, and API functions contain complete implementations. |
 | **Console Log Residue** | **VERIFIED ABSENT** | Grep search across `web/src/` returned 0 occurrences of `console.log`. Error handling in frontend renders visual Problem+JSON banners. |
 | **Catch-All Exception Handling** | **CONFIGURED & AUDITED** | Catch-all `except Exception` blocks in `app/infrastructure/paypal.py`, `app/infrastructure/tokens.py`, and `app/application/intent_extractor.py` were audited. All catch-alls convert external failures into explicit failure records (`PAYOUT_EXCEPTION`, invalid token rejection, or parse failure) rather than suppressing exceptions silently. |
-| **Unsupported Claims** | **CORRECTED** | Prior documentation cited "83 tests" (an outdated count from early bootstrap). Actual automated test suite contains 258 tests (67 red-team). Updated `README.md` and `docs/DEVPOST.md` to reflect empirical counts. |
+| **Unsupported Claims** | **CORRECTED** | Prior documentation cited "83 tests" (an outdated count from early bootstrap). Actual automated test suite contains 263 tests (72 red-team). Updated `README.md` and `docs/DEVPOST.md` to reflect empirical counts. |
 
 ---
 
@@ -70,7 +70,7 @@ The installation procedure documented in `README.md` was followed strictly from 
    - **Resolution**: Created pinned `requirements.txt` and `requirements-dev.txt` matching `pyproject.toml` (DECISIONS.md D-009, D-011, D-013, D-014, D-015) and updated `README.md` to document both commands.
 3. `python -m pip check`: **Passed** (No broken requirements found).
 4. `uv run pytest -q`: **Passed** (252 passed, 4 skipped without PostgreSQL container).
-5. `uv run pytest -q -m redteam`: **Passed** (67/67 passed in 2.34s).
+5. `uv run pytest -q -m redteam`: **Passed** (72/72 passed in 2.34s).
 6. `uv run ruff check . && uv run ruff format --check . && uv run mypy app`: **Passed** (All checks passed, 76 files formatted, 0 type errors in 38 source files).
 7. `cd web && npm run lint && npx tsc --noEmit && npm test -- --run && npm run build`:
    - **Lint**: **Passed** (0 ESLint errors).
@@ -110,7 +110,7 @@ In accordance with hackathon rules and truthfulness requirements, the 'Built wit
 
 ### Changed in Review
 - Created `requirements.txt` and `requirements-dev.txt` with exact pinned dependencies.
-- Updated `README.md` and `docs/DEVPOST.md` to reflect true test count (258 automated tests, 67 red-team tests, 15 transaction audit tests) and exact install commands.
+- Updated `README.md` and `docs/DEVPOST.md` to reflect true test count (263 automated tests, 72 red-team tests, 15 transaction audit tests) and exact install commands.
 - Remediated hostile security audit findings:
   - F-01 (P0): Removed unmandated agent fallback to default mandate in `MandateService`; unmandated agents now strictly return None and evaluate to DENY (`MANDATE_INACTIVE`).
   - F-02 (P0): Enforced live mandate status (`ACTIVE`) and expiration check in `AuthorizationService.execute_approval()`. Approving after mandate expiry or revocation now evaluates to DENY and halts payment dispatch.
@@ -118,6 +118,14 @@ In accordance with hackathon rules and truthfulness requirements, the 'Built wit
   - F-04 (P2): Eliminated MCP agent impersonation exemption for `agent-auto-1`.
   - F-05 (P2): Restricted `/v1/ledger/tamper` and `/restore` to `AUDITOR` and `PRINCIPAL` roles.
   - Added 6 redteam regression tests in `tests/redteam/test_redteam.py`.
+- Remediated application security hardening & threat catalog Family I (R4):
+  - Probe 1 (Unsigned & Header Bypass): Removed unsigned `demo-<role>` bypass in `verify_role_token` and `X-Phalanx-Role` header fallback in `get_current_identity`. Bearer tokens strictly HMAC-SHA256 validated.
+  - Probe 2 (Secret Key Enforcement): Added `validate_secret_key()` requiring `SECRET_KEY >= 32` bytes outside test environments; fails boot (`boot.py`) and readiness (`/readyz`) if absent or weak.
+  - Probe 3 (Admin Token Hardening): Removed `phalanx-admin-demo-key` fallback constant; requires `len(ADMIN_TOKEN) >= 24` chars (returning 503 if unconfigured) and validates via constant-time `hmac.compare_digest`.
+  - Probe 4 (PayPal Webhook Verification): Replaced substring signature checks with PayPal's documented `/v1/notifications/verify-webhook-signature` API with full header propagation (`auth_algo`, `cert_url`, `transmission_id`, `transmission_sig`, `transmission_time`), event deduplication, and fail-closed handling (503 if credentials/webhook ID unconfigured). Recorded in `docs/EVIDENCE.md` Section 11.
+  - Probe 5 (Demo Mode Guardrails): Added `DEMO_MODE` flag (default `false`). Sealed `/v1/auth/demo-token`, `/v1/ledger/tamper`, and `/restore` behind `DEMO_MODE`; demo tokens are signed with the active secret key, bound to `principal_treasury`, and rate-limited to 10 req/min per IP.
+  - Problem 6 (Database Credential Isolation & Configurable Ports): Removed hardcoded database passwords from `docker-compose.yml`, `scripts/init_db.sql`, and `app/infrastructure/config.py`. Enforced `POSTGRES_PASSWORD` from environment with `scripts/init_db.sh` for restricted role creation; added `POSTGRES_PORT` (default 5433) and `APP_PORT` (default 8000).
+  - Added 5 redteam regression probe tests in `tests/redteam/test_redteam.py` (Family I: Security Probes I1-I5).
 - Remediated concurrency & transaction boundary audit findings (R2):
   - F1 (Step-up retry / final idempotency): `execute_approval()` persists final decision in `_idempotency_records`; replayed requests return cached decision without duplicate payment dispatch or budget deduction.
   - F2 (`confirm_reservation` state guard): In `db_budget_repo.py`, rejected confirmations on non-PENDING/RECONCILE reservations (`InvalidApprovalStateError`).
@@ -130,8 +138,8 @@ In accordance with hackathon rules and truthfulness requirements, the 'Built wit
 - Authored and updated `docs/FINAL_REPORT.md` (this report).
 
 ### Tested
-- `uv run pytest -q`: 252 passed, 4 skipped (256 total backend tests).
-- `uv run pytest -q -m redteam`: 67/67 red-team tests passing in 2.34s.
+- `uv run pytest -q`: 259 passed, 4 skipped (263 total backend tests).
+- `uv run pytest -q -m redteam`: 72/72 red-team tests passing in 2.34s.
 - `uv run pytest tests/concurrency/test_transaction_audit.py -q`: 15/15 tests passing in 1.16s.
 - `uv run ruff check . && uv run ruff format --check .`: Clean (0 errors, 76 files formatted).
 - `uv run mypy app`: Clean across 38 source files.

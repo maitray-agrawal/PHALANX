@@ -11,6 +11,11 @@ from app.mcp.server import PhalanxMcpServer, authenticate_agent_identity, mcp_se
 
 def test_mcp_server_request_payment_and_verify_ledger() -> None:
     server = PhalanxMcpServer()
+    agent_token = create_role_token(
+        role=Role.AGENT,
+        principal_id="principal_treasury",
+        agent_id="agent-auto-1",
+    )
 
     # 1. Evaluate request
     result = server.request_payment(
@@ -20,6 +25,7 @@ def test_mcp_server_request_payment_and_verify_ledger() -> None:
         currency="USD",
         purpose="Monthly subscription renewal",
         idempotency_key="mcp-tx-001",
+        auth_token=agent_token,
     )
     assert result["decision"] == "ALLOW"
     assert result["payout_id"] is not None
@@ -27,7 +33,10 @@ def test_mcp_server_request_payment_and_verify_ledger() -> None:
     assert "client_secret" not in result
 
     # 2. Query mandate status
-    mandate_info = server.get_mandate_status("mandate_default_sandbox")
+    mandate_info = server.get_mandate_status(
+        "mandate_default_sandbox",
+        auth_token=agent_token,
+    )
     assert mandate_info["status"] == "ACTIVE"
     assert mandate_info["single_limit_minor"] == 500_000
     assert "signing_key" not in mandate_info
@@ -83,17 +92,23 @@ async def test_fastmcp_call_tool_async_execution() -> None:
 
 def test_authenticate_agent_identity_enforces_agent_role() -> None:
     """Verify authenticate_agent_identity rejects non-agent or invalid tokens."""
+    agent_token = create_role_token(
+        role=Role.AGENT, principal_id="principal_treasury", agent_id="agent-auto-1"
+    )
+    approver_token = create_role_token(role=Role.APPROVER, principal_id="principal_treasury")
+    principal_token = create_role_token(role=Role.PRINCIPAL, principal_id="principal_treasury")
+
     # 1. Valid agent token succeeds
-    valid_agent = authenticate_agent_identity("demo-agent", "agent-auto-1")
+    valid_agent = authenticate_agent_identity(agent_token, "agent-auto-1")
     assert valid_agent.role == Role.AGENT
 
     # 2. Approver token rejected
     with pytest.raises(PermissionError, match="Client must authenticate as an agent identity"):
-        authenticate_agent_identity("demo-approver", "agent-auto-1")
+        authenticate_agent_identity(approver_token, "agent-auto-1")
 
     # 3. Principal token rejected
     with pytest.raises(PermissionError, match="Client must authenticate as an agent identity"):
-        authenticate_agent_identity("demo-principal", "agent-auto-1")
+        authenticate_agent_identity(principal_token, "agent-auto-1")
 
     # 4. Invalid token rejected
     with pytest.raises(PermissionError, match="Authentication failed"):
@@ -103,6 +118,7 @@ def test_authenticate_agent_identity_enforces_agent_role() -> None:
 @pytest.mark.asyncio
 async def test_fastmcp_rejects_unauthorized_role_tokens() -> None:
     """Verify FastMCP call_tool raises error when caller uses non-agent token."""
+    approver_token = create_role_token(role=Role.APPROVER, principal_id="principal_treasury")
     with pytest.raises(ToolError, match="Client must authenticate as an agent identity"):
         await mcp_server.call_tool(
             "request_payment",
@@ -113,6 +129,6 @@ async def test_fastmcp_rejects_unauthorized_role_tokens() -> None:
                 "currency": "USD",
                 "purpose": "Testing unauthorized role",
                 "idempotency_key": "unauth-role-001",
-                "auth_token": "demo-approver",
+                "auth_token": approver_token,
             },
         )

@@ -38,14 +38,21 @@ from app.infrastructure.models import (
 
 def _get_postgres_engine():
     """Retrieve engine for local Docker PostgreSQL if reachable, else return None."""
-    db_url = os.getenv(
-        "DATABASE_URL",
-        "postgresql+psycopg://phalanx_app:Maitray%407979@127.0.0.1:5433/phalanx_db",
+    db_password = os.getenv("POSTGRES_PASSWORD", "")
+    default_url = (
+        f"postgresql+psycopg://phalanx_app:{db_password}@127.0.0.1:5433/phalanx_db"
+        if db_password
+        else "postgresql+psycopg://phalanx_app@127.0.0.1:5433/phalanx_db"
     )
+    db_url = os.getenv("DATABASE_URL", default_url)
     if "postgres" not in db_url:
         return None
     try:
-        engine = create_engine(db_url, pool_pre_ping=True)
+        engine = create_engine(
+            db_url,
+            pool_pre_ping=True,
+            connect_args={"connect_timeout": 2},
+        )
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return engine

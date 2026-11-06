@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.infrastructure.tokens import (
@@ -19,27 +19,20 @@ security = HTTPBearer(auto_error=False)
 
 def get_current_identity(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)] = None,
-    x_phalanx_role: Annotated[str | None, Header()] = None,
 ) -> Identity:
-    """Extract and verify caller identity from Bearer token or demo header.
+    """Extract and verify caller identity from signed Bearer token.
 
     Raises:
         HTTPException(401): If token is missing, malformed, or expired.
     """
-    token_str: str | None = None
-
-    if credentials and credentials.scheme.lower() == "bearer":
-        token_str = credentials.credentials
-    elif x_phalanx_role:
-        # Support demo header convenience in demo environment
-        token_str = f"demo-{x_phalanx_role}"
-
-    if not token_str:
+    if not (credentials and credentials.scheme.lower() == "bearer" and credentials.credentials):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unauthorized: Authentication token required (Bearer <token>)",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    token_str = credentials.credentials
 
     try:
         return verify_role_token(token_str)

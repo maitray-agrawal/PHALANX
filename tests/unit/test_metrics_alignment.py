@@ -10,8 +10,8 @@ from scripts.generate_test_report import (
 def test_canonical_metrics_exist() -> None:
     """Verify that canonical metrics are defined with correct types and keys."""
     metrics = get_canonical_metrics()
-    assert metrics["total_backend_tests"] == 258
-    assert metrics["redteam_tests"] == 67
+    assert metrics["total_backend_tests"] == 263
+    assert metrics["redteam_tests"] == 72
     assert metrics["frontend_tests"] == 11
     assert metrics["prompt_injections"] == 30
     assert metrics["policy_eval_median_us"] == 1.10

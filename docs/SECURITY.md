@@ -32,6 +32,14 @@ PHALANX implements multi-layered security controls derived from the Antigravity 
 - **Key Storage & Protection**: Private keys are injected strictly via environment (`MANDATE_SIGNING_KEY_HEX`) or secure file (`MANDATE_SIGNING_KEY_FILE`). Key material is never printed, logged, or returned in error traces.
 - **Key ID Binding**: Every signature embeds and validates the corresponding `key_id`, ensuring signature verification matches the active public key.
 
+### 1.6 Hardened Authentication & Access Control (R4 Application Security Review)
+- **Signed Role Tokens**: Authentication requires an HMAC-SHA256 signed role token (`header.payload.signature`) bound to the subject, principal, role, and expiration window. Unsigned role tokens (such as `demo-<role>`) and header-only impersonation (`X-Phalanx-Role`) are strictly rejected with 401 Unauthorized.
+- **SECRET_KEY Enforcement**: Boot and readiness (`/readyz`) fail closed (503 Service Unavailable) unless `SECRET_KEY` has at least 32 bytes outside test environments.
+- **Admin Endpoint Hardening**: `/v1/admin/reset` is disabled (503) unless `ADMIN_TOKEN` is configured with at least 24 characters. Tokens are verified using constant-time `hmac.compare_digest` to prevent timing attacks. The static demo constant has been eradicated.
+- **PayPal Webhook Verification**: Inbound webhooks must pass PayPal's official API signature verification endpoint (`/v1/notifications/verify-webhook-signature`). Webhooks fail closed (503) if `PAYPAL_WEBHOOK_ID` or PayPal credentials are missing.
+- **Demo Mode Isolation (`DEMO_MODE`)**: Public demo token dispenser (`/v1/auth/demo-token`) and simulated ledger tamper/restore endpoints exist only when `DEMO_MODE=true` (default: `false`). Demo tokens are HMAC-signed with the real system key, strictly bound to the fixed demo principal (`principal_treasury`), and rate-limited.
+- **Database Role & Password Isolation**: Hardcoded database passwords have been removed from source code, compose files, and schema scripts. PostgreSQL access requires a parameterized `POSTGRES_PASSWORD` from the environment, initialized via `scripts/init_db.sh`. Configurable `POSTGRES_PORT` (default: 5433) and `APP_PORT` (default: 8000) prevent local port collisions.
+
 ---
 
 ## 2. Production Gates Mapping (Manual Section 56)

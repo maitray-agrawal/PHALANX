@@ -93,3 +93,8 @@ Every test in this catalog must have a defined threat, implementation vector, an
 | **G2** | Oversized Payload Buffer Flooding | Purpose string sends 50,000 characters to trigger memory exhaustion. | **HTTP 422**: Explicit string length caps (`max_length=500`) reject oversized payloads. |
 | **H1** | Host Clock Drift / Tampering | System clock adjusted to bypass 24-hour velocity budget window. | **IMMUNE**: Clocks are injected via application `ClockPort` with UTC timezone enforcement. |
 | **H2** | Out-of-Order Webhook Delivery | Refund webhook arrives before payment capture webhook completes. | **STATE MACHINE REJECTION**: Invalid state transition rejected by transaction state machine. |
+| **I1** | Unsigned Role Token Bypass | Attacker submits unsigned `'demo-<role>'` string in Authorization header. | **HTTP 401 Unauthorized**: Strict HMAC-SHA256 signature verification enforced. |
+| **I2** | Header-Only Role Spoofing | Attacker passes `X-Phalanx-Role` header without Bearer token. | **HTTP 401 Unauthorized**: Header-only authentication deleted; signed Bearer token mandatory. |
+| **I3** | Static Admin Key Probe | Attacker sends constant `'phalanx-admin-demo-key'` to administrative reset. | **HTTP 401 / 503**: Static key removed; disabled unless `ADMIN_TOKEN` has >= 24 chars; compared via `hmac.compare_digest`. |
+| **I4** | Arbitrary Webhook Signature | Attacker sends webhook with unverified signature not containing bad keywords. | **HTTP 401 / 503**: Verified against PayPal `verify-webhook-signature` API; fails closed on unconfigured credentials. |
+| **I5** | Insecure/Empty SECRET_KEY | Service started in production without configured `SECRET_KEY` >= 32 bytes. | **BOOT/READINESS FAILURE**: `/readyz` returns 503; boot sequence aborts immediately. |

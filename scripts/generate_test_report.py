@@ -31,10 +31,10 @@ from app.main import create_app
 
 # Canonical single source of truth for test counts and latency numbers
 CANONICAL_METRICS: dict[str, Any] = {
-    "total_backend_tests": 258,
-    "passed_backend_tests": 254,
+    "total_backend_tests": 263,
+    "passed_backend_tests": 259,
     "skipped_backend_tests": 4,  # Containerized PostgreSQL integration tests (Docker)
-    "redteam_tests": 67,
+    "redteam_tests": 72,
     "concurrency_tests": 15,
     "frontend_tests": 11,
     "prompt_injections": 30,

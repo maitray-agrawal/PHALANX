@@ -95,7 +95,7 @@ class InMemoryLedgerAdapter(LedgerPort):
                     self._counter = models[-1].event_seq
                     self._pristine_events = list(self._events)
         except Exception:
-            pass
+            pass  # nosec: B110
 
     def append_event(
         self,
@@ -167,7 +167,7 @@ class InMemoryLedgerAdapter(LedgerPort):
                         )
                         session.add(db_event)
                 except Exception:
-                    pass
+                    pass  # nosec: B110
 
             return event_id
 

@@ -13,6 +13,7 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import Enum
@@ -52,12 +53,42 @@ class TokenSignatureError(TokenError):
     """Token HMAC signature is invalid or tampered."""
 
 
-def _get_signing_key() -> bytes:
-    """Fetch secret key for signing tokens."""
+def is_test_environment() -> bool:
+    """Check if execution is running in test mode."""
+    if settings.environment.lower() in ("production", "staging", "prod"):
+        return False
+    return (
+        settings.environment.lower() in ("test", "testing") or "PYTEST_CURRENT_TEST" in os.environ
+    )
+
+
+def validate_secret_key() -> tuple[bool, str]:
+    """Validate SECRET_KEY configuration.
+
+    Outside test mode, requires SECRET_KEY with at least 32 bytes.
+    """
+    if is_test_environment():
+        return True, "test_mode"
     key = settings.secret_key
     if not key:
-        # Fallback to deterministic key derived from mandate key or system fallback for tests
-        key = settings.mandate_signing_key_hex or "phalanx-secure-token-signing-key-default"
+        return False, "SECRET_KEY environment variable is required and must not be empty"
+    if len(key.encode("utf-8")) < 32:
+        return False, "SECRET_KEY must be at least 32 bytes"
+    return True, "valid"
+
+
+def _get_signing_key() -> bytes:
+    """Fetch secret key for signing tokens."""
+    is_valid, msg = validate_secret_key()
+    if not is_valid:
+        raise ValueError(f"Invalid secret key configuration: {msg}")
+
+    key = settings.secret_key
+    if not key and is_test_environment():
+        key = (
+            settings.mandate_signing_key_hex
+            or "test-secret-key-at-least-32-bytes-long-for-test-harness"
+        )
     return key.encode("utf-8")
 
 
@@ -102,21 +133,6 @@ def create_role_token(
 
 def verify_role_token(token_str: str) -> Identity:
     """Verify cryptographic signature and expiration of a role token."""
-    # Support convenient demo tokens
-    if token_str.startswith("demo-"):
-        role_name = token_str.replace("demo-", "").lower()
-        try:
-            role = Role(role_name)
-        except ValueError as err:
-            raise TokenSignatureError(f"Invalid demo role: {role_name}") from err
-        return Identity(
-            subject=f"demo:{role_name}",
-            role=role,
-            principal_id="principal_treasury",
-            agent_id="agent-auto-1" if role == Role.AGENT else None,
-            expires_at_utc=datetime.now(UTC) + timedelta(hours=1),
-        )
-
     parts = token_str.split(".")
     if len(parts) != 3:
         raise TokenSignatureError("Malformed token structure: expected 3 segments.")

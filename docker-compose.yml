@@ -4,16 +4,16 @@ services:
     container_name: phalanx-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: phalanx_app
-      POSTGRES_PASSWORD: Maitray@7979
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
       POSTGRES_DB: phalanx_db
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
+      - ./scripts/init_db.sh:/docker-entrypoint-initdb.d/init_db.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U phalanx_app -d phalanx_db"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d phalanx_db"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -28,15 +28,17 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "${PORT:-8000}:8000"
+      - "${APP_PORT:-8000}:8000"
     environment:
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
-      - DATABASE_URL=postgresql+psycopg://phalanx_app:Maitray%407979@db:5432/phalanx_db
+      - DATABASE_URL=postgresql+psycopg://phalanx_app:${POSTGRES_PASSWORD}@db:5432/phalanx_db
       - SECRET_KEY=${SECRET_KEY:-}
       - ADMIN_TOKEN=${ADMIN_TOKEN:-}
+      - DEMO_MODE=${DEMO_MODE:-false}
       - PAYPAL_CLIENT_ID=${PAYPAL_CLIENT_ID:-}
       - PAYPAL_CLIENT_SECRET=${PAYPAL_CLIENT_SECRET:-}
+      - PAYPAL_WEBHOOK_ID=${PAYPAL_WEBHOOK_ID:-}
       - PAYPAL_ENVIRONMENT=${PAYPAL_ENVIRONMENT:-sandbox}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]

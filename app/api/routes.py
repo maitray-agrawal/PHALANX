@@ -7,6 +7,9 @@ Strict entry path:
 - Secure headers, sanitized errors without stack traces, and log redaction.
 """
 
+import hmac
+import os
+import time
 from typing import Annotated, Any
 
 from fastapi import (
@@ -61,7 +64,13 @@ from app.domain.models import DecisionOutcome
 from app.domain.ports import PaymentRail
 from app.infrastructure.config import settings
 from app.infrastructure.database import check_database_readiness
-from app.infrastructure.tokens import Identity, Role, create_role_token
+from app.infrastructure.paypal import PayPalPaymentRailAdapter
+from app.infrastructure.tokens import (
+    Identity,
+    Role,
+    create_role_token,
+    validate_secret_key,
+)
 
 router = APIRouter()
 
@@ -79,7 +88,12 @@ def healthz() -> dict[str, str]:
 
 @router.get("/readyz")
 def readyz(response: Response) -> dict[str, str]:
-    """Readiness probe endpoint checking database connectivity."""
+    """Readiness probe endpoint checking database connectivity and secrets."""
+    is_key_valid, key_msg = validate_secret_key()
+    if not is_key_valid:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {"status": "not_ready", "error": f"secret_key configuration invalid: {key_msg}"}
+
     is_ready, details = check_database_readiness()
     if is_ready:
         response.status_code = status.HTTP_200_OK
@@ -101,13 +115,44 @@ def health_check(
 # ---------------------------------------------------------------------------
 
 
+_demo_token_rate_limits: dict[str, list[float]] = {}
+
+
+def _check_demo_token_rate_limit(client_ip: str) -> None:
+    now = time.time()
+    history = _demo_token_rate_limits.setdefault(client_ip, [])
+    # Retain timestamps within the last 60 seconds
+    _demo_token_rate_limits[client_ip] = [t for t in history if now - t < 60.0]
+    if len(_demo_token_rate_limits[client_ip]) >= 10:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                "Rate limit exceeded: demo token dispensing is limited to 10 requests per minute."
+            ),
+        )
+    _demo_token_rate_limits[client_ip].append(now)
+
+
 @router.post(
     "/v1/auth/demo-token",
     response_model=DemoTokenResponseDTO,
     status_code=status.HTTP_200_OK,
 )
-def create_demo_token(request: DemoTokenRequestDTO) -> DemoTokenResponseDTO:
-    """Issue a signed short-lived role token for demo mode without registration."""
+def create_demo_token(request: DemoTokenRequestDTO, raw_request: Request) -> DemoTokenResponseDTO:
+    """Issue a signed short-lived role token for demo mode without registration.
+
+    Available only when DEMO_MODE=true. Tokens are HMAC-signed with the real key,
+    bound to the fixed demo principal, and rate-limited.
+    """
+    if not settings.demo_mode:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Endpoint not found: Demo mode is disabled",
+        )
+
+    client_ip = raw_request.client.host if raw_request.client else "unknown"
+    _check_demo_token_rate_limit(client_ip)
+
     try:
         role = Role(request.role.lower())
     except ValueError as exc:
@@ -116,13 +161,10 @@ def create_demo_token(request: DemoTokenRequestDTO) -> DemoTokenResponseDTO:
             detail=f"Invalid role: {request.role}. Must be principal, agent, approver, or auditor.",
         ) from exc
 
-    req_principal = request.principal_id
-    if req_principal in ("demo-principal", None, ""):
-        req_principal = "principal_treasury"
-
+    # Demo tokens are strictly bound to the fixed demo principal
     token = create_role_token(
         role=role,
-        principal_id=req_principal,
+        principal_id="principal_treasury",
         agent_id=request.agent_id or ("agent-auto-1" if role == Role.AGENT else None),
         expires_in_seconds=900,
     )
@@ -140,13 +182,15 @@ def create_demo_token(request: DemoTokenRequestDTO) -> DemoTokenResponseDTO:
     status_code=status.HTTP_200_OK,
 )
 def get_demo_token(
+    raw_request: Request,
     role: Annotated[str, Query()] = "principal",
     principal_id: Annotated[str, Query()] = "demo-principal",
     agent_id: Annotated[str | None, Query()] = None,
 ) -> DemoTokenResponseDTO:
     """Query parameter version for browser console demo token fetching."""
     return create_demo_token(
-        DemoTokenRequestDTO(role=role, principal_id=principal_id, agent_id=agent_id)
+        DemoTokenRequestDTO(role=role, principal_id=principal_id, agent_id=agent_id),
+        raw_request=raw_request,
     )
 
 
@@ -535,6 +579,11 @@ def tamper_ledger(
     service: Annotated[LedgerService, Depends(get_ledger_service)],
 ) -> dict[str, str]:
     """Testing hook to simulate illicit SQL modification of ledger event amount."""
+    if not settings.demo_mode:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Endpoint not found: Demo mode is disabled",
+        )
     if identity.role not in (Role.AUDITOR, Role.PRINCIPAL):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -553,6 +602,11 @@ def restore_ledger(
     service: Annotated[LedgerService, Depends(get_ledger_service)],
 ) -> dict[str, str]:
     """Restore authentic ledger blocks."""
+    if not settings.demo_mode:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Endpoint not found: Demo mode is disabled",
+        )
     if identity.role not in (Role.AUDITOR, Role.PRINCIPAL):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -612,6 +666,20 @@ async def paypal_webhook(
     rail: Annotated[PaymentRail, Depends(get_payment_rail)],
 ) -> dict[str, str]:
     """Ingest PayPal webhook events with signature verification and idempotency."""
+    webhook_id = settings.paypal_webhook_id or os.getenv("PAYPAL_WEBHOOK_ID")
+    if not webhook_id:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="PayPal webhook processing unavailable: PAYPAL_WEBHOOK_ID unconfigured",
+        )
+    if isinstance(rail, PayPalPaymentRailAdapter) and not (
+        settings.paypal_client_id and settings.paypal_client_secret
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="PayPal webhook processing unavailable: PayPal credentials unconfigured",
+        )
+
     body_bytes = await request.body()
     headers_dict = dict(request.headers)
 
@@ -644,25 +712,28 @@ async def paypal_webhook(
 def verify_admin_reset_access(
     x_admin_token: Annotated[str | None, Header(alias="X-Admin-Token")] = None,
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
-    x_phalanx_role: Annotated[str | None, Header(alias="x-phalanx-role")] = None,
 ) -> bool:
     """Verify admin access via X-Admin-Token or Principal role."""
-    expected_token = settings.admin_token or "phalanx-admin-demo-key"
+    expected_token = settings.admin_token
+    if not expected_token or len(expected_token) < 24:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Admin endpoint disabled: ADMIN_TOKEN unconfigured or insufficient length",
+        )
+
     if x_admin_token:
-        if x_admin_token in (expected_token, "phalanx-admin-demo-key"):
+        if hmac.compare_digest(x_admin_token.encode("utf-8"), expected_token.encode("utf-8")):
             return True
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unauthorized: Invalid X-Admin-Token",
         )
 
-    if authorization or x_phalanx_role:
-        creds = None
-        if authorization and authorization.lower().startswith("bearer "):
-            creds = HTTPAuthorizationCredentials(
-                scheme="Bearer", credentials=authorization.split(" ", 1)[1]
-            )
-        identity = get_current_identity(credentials=creds, x_phalanx_role=x_phalanx_role)
+    if authorization and authorization.lower().startswith("bearer "):
+        creds = HTTPAuthorizationCredentials(
+            scheme="Bearer", credentials=authorization.split(" ", 1)[1]
+        )
+        identity = get_current_identity(credentials=creds)
         if identity.role == Role.PRINCIPAL:
             return True
         raise HTTPException(

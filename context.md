@@ -1,34 +1,30 @@
 # context.md
-Phase: R3 Complete (Judge-Facing Product Integration & PayPal E2E Verification)   Branch: main   Last green CI: local-verified
+Phase: R4 Complete (Application Security Hardening & Red-Team Probes)   Branch: main   Last green CI: local-verified
 Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
 - app/domain: Pure deterministic policy engine, Ed25519 mandate invariants, canonical RFC 8785 JSON, cryptographic hash-chained ledger. AST purity test enforced.
 - app/application: AuthorizationService, MandateService, LedgerService, ProviderAgnosticLLMClient (quotas, timeouts, retries), IntentExtractor (delimiter isolation, strict Pydantic draft), GroundedExplanationValidator, PrincipalSessionMemory, DeterministicKnowledgeBase, CompositeAdvisoryPipeline.
-- app/infrastructure: Ed25519 signing/verification (PEM & raw hex), HMAC-SHA256 role tokens, append-only ledger adapter, PayPal Sandbox rail adapter (Payouts with Orders v2 fallback and lookup), UTC clock, Bandit security scan.
-- app/api: Complete FastAPI REST suite with /v1/ and /api/v1/ contracts (/v1/payment-requests, /api/v1/authorize, /v1/mandates, /api/v1/mandates/{id}, /v1/decisions, /v1/approvals, /api/v1/approvals/{id}/approve, /api/v1/approvals/{id}/reject, /v1/ledger, /api/v1/ledger/verify, /v1/webhooks/paypal, /v1/admin/reset, /v1/auth/demo-token).
+- app/infrastructure: Ed25519 signing/verification (PEM & raw hex), HMAC-SHA256 role tokens (validated >= 32-byte secret key), append-only ledger adapter, PayPal Sandbox rail adapter (Payouts with Orders v2 fallback and live webhook signature verification API), UTC clock, Bandit security scan.
+- app/api: Complete FastAPI REST suite with /v1/ and /api/v1/ contracts, strictly validated Bearer tokens (zero bypass headers/unsigned tokens), timing-safe admin reset (hmac.compare_digest with min 24-char token), fail-closed webhooks (503 if unconfigured), and demo mode guardrails (/v1/auth/demo-token, /v1/ledger/tamper, /restore gated on DEMO_MODE).
 - app/mcp: Model Context Protocol server exposing financial agent governance tools through identical application authorization boundary.
 - web: React + Vite + TypeScript security console with PHALANX visual identity and 0/90 geometric logo mark; 4 core operational scenes (Request Console, Step-Up Approvals, Tamper-Evident Ledger, Active Mandate) + Reconciliation & Security Center.
-- tests: 258 automated tests (unit, integration, concurrency, external failure, MCP parity, red-team A1-H2, security audit regressions, payment rail order lookup, metrics alignment).
+- tests: 263 automated tests (unit, integration, concurrency, external failure, MCP parity, red-team A1-I5, security audit regressions, payment rail order lookup, metrics alignment).
 
-Completed R3 Milestones:
-- R3.1: PayPal Sandbox End-to-End verified live against `api.sandbox.paypal.com` with real transaction creation and order lookup (`3J77364339194024E`).
-- R3.2: API contract synchronized between `/v1/` and `/api/v1/` endpoints.
-- R3.3: Agent Console updated with policy checks checklist and payment result cards for ALLOW, STEP-UP, and DENY.
-- R3.4: Approval Queue bound to exact RFC 8785 canonical intent digest with agent role rejection.
-- R3.5: Audit Ledger verified with AG Grid and live hash-chain tamper detection.
-- R3.6: Light / Dark / System themes verified with ivory/sandstone light and deep-ink dark palettes.
-- R3.7: Three Hero Scenarios (Legitimate, Over-limit, Injection/unauthorized payee) demonstrable and verified.
-- R3.8: Tests updated and verified green across Python and TypeScript test suites.
-- R3.9: Demo-state seeding and reset via `/v1/admin/reset` verified.
-- R3.10: Public UI and documentation cleansed of AstraX/KuberSetu references; evidence recorded in `docs/EVIDENCE.md`.
-- R3.11: Cleaned repository: moved prompt manual to `docs/reference/prompt_manual.md`, added `.gitattributes` and `.dockerignore`, replaced obsolete mandate/principal IDs with sandbox standards, and established `scripts/generate_test_report.py` as single source of truth for test counts and latencies.
+Completed R4 Milestones:
+- R4.1: Deleted unsigned 'demo-<role>' token bypass and X-Phalanx-Role header bypass paths from `app/infrastructure/tokens.py` and `app/api/auth.py`.
+- R4.2: Enforced >= 32-byte `SECRET_KEY` validation for token signing outside test environments; verified boot failure (`scripts/boot.py`) and readiness failure (`/readyz`) when unconfigured or weak.
+- R4.3: Hardened admin reset (`/v1/admin/reset`): removed fallback constant `phalanx-admin-demo-key`, enforced `ADMIN_TOKEN` length >= 24 chars (503 if unconfigured), and implemented constant-time comparison via `hmac.compare_digest`.
+- R4.4: Implemented PayPal's documented webhook signature verification (`/v1/notifications/verify-webhook-signature`) in `PayPalPaymentRailAdapter` with headers, event deduplication, and fail-closed 503 behavior when `PAYPAL_WEBHOOK_ID` or credentials are unset. Documented in `docs/EVIDENCE.md`.
+- R4.5: Added `DEMO_MODE` configuration (default false). Gated `/v1/auth/demo-token`, `/v1/ledger/tamper`, and `/restore` strictly behind `DEMO_MODE`. Demo tokens are signed with active secret key, bound to `principal_treasury`, and rate-limited.
+- R4.6: Removed hardcoded database passwords from `docker-compose.yml`, `scripts/init_db.sql`, and `app/infrastructure/config.py`. Enforced `POSTGRES_PASSWORD` from environment, created `scripts/init_db.sh` for restricted role setup, and added configurable `POSTGRES_PORT` (default 5433) and `APP_PORT` (default 8000).
+- R4.7: Added 5 redteam regression probe tests in `tests/redteam/test_redteam.py` (Family I: Security Probes I1-I5). Proved reproduction by verifying test failures against old code before verifying green against the fixes.
 
 Test status:
-- Backend: 254 passed, 4 skipped (258 total backend tests across 16 test files)
-- Red Team: 67/67 red-team tests passed in 4.67s
+- Backend: 259 passed, 4 skipped (263 total backend tests across 16 test files)
+- Red Team: 72/72 red-team tests passed in 16.68s
 - Concurrency / Transaction Audit: 15/15 passed in `tests/concurrency/test_transaction_audit.py`
 - Payment Rail Suite: 5/5 passed in `tests/unit/test_payment_rail.py`
 - Security Audit: bandit -r app reports 0 issues (0 High, 0 Medium, 0 Low)
 - Static Analysis: ruff check clean (0 errors), ruff format clean, mypy app clean (0 errors across 38 source files)
 - Frontend: ESLint clean (0 errors), TypeScript clean (`npx tsc --noEmit`), Vitest passed (11/11 across 2 suites), Vite production build clean
 
-Next recommended action: Repository is clean and fully verified; all 4 items committed to main.
+Next recommended action: Review and commit security hardening changes directly to main.

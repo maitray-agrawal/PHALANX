@@ -5,6 +5,7 @@ from unittest.mock import patch
 from fastapi import status
 from fastapi.testclient import TestClient
 
+from app.infrastructure.config import settings
 from app.infrastructure.tokens import Role, create_role_token
 
 
@@ -88,7 +89,7 @@ def test_api_authorize_endpoint(client: TestClient) -> None:
     assert data["event_id"].startswith("evt_")
 
 
-def test_api_rejects_extra_fields_strictly(client: TestClient) -> None:
+def test_api_rejects_extra_fields_strictly(client: TestClient, agent_token: str) -> None:
     """Security rule: Strict Pydantic models with extra='forbid'."""
     payload = {
         "agent_id": "finance-bot-42",
@@ -102,7 +103,7 @@ def test_api_rejects_extra_fields_strictly(client: TestClient) -> None:
     response = client.post(
         "/api/v1/authorize",
         json=payload,
-        headers={"Authorization": "Bearer demo-agent"},
+        headers={"Authorization": f"Bearer {agent_token}"},
     )
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
     assert response.headers["content-type"] == "application/problem+json"
@@ -112,7 +113,7 @@ def test_admin_reset_with_admin_token(client: TestClient) -> None:
     """Verify admin reset succeeds with X-Admin-Token header."""
     resp = client.post(
         "/v1/admin/reset",
-        headers={"X-Admin-Token": "phalanx-admin-demo-key"},
+        headers={"X-Admin-Token": settings.admin_token},
     )
     assert resp.status_code == status.HTTP_200_OK
     assert resp.json()["status"] == "reset_completed"
@@ -127,11 +128,11 @@ def test_admin_reset_with_invalid_token_fails(client: TestClient) -> None:
     assert resp.status_code == status.HTTP_401_UNAUTHORIZED
 
 
-def test_admin_reset_with_principal_role(client: TestClient) -> None:
+def test_admin_reset_with_principal_role(client: TestClient, principal_token: str) -> None:
     """Verify admin reset succeeds with principal role token."""
     resp = client.post(
         "/v1/admin/reset",
-        headers={"Authorization": "Bearer demo-principal"},
+        headers={"Authorization": f"Bearer {principal_token}"},
     )
     assert resp.status_code == status.HTTP_200_OK
     assert resp.json()["status"] == "reset_completed"

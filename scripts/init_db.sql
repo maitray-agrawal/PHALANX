@@ -1,12 +1,11 @@
 -- Initialize DB roles and grant rules
 -- Application role has INSERT/SELECT only on ledger_events to guarantee audit immutability
+-- Note: Production and Docker deployments initialize via scripts/init_db.sh using POSTGRES_PASSWORD.
 
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'phalanx_app') THEN
-    CREATE ROLE phalanx_app WITH LOGIN PASSWORD 'Maitray@7979';
-  ELSE
-    ALTER ROLE phalanx_app WITH PASSWORD 'Maitray@7979';
+    CREATE ROLE phalanx_app WITH LOGIN;
   END IF;
 END
 $$;

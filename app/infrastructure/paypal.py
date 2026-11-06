@@ -5,6 +5,7 @@ Handles Route A (Payouts v1) with Orders v2 fallback trigger,
 using PayPal-Request-Id for idempotency.
 """
 
+import json
 import os
 import uuid
 from pathlib import Path
@@ -29,11 +30,21 @@ def load_env_if_present() -> None:
 class FakePaymentRail(PaymentRail):
     """Recording test double for deterministic test execution."""
 
-    def __init__(self, should_succeed: bool = True, status: str = "COMPLETED") -> None:
+    def __init__(
+        self,
+        should_succeed: bool = True,
+        status: str = "COMPLETED",
+        valid_signatures: set[str] | None = None,
+    ) -> None:
         self.should_succeed = should_succeed
         self.status = status
         self.dispatched_payments: list[TransactionIntent] = []
         self._tx_counter = 0
+        self.valid_signatures = (
+            valid_signatures
+            if valid_signatures is not None
+            else {"fixture-valid-test-sig", "valid_mock_signature_test_123"}
+        )
 
     def pay(self, intent: TransactionIntent) -> PaymentResult:
         self.dispatched_payments.append(intent)
@@ -72,11 +83,15 @@ class FakePaymentRail(PaymentRail):
 
     def verify_webhook(self, headers: dict[str, str], body_bytes: bytes) -> bool:
         _ = body_bytes
-        algo = headers.get("PAYPAL-AUTH-ALGO") or headers.get("paypal-auth-algo")
-        sig = headers.get("PAYPAL-TRANSMISSION-SIG") or headers.get("paypal-transmission-sig")
-        if not (algo and sig):
+        sig = (
+            headers.get("PAYPAL-TRANSMISSION-SIG")
+            or headers.get("paypal-transmission-sig")
+            or headers.get("Paypal-Transmission-Sig")
+        )
+        if not sig:
             return False
-        return not any(bad in sig.lower() for bad in ("forged", "invalid", "bad", "tampered"))
+        # Only signatures matching stubbed/fixture set are accepted
+        return sig in self.valid_signatures
 
 
 class PayPalPaymentRailAdapter(PaymentRail):
@@ -288,9 +303,80 @@ class PayPalPaymentRailAdapter(PaymentRail):
         return str(raw_error)
 
     def verify_webhook(self, headers: dict[str, str], body_bytes: bytes) -> bool:
-        _ = body_bytes
-        algo = headers.get("PAYPAL-AUTH-ALGO") or headers.get("paypal-auth-algo")
-        sig = headers.get("PAYPAL-TRANSMISSION-SIG") or headers.get("paypal-transmission-sig")
-        if not (algo and sig):
+        """Verify webhook signature via PayPal's verify-webhook-signature API.
+
+        Documentation:
+        POST https://api-m.sandbox.paypal.com/v1/notifications/verify-webhook-signature
+        Fails closed on missing headers, unconfigured credentials, or invalid signature.
+        """
+        auth_algo = (
+            headers.get("PAYPAL-AUTH-ALGO")
+            or headers.get("paypal-auth-algo")
+            or headers.get("Paypal-Auth-Algo")
+        )
+        cert_url = (
+            headers.get("PAYPAL-CERT-URL")
+            or headers.get("paypal-cert-url")
+            or headers.get("Paypal-Cert-Url")
+        )
+        transmission_id = (
+            headers.get("PAYPAL-TRANSMISSION-ID")
+            or headers.get("paypal-transmission-id")
+            or headers.get("Paypal-Transmission-Id")
+        )
+        transmission_sig = (
+            headers.get("PAYPAL-TRANSMISSION-SIG")
+            or headers.get("paypal-transmission-sig")
+            or headers.get("Paypal-Transmission-Sig")
+        )
+        transmission_time = (
+            headers.get("PAYPAL-TRANSMISSION-TIME")
+            or headers.get("paypal-transmission-time")
+            or headers.get("Paypal-Transmission-Time")
+        )
+
+        if not (
+            auth_algo and cert_url and transmission_id and transmission_sig and transmission_time
+        ):
             return False
-        return not any(bad in sig.lower() for bad in ("forged", "invalid", "bad", "tampered"))
+
+        webhook_id = os.getenv("PAYPAL_WEBHOOK_ID") or ""
+        if not webhook_id or not self._client_id or not self._client_secret:
+            return False
+
+        token = self._get_access_token()
+        if not token:
+            return False
+
+        try:
+            webhook_event = json.loads(body_bytes.decode("utf-8"))
+        except Exception:
+            return False
+
+        verification_payload = {
+            "auth_algo": auth_algo,
+            "cert_url": cert_url,
+            "transmission_id": transmission_id,
+            "transmission_sig": transmission_sig,
+            "transmission_time": transmission_time,
+            "webhook_id": webhook_id,
+            "webhook_event": webhook_event,
+        }
+
+        url = f"{self._base_url}/v1/notifications/verify-webhook-signature"
+        try:
+            resp = httpx.post(
+                url,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {token}",
+                },
+                json=verification_payload,
+                timeout=10.0,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return bool(data.get("verification_status") == "SUCCESS")
+            return False
+        except Exception:
+            return False

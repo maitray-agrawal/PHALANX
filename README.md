@@ -64,10 +64,10 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 ## Running Verification & Tests
 
 ```bash
-# Run all 258 backend tests (unit, integration, concurrency, and red-team)
+# Run all 263 backend tests (unit, integration, concurrency, and red-team)
 pytest -q
 
-# Run adversarial red-team suite only (67 threat catalog tests)
+# Run adversarial red-team suite only (72 threat catalog tests)
 pytest -q -m redteam
 
 # Run linters, formatters, and typecheckers
@@ -80,7 +80,25 @@ cd web && npm run lint && npx tsc --noEmit && npm test -- --run && npm run build
 
 ---
 
+## Configuration & Environment Variables
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `DEMO_MODE` | `bool` | `false` | Enables `/v1/auth/demo-token`, `/v1/ledger/tamper`, and `/restore`. Disabled by default. |
+| `SECRET_KEY` | `str` | *None* | HMAC-SHA256 signing key (min 32 bytes outside test mode). Fails boot and `/readyz` if unset. |
+| `ADMIN_TOKEN` | `str` | *None* | Bearer secret for `POST /v1/admin/reset` (min 24 chars). Compared via `hmac.compare_digest`; 503 if unconfigured. |
+| `POSTGRES_PASSWORD` | `str` | *None* | Required database password for PostgreSQL and `phalanx_app` role. Zero hardcoded passwords. |
+| `POSTGRES_PORT` | `int` | `5433` | Host port for PostgreSQL container. |
+| `APP_PORT` | `int` | `8000` | Host port for FastAPI backend application. |
+| `PAYPAL_CLIENT_ID` | `str` | *None* | PayPal Sandbox OAuth client ID for payout and checkout execution. |
+| `PAYPAL_CLIENT_SECRET`| `str` | *None* | PayPal Sandbox OAuth client secret. |
+| `PAYPAL_WEBHOOK_ID` | `str` | *None* | PayPal webhook ID. Verified via PayPal's `/v1/notifications/verify-webhook-signature` API; fails closed (503) if missing. |
+
+---
+
 ## Judge Demo Guide (3 Hero Scenes)
+
+> **Demo Mode Notice**: Demo mode lets any visitor pick a role, by design. When `DEMO_MODE=true` (disabled by default in production), `POST /v1/auth/demo-token` issues HMAC-SHA256 signed role tokens bound to fixed demo principal `principal_treasury` (rate limited to 10 req/min per IP), and unlocks ledger tampering simulation for auditor evaluation.
 
 1. **Scene 1: Autonomous Pre-Authorized Payment**:
    - Persona: `AGENT`

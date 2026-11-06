@@ -33,6 +33,15 @@ logger = logging.getLogger("phalanx.boot")
 def run_boot() -> bool:
     """Run idempotent migrations and seed data."""
     logger.info("Starting PHALANX idempotent boot sequence...")
+
+    # Step 0: Validate runtime secret configuration outside test environment
+    from app.infrastructure.tokens import validate_secret_key
+
+    is_key_valid, key_error = validate_secret_key()
+    if not is_key_valid:
+        logger.error("Boot aborted: %s", key_error)
+        return False
+
     engine = get_engine()
 
     # Step 1: Database schema & triggers via Alembic migrations

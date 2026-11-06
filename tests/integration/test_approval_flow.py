@@ -4,7 +4,12 @@ from fastapi import status
 from fastapi.testclient import TestClient
 
 
-def test_full_step_up_and_approval_flow(client: TestClient) -> None:
+def test_full_step_up_and_approval_flow(
+    client: TestClient,
+    agent_token: str,
+    approver_token: str,
+    auditor_token: str,
+) -> None:
     # 1. Submit an intent exceeding the $500 instant threshold ($1,000)
     req_payload = {
         "agent_id": "agent-auto-1",
@@ -17,7 +22,7 @@ def test_full_step_up_and_approval_flow(client: TestClient) -> None:
     resp = client.post(
         "/v1/payment-requests",
         json=req_payload,
-        headers={"Authorization": "Bearer demo-agent"},
+        headers={"Authorization": f"Bearer {agent_token}"},
     )
     assert resp.status_code == status.HTTP_200_OK
     data = resp.json()
@@ -34,7 +39,7 @@ def test_full_step_up_and_approval_flow(client: TestClient) -> None:
             "decision": "ALLOW",
             "reason": "Agent approving itself",
         },
-        headers={"X-Phalanx-Role": "agent"},
+        headers={"Authorization": f"Bearer {agent_token}"},
     )
     assert agent_approve.status_code == status.HTTP_403_FORBIDDEN
 
@@ -46,7 +51,7 @@ def test_full_step_up_and_approval_flow(client: TestClient) -> None:
             "decision": "ALLOW",
             "reason": "Approving with mismatched digest",
         },
-        headers={"X-Phalanx-Role": "approver"},
+        headers={"Authorization": f"Bearer {approver_token}"},
     )
     assert tampered_approve.status_code == status.HTTP_400_BAD_REQUEST
     assert "digest mismatch" in tampered_approve.json()["detail"].lower()
@@ -59,7 +64,7 @@ def test_full_step_up_and_approval_flow(client: TestClient) -> None:
             "decision": "ALLOW",
             "reason": "Approved by CFO after invoice review",
         },
-        headers={"X-Phalanx-Role": "approver"},
+        headers={"Authorization": f"Bearer {approver_token}"},
     )
     assert valid_approve.status_code == status.HTTP_200_OK
     approved_data = valid_approve.json()
@@ -69,7 +74,7 @@ def test_full_step_up_and_approval_flow(client: TestClient) -> None:
     # 5. Verify the ledger chain contains both events and is cryptographically intact
     verify_resp = client.get(
         "/v1/ledger/verify",
-        headers={"Authorization": "Bearer demo-auditor"},
+        headers={"Authorization": f"Bearer {auditor_token}"},
     )
     assert verify_resp.status_code == status.HTTP_200_OK
     verify_data = verify_resp.json()

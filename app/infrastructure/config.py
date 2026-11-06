@@ -19,8 +19,15 @@ class Settings(BaseSettings):
     environment: str = Field(default="development")
     log_level: str = Field(default="INFO")
     allowed_hosts: str = Field(default="*")
-    database_url: str = Field(
-        default="postgresql+psycopg://phalanx_app:phalanx_app_password@localhost:5432/phalanx_db"
+    database_url: str = Field(default="postgresql+psycopg://phalanx_app@localhost:5433/phalanx_db")
+    postgres_password: str = Field(
+        default="", description="PostgreSQL password required for application database access"
+    )
+    postgres_port: int = Field(default=5433, description="PostgreSQL port (default host 5433)")
+    app_port: int = Field(default=8000, description="Application HTTP server port")
+    demo_mode: bool = Field(
+        default=False,
+        description="Demo mode: allows visitor role switching and simulated tampering",
     )
 
     @field_validator("database_url", mode="before")

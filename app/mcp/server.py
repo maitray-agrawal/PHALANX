@@ -20,10 +20,12 @@ from app.api.dependencies import (
     get_mandate_service,
 )
 from app.application.dtos import AuthorizeTransactionCommand
+from app.infrastructure.config import settings
 from app.infrastructure.tokens import (
     Identity,
     Role,
     TokenError,
+    create_role_token,
     verify_role_token,
 )
 
@@ -50,7 +52,16 @@ def authenticate_agent_identity(
         PermissionError: If token is missing, invalid, expired, non-AGENT role,
                          or fails object-level authorization for the target agent.
     """
-    token_str = auth_token or "demo-agent"
+    if auth_token:
+        token_str = auth_token
+    elif settings.demo_mode:
+        token_str = create_role_token(
+            role=Role.AGENT,
+            principal_id="principal_treasury",
+            agent_id=target_agent_id or "agent-auto-1",
+        )
+    else:
+        raise PermissionError("Unauthorized: Authentication token required (Role.AGENT)")
     try:
         identity = verify_role_token(token_str)
     except TokenError as exc:

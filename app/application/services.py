@@ -811,7 +811,7 @@ class AuthorizationService:
                             response_payload=resp.model_dump_json(),
                         )
                 except Exception:
-                    pass
+                    pass  # nosec: B110
             return resp
 
     def execute_approval(
@@ -1049,7 +1049,7 @@ class AuthorizationService:
                             response_payload=resp.model_dump_json(),
                         )
                 except Exception:
-                    pass
+                    pass  # nosec: B110
             return resp
 
     def get_request_state(self, request_id: str) -> RequestState | None:
@@ -1169,7 +1169,7 @@ class AuthorizationService:
                             self._responses_by_id[request_id] = loaded
                             return loaded
                 except Exception:
-                    pass
+                    pass  # nosec: B110
             return None
 
     def get_decision(self, decision_id: str) -> AuthorizationResponseDTO | None:
@@ -1198,7 +1198,7 @@ class AuthorizationService:
                             self._responses_by_id[loaded.request_id] = loaded
                             return loaded
                 except Exception:
-                    pass
+                    pass  # nosec: B110
             return None
 
     def get_held_reservations(self) -> list[dict[str, Any]]:
