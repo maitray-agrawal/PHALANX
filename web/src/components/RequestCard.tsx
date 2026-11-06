@@ -37,7 +37,7 @@ export const RequestCard: React.FC<RequestCardProps> = ({
       <div className="request-card-header">
         <div className="request-payee-info">
           <div className="request-icon-wrap" aria-hidden="true">
-            <ArrowUpRight size={18} />
+            <ArrowUpRight size={18} aria-hidden="true" />
           </div>
           <div>
             <h4 className="request-payee-title">{recipientId}</h4>
@@ -64,7 +64,7 @@ export const RequestCard: React.FC<RequestCardProps> = ({
             <div className="request-meta-item">
               <span className="meta-label">PAYPAL SANDBOX PAYOUT</span>
               <span className="meta-val mono payout-id">
-                <ShieldCheck size={12} className="inline-icon" /> {payoutId}
+                <ShieldCheck size={12} className="inline-icon" aria-hidden="true" /> {payoutId}
               </span>
             </div>
           )}

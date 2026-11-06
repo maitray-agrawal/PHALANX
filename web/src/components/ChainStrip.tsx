@@ -29,7 +29,7 @@ export const ChainStrip: React.FC<ChainStripProps> = ({
     <div className={`chain-strip-card card ${className}`.trim()} data-testid="chain-strip">
       <div className="chain-strip-header">
         <div className="chain-header-title-box">
-          <Link2 size={18} className="text-accent" />
+          <Link2 size={18} className="text-accent" aria-hidden="true" />
           <h3 className="card-title">Cryptographic Hash Chain Sequence</h3>
         </div>
         <div className="chain-strip-actions">
@@ -38,7 +38,7 @@ export const ChainStrip: React.FC<ChainStripProps> = ({
               variant="secondary"
               size="sm"
               loading={isVerifying}
-              icon={<RefreshCw size={14} />}
+              icon={<RefreshCw size={14} aria-hidden="true" />}
               onClick={onVerify}
             >
               Verify Chain
@@ -73,7 +73,7 @@ export const ChainStrip: React.FC<ChainStripProps> = ({
       >
         {isChainValid ? (
           <div className="status-content">
-            <ShieldCheck size={18} />
+            <ShieldCheck size={18} aria-hidden="true" />
             <span>
               <strong>Cryptographic Integrity Verified:</strong>{" "}
               {verification ? verification.message : `${events.length}/${events.length} block links intact.`}
@@ -81,9 +81,9 @@ export const ChainStrip: React.FC<ChainStripProps> = ({
           </div>
         ) : (
           <div className="status-content">
-            <ShieldAlert size={18} />
+            <ShieldAlert size={18} aria-hidden="true" />
             <span>
-              <strong>TAMPER DETECTED:</strong> Hash chain broken at Block #{brokenIndex}! Ledger integrity compromised.
+              <strong>Tamper detected:</strong> Hash chain broken at Block #{brokenIndex}. Ledger integrity compromised.
             </span>
           </div>
         )}
@@ -131,7 +131,7 @@ export const ChainStrip: React.FC<ChainStripProps> = ({
 
                 {index < events.length - 1 && (
                   <div className={`chain-link-connector ${isBroken ? "link-severed" : "link-intact"}`}>
-                    <ArrowRight size={14} />
+                    <ArrowRight size={14} aria-hidden="true" />
                   </div>
                 )}
               </React.Fragment>

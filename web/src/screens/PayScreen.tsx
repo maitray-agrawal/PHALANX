@@ -4,6 +4,7 @@ import { api, type AuthorizationResponse, type AuthorizeTransactionCommand } fro
 import { PillButton } from "../components/PillButton";
 import { RequestCard } from "../components/RequestCard";
 import { DecisionBadge } from "../components/DecisionBadge";
+import { EmptyState } from "../components/EmptyState";
 
 export interface PayScreenProps {
   token?: string;
@@ -322,13 +323,11 @@ export const PayScreen: React.FC<PayScreenProps> = ({
             </div>
           ) : (
             <div className="pay-empty-helper card">
-              <div className="helper-icon">
-                <Shield size={32} className="text-muted" />
-              </div>
-              <h4 className="helper-title">Awaiting Intent Submission</h4>
-              <p className="helper-desc">
-                Fill the transaction intent form or select one of the presets on the left. The pure policy engine will immediately evaluate rules, enforce single-limits, instant thresholds, and generate cryptographic receipts.
-              </p>
+              <EmptyState
+                icon={<Shield size={36} className="text-muted" />}
+                title="Awaiting Intent Submission"
+                description="Fill the transaction intent form or select one of the presets on the left. The policy engine will evaluate rules and display the authorization decision."
+              />
             </div>
           )}
         </div>

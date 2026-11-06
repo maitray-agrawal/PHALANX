@@ -43,7 +43,7 @@ export const MandateMeter: React.FC<MandateMeterProps> = ({
     <article className={`mandate-meter-card card ${className}`.trim()} data-testid="mandate-meter">
       <div className="card-header">
         <div className="card-title-row">
-          <Lock size={20} className="card-icon text-accent" />
+          <Lock size={20} className="card-icon text-accent" aria-hidden="true" />
           <div>
             <h3 className="card-title">Active Ed25519 Authority Mandate</h3>
             <span className="mandate-id-sub mono">
@@ -54,7 +54,7 @@ export const MandateMeter: React.FC<MandateMeterProps> = ({
         <div className="mandate-status-tags">
           <span className="status-pill active">ACTIVE</span>
           <span className="signature-pill verified">
-            <CheckCircle2 size={12} className="inline-icon" /> ED25519 SEALED
+            <CheckCircle2 size={12} className="inline-icon" aria-hidden="true" /> ED25519 SEALED
           </span>
         </div>
       </div>
@@ -120,7 +120,7 @@ export const MandateMeter: React.FC<MandateMeterProps> = ({
             {mandate.allowed_payees && mandate.allowed_payees.length > 0 ? (
               mandate.allowed_payees.map((payee) => (
                 <span key={payee} className="spec-chip mono">
-                  <ShieldCheck size={11} className="inline-icon" /> {payee}
+                  <ShieldCheck size={11} className="inline-icon" aria-hidden="true" /> {payee}
                 </span>
               ))
             ) : (

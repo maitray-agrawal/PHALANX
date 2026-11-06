@@ -149,7 +149,7 @@ export const ActivityScreen: React.FC<ActivityScreenProps> = ({
         onNotify(
           ver.is_valid
             ? `Cryptographic proof verified: ${ver.message}`
-            : `Tamper detected: Block #${ver.broken_index} hash mismatch!`,
+            : `Tamper detected: Block #${ver.broken_index} hash mismatch.`,
           ver.is_valid ? "success" : "error"
         );
       }
@@ -232,7 +232,7 @@ export const ActivityScreen: React.FC<ActivityScreenProps> = ({
       </div>
 
       {/* Visual Chain of Blocks */}
-      {events.length > 0 && (
+      {events.length > 0 ? (
         <section className="chain-strip-section mt-4">
           <ChainStrip
             events={events}
@@ -241,6 +241,13 @@ export const ActivityScreen: React.FC<ActivityScreenProps> = ({
             onVerify={handleVerifyChain}
             onTamperSimulate={handleTamperSimulate}
             onRestore={handleRestoreLedger}
+          />
+        </section>
+      ) : (
+        <section className="chain-strip-section mt-4 card">
+          <EmptyState
+            title="No blocks recorded"
+            description="The cryptographic hash chain will display committed blocks once transactions occur."
           />
         </section>
       )}

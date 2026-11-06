@@ -64,7 +64,7 @@ export const ActivityRow: React.FC<ActivityRowProps> = ({
           <div className="activity-submeta">
             <span className="reason-code-badge mono">{reasonCode}</span>
             <span className="activity-time tabular-nums">
-              <Clock size={11} className="inline-icon" /> {timestampUtc}
+              <Clock size={11} className="inline-icon" aria-hidden="true" /> {timestampUtc}
             </span>
           </div>
         </div>
@@ -88,9 +88,10 @@ export const ActivityRow: React.FC<ActivityRowProps> = ({
             className="receipt-link-btn"
             onClick={() => onViewReceipt(receiptId)}
             title={`View cryptographic receipt ${receiptId}`}
+            aria-label={`View cryptographic receipt for ${receiptId}`}
           >
             <span className="receipt-id-label mono">{receiptId.slice(0, 14)}...</span>
-            <ExternalLink size={12} className="inline-icon" />
+            <ExternalLink size={12} className="inline-icon" aria-hidden="true" />
           </button>
         )}
       </div>

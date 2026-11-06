@@ -9,6 +9,7 @@ import {
 import { api, type AttackLabItem, type AttackLabResponse } from "../api";
 import { PillButton } from "../components/PillButton";
 import { Skeleton } from "../components/Skeleton";
+import { EmptyState } from "../components/EmptyState";
 
 export interface AttackLabScreenProps {
   token?: string;
@@ -163,7 +164,7 @@ export const AttackLabScreen: React.FC<AttackLabScreenProps> = ({
           <Skeleton height="180px" borderRadius="var(--radius-md)" />
           <Skeleton height="180px" borderRadius="var(--radius-md)" />
         </div>
-      ) : (
+      ) : results.length > 0 ? (
         <div className="attack-cards-grid mt-4">
           {results.map((item) => (
             <div key={item.attack_name} className="attack-card card" data-testid="attack-card">
@@ -196,6 +197,13 @@ export const AttackLabScreen: React.FC<AttackLabScreenProps> = ({
               </div>
             </div>
           ))}
+        </div>
+      ) : (
+        <div className="mt-4">
+          <EmptyState
+            title="No threat vectors loaded"
+            description="The adversarial suite contains no test scenarios to execute."
+          />
         </div>
       )}
     </div>

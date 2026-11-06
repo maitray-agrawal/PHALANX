@@ -26,7 +26,7 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
     <article className={`receipt-card card ${className}`.trim()} data-testid="receipt-card">
       <div className="receipt-header">
         <div className="receipt-title-box">
-          <FileText size={20} className="text-accent" />
+          <FileText size={20} className="text-accent" aria-hidden="true" />
           <div>
             <h3 className="card-title">Cryptographic Transaction Receipt</h3>
             <span className="receipt-id-sub mono">{receipt.receipt_id}</span>
@@ -67,7 +67,7 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
           <div className="chips-container">
             {receipt.reason_codes.map((code) => (
               <span key={code} className="spec-chip mono">
-                <CheckCircle2 size={11} className="inline-icon" /> {code}
+                <CheckCircle2 size={11} className="inline-icon" aria-hidden="true" /> {code}
               </span>
             ))}
           </div>
@@ -80,11 +80,11 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
             <span className={`proof-validity-tag ${proof.is_valid ? "valid" : "invalid"}`}>
               {proof.is_valid ? (
                 <>
-                  <ShieldCheck size={12} className="inline-icon" /> Link Valid
+                  <ShieldCheck size={12} className="inline-icon" aria-hidden="true" /> Link Valid
                 </>
               ) : (
                 <>
-                  <ShieldAlert size={12} className="inline-icon" /> Broken Link
+                  <ShieldAlert size={12} className="inline-icon" aria-hidden="true" /> Broken Link
                 </>
               )}
             </span>

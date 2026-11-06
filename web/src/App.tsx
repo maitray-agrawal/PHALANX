@@ -201,7 +201,7 @@ export const App: React.FC = () => {
               onClick={toggleTheme}
               aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
             >
-              {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
+              {theme === "light" ? <Moon size={18} aria-hidden="true" /> : <Sun size={18} aria-hidden="true" />}
             </button>
 
             {/* Profile Menu Trigger */}
@@ -212,8 +212,9 @@ export const App: React.FC = () => {
                 onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
                 aria-expanded={isProfileMenuOpen}
                 aria-haspopup="true"
+                aria-label={`Current persona: ${currentRole}. Click to switch role.`}
               >
-                <User size={16} className="inline-icon" />
+                <User size={16} className="inline-icon" aria-hidden="true" />
                 <span className="current-role-label mono">{currentRole}</span>
               </button>
 
@@ -337,8 +338,9 @@ export const App: React.FC = () => {
           type="button"
           className={`tabbar-item ${activeTab === "home" ? "active" : ""}`}
           onClick={() => navigateTo("home")}
+          aria-label="Home"
         >
-          <Home size={20} />
+          <Home size={20} aria-hidden="true" />
           <span>Home</span>
         </button>
 
@@ -346,8 +348,9 @@ export const App: React.FC = () => {
           type="button"
           className={`tabbar-item ${activeTab === "pay" ? "active" : ""}`}
           onClick={() => navigateTo("pay")}
+          aria-label="Pay"
         >
-          <Send size={20} />
+          <Send size={20} aria-hidden="true" />
           <span>Pay</span>
         </button>
 
@@ -355,8 +358,9 @@ export const App: React.FC = () => {
           type="button"
           className={`tabbar-item ${activeTab === "approvals" ? "active" : ""}`}
           onClick={() => navigateTo("approvals")}
+          aria-label="Approvals"
         >
-          <CheckSquare size={20} />
+          <CheckSquare size={20} aria-hidden="true" />
           <span>Approvals</span>
         </button>
 
@@ -364,8 +368,9 @@ export const App: React.FC = () => {
           type="button"
           className={`tabbar-item ${activeTab === "activity" ? "active" : ""}`}
           onClick={() => navigateTo("activity")}
+          aria-label="Activity"
         >
-          <Activity size={20} />
+          <Activity size={20} aria-hidden="true" />
           <span>Activity</span>
         </button>
 
@@ -375,8 +380,9 @@ export const App: React.FC = () => {
           onClick={() => setIsMoreMenuOpen(true)}
           aria-haspopup="dialog"
           aria-expanded={isMoreMenuOpen}
+          aria-label="More"
         >
-          <Menu size={20} />
+          <Menu size={20} aria-hidden="true" />
           <span>More</span>
         </button>
       </nav>
@@ -400,7 +406,7 @@ export const App: React.FC = () => {
                 onClick={() => setIsMoreMenuOpen(false)}
                 aria-label="Close menu"
               >
-                <X size={20} />
+                <X size={20} aria-hidden="true" />
               </button>
             </div>
 
@@ -410,7 +416,7 @@ export const App: React.FC = () => {
                 className="sheet-nav-item"
                 onClick={() => navigateTo("mandates")}
               >
-                <Lock size={18} className="sheet-icon" />
+                <Lock size={18} className="sheet-icon" aria-hidden="true" />
                 <div className="sheet-text">
                   <span className="sheet-item-title">Ed25519 Authority Mandate</span>
                   <span className="sheet-item-sub">Budget limits and allowlists</span>
@@ -422,7 +428,7 @@ export const App: React.FC = () => {
                 className="sheet-nav-item"
                 onClick={() => navigateTo("attack-lab")}
               >
-                <Zap size={18} className="sheet-icon text-accent" />
+                <Zap size={18} className="sheet-icon text-accent" aria-hidden="true" />
                 <div className="sheet-text">
                   <span className="sheet-item-title">Adversarial Attack Lab</span>
                   <span className="sheet-item-sub">Test 6 canned threat vectors</span>
@@ -434,7 +440,7 @@ export const App: React.FC = () => {
                 className="sheet-nav-item"
                 onClick={() => navigateTo("receipt")}
               >
-                <ExternalLink size={18} className="sheet-icon" />
+                <ExternalLink size={18} className="sheet-icon" aria-hidden="true" />
                 <div className="sheet-text">
                   <span className="sheet-item-title">Receipt & Proof Verifier</span>
                   <span className="sheet-item-sub">Public SHA-256 chain verification</span>

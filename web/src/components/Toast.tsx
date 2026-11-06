@@ -38,7 +38,7 @@ export const Toast: React.FC<ToastProps> = ({
         onClick={onDismiss}
         aria-label="Dismiss notification"
       >
-        <X size={14} />
+        <X size={14} aria-hidden="true" />
       </button>
     </div>
   );

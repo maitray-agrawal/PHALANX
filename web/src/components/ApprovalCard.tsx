@@ -79,7 +79,7 @@ export const ApprovalCard: React.FC<ApprovalCardProps> = ({
         <div className="approval-digest-box">
           <div className="digest-header">
             <span className="meta-label">
-              <FileCode size={12} className="inline-icon" /> BOUND RFC 8785 INTENT DIGEST (SHA-256)
+              <FileCode size={12} className="inline-icon" aria-hidden="true" /> BOUND RFC 8785 INTENT DIGEST (SHA-256)
             </span>
             <button
               type="button"
@@ -87,7 +87,7 @@ export const ApprovalCard: React.FC<ApprovalCardProps> = ({
               onClick={() => setShowDiff(!showDiff)}
               aria-expanded={showDiff}
             >
-              <Eye size={12} className="inline-icon" /> {showDiff ? "Hide Digest Inspection" : "Inspect Diff"}
+              <Eye size={12} className="inline-icon" aria-hidden="true" /> {showDiff ? "Hide Digest Inspection" : "Inspect Diff"}
             </button>
           </div>
           <code className="digest-code mono" title={activeDigest}>
@@ -111,13 +111,13 @@ export const ApprovalCard: React.FC<ApprovalCardProps> = ({
               <div className="diff-tamper-alert">
                 <ShieldAlert size={16} />
                 <span>
-                  Tamper detected: Digest mismatch! Expected <code>{intentDigest.slice(0, 16)}...</code> but received{" "}
+                  Tamper detected: Digest mismatch. Expected <code>{intentDigest.slice(0, 16)}...</code> but received{" "}
                   <code>{activeDigest.slice(0, 16)}...</code>. Policy engine will fail closed.
                 </span>
               </div>
             ) : (
               <div className="diff-clean-alert">
-                <Check size={16} />
+                <Check size={16} aria-hidden="true" />
                 <span>Byte-for-byte canonical RFC 8785 match. Ready for cryptographic approval.</span>
               </div>
             )}
@@ -126,7 +126,7 @@ export const ApprovalCard: React.FC<ApprovalCardProps> = ({
 
         {isAgentRole && (
           <div className="warning-banner" role="alert">
-            <ShieldAlert size={16} className="warning-icon" />
+            <ShieldAlert size={16} className="warning-icon" aria-hidden="true" />
             <span>
               Autonomous agent persona active: Agents are strictly prohibited from approving their own step-ups. Switch to Approver role.
             </span>
@@ -137,7 +137,7 @@ export const ApprovalCard: React.FC<ApprovalCardProps> = ({
           <PillButton
             variant="secondary"
             size="md"
-            icon={<X size={16} />}
+            icon={<X size={16} aria-hidden="true" />}
             disabled={isAgentRole || isActionLoading}
             onClick={() => onDecline(requestId, activeDigest)}
           >
@@ -146,7 +146,7 @@ export const ApprovalCard: React.FC<ApprovalCardProps> = ({
           <PillButton
             variant="primary"
             size="md"
-            icon={<Check size={16} />}
+            icon={<Check size={16} aria-hidden="true" />}
             disabled={isAgentRole || isActionLoading}
             loading={isActionLoading}
             onClick={() => onApprove(requestId, activeDigest)}
