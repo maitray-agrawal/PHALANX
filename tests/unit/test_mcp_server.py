@@ -27,7 +27,7 @@ def test_mcp_server_request_payment_and_verify_ledger() -> None:
     assert "client_secret" not in result
 
     # 2. Query mandate status
-    mandate_info = server.get_mandate_status("mandate_default_astra")
+    mandate_info = server.get_mandate_status("mandate_default_sandbox")
     assert mandate_info["status"] == "ACTIVE"
     assert mandate_info["single_limit_minor"] == 500_000
     assert "signing_key" not in mandate_info
@@ -52,13 +52,13 @@ async def test_fastmcp_call_tool_async_execution() -> None:
     res = await mcp_server.call_tool(
         "get_mandate_status",
         {
-            "mandate_id": "mandate_default_astra",
+            "mandate_id": "mandate_default_sandbox",
             "auth_token": agent_token,
         },
     )
     assert len(res) == 1
     data = json.loads(res[0].text)
-    assert data["mandate_id"] == "mandate_default_astra"
+    assert data["mandate_id"] == "mandate_default_sandbox"
     assert data["status"] == "ACTIVE"
 
     # Call request_payment (pre-authorized spend)

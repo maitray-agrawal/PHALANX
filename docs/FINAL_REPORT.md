@@ -114,7 +114,7 @@ In accordance with hackathon rules and truthfulness requirements, the 'Built wit
 - Remediated hostile security audit findings:
   - F-01 (P0): Removed unmandated agent fallback to default mandate in `MandateService`; unmandated agents now strictly return None and evaluate to DENY (`MANDATE_INACTIVE`).
   - F-02 (P0): Enforced live mandate status (`ACTIVE`) and expiration check in `AuthorizationService.execute_approval()`. Approving after mandate expiry or revocation now evaluates to DENY and halts payment dispatch.
-  - F-03 (P1): Removed cross-tenant demo bypass in `check_approver_object_authorization()` and aligned demo principal identifiers to `principal_astra_treasury`.
+  - F-03 (P1): Removed cross-tenant demo bypass in `check_approver_object_authorization()` and aligned demo principal identifiers to `principal_treasury`.
   - F-04 (P2): Eliminated MCP agent impersonation exemption for `agent-auto-1`.
   - F-05 (P2): Restricted `/v1/ledger/tamper` and `/restore` to `AUDITOR` and `PRINCIPAL` roles.
   - Added 6 redteam regression tests in `tests/redteam/test_redteam.py`.

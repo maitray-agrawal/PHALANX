@@ -60,13 +60,13 @@ Submits an autonomous financial transaction for deterministic policy evaluation.
 Queries active spending limits, remaining lifetime budget, and validity windows.
 
 **Arguments**:
-- `mandate_id` (str): The identifier of the mandate (e.g., `"mandate_default_astra"`).
+- `mandate_id` (str): The identifier of the mandate (e.g., `"mandate_default_sandbox"`).
 - `auth_token` (str, optional): Signed agent role token.
 
 **Response**:
 ```json
 {
-  "mandate_id": "mandate_default_astra",
+  "mandate_id": "mandate_default_sandbox",
   "version": 1,
   "status": "ACTIVE",
   "single_limit_minor": 500000,

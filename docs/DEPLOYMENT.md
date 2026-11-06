@@ -64,7 +64,7 @@ The deployment defines two core managed resources:
 Every container start or restart executes [`scripts/boot.py`](file:///d:/PHALANX/scripts/boot.py) prior to starting Uvicorn:
 1. **Schema Creation**: Executes table creation and database-level triggers enforcing append-only immutability on `ledger_events` (blocks `UPDATE` and `DELETE`).
 2. **Demo Mandate Seeding**:
-   - Mandate ID: `mandate_default_astra`
+   - Mandate ID: `mandate_default_sandbox`
    - Principal: `org_astra_corp`
    - Agent: `agent-auto-1`
    - Validity Window: Start UTC now, Expiry **no earlier than 31 Mar 2027** (`2027-03-31T23:59:59Z`).

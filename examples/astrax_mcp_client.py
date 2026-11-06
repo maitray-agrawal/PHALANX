@@ -40,7 +40,7 @@ async def run_astrax_agent() -> None:
     mandate_res = await mcp_server.call_tool(
         "get_mandate_status",
         {
-            "mandate_id": "mandate_default_astra",
+            "mandate_id": "mandate_default_sandbox",
             "auth_token": agent_token,
         },
     )

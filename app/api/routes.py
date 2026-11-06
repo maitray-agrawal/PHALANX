@@ -118,7 +118,7 @@ def create_demo_token(request: DemoTokenRequestDTO) -> DemoTokenResponseDTO:
 
     req_principal = request.principal_id
     if req_principal in ("demo-principal", None, ""):
-        req_principal = "principal_astra_treasury"
+        req_principal = "principal_treasury"
 
     token = create_role_token(
         role=role,

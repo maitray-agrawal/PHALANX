@@ -86,8 +86,8 @@ test.describe("PHALANX Operator Dashboard E2E Smoke Tests", () => {
     await mandateTab.click();
 
     await expect(page.getByRole("heading", { name: "Active Ed25519 Authority Mandate" })).toBeVisible();
-    await expect(page.getByText("mandate_default_astra (v1)")).toBeVisible();
-    await expect(page.getByText("principal_astra_treasury")).toBeVisible();
+    await expect(page.getByText("mandate_default_sandbox (v1)")).toBeVisible();
+    await expect(page.getByText("principal_treasury")).toBeVisible();
     await expect(page.getByText("Remaining Budget")).toBeVisible();
     await expect(page.locator(".sig-code")).toBeVisible();
   });

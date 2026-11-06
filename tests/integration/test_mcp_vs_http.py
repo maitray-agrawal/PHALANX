@@ -235,7 +235,7 @@ async def test_parity_mandate_status_query(
     agent_token: str,
 ) -> None:
     """get_mandate_status returns identical parameters to GET /v1/mandates/{id}."""
-    mandate_id = "mandate_default_astra"
+    mandate_id = "mandate_default_sandbox"
 
     # 1. HTTP
     http_resp = http_client.get(

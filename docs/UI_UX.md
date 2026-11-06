@@ -91,7 +91,7 @@ Tokens are declared in `brand/tokens.json` and mirrored in `web/src/styles/token
   - **Restore Ledger Button**: Calls `POST /v1/ledger/restore` to revert the illicit modification and re-verify the chain.
 
 ### 3.4 Mandate View (`/mandate`)
-- Displays the active Ed25519 Authority Mandate (`mandate_default_astra`):
+- Displays the active Ed25519 Authority Mandate (`mandate_default_sandbox`):
   - Limits: Single Transaction Cap ($5,000.00), Instant Autonomous Threshold ($500.00), Lifetime Budget Cap ($25,000.00).
   - Remaining Budget: Calculated dynamically as Lifetime Budget minus spent minor units, formatted with tabular numbers.
   - Expiry: Start and end validity timestamps (UTC).

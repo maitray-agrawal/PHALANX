@@ -109,7 +109,7 @@ class MandateService:
     def _seed_default_mandate(self) -> None:
         """Seed a standard operational demo mandate."""
         now = self._clock.now_utc()
-        mandate_id = "mandate_default_astra"
+        mandate_id = "mandate_default_sandbox"
         valid_until = max(
             now + timedelta(days=365),
             datetime(2027, 3, 31, 23, 59, 59, tzinfo=UTC),
@@ -117,7 +117,7 @@ class MandateService:
         payload = {
             "mandate_id": mandate_id,
             "version": 1,
-            "principal_id": "principal_astra_treasury",
+            "principal_id": "principal_treasury",
             "agent_id": "agent-auto-1",
             "single_limit_minor": 500_000,  # $5,000 max single cap
             "instant_threshold_minor": 50_000,  # $500 instant threshold
@@ -135,7 +135,7 @@ class MandateService:
         mandate = Mandate(
             mandate_id=mandate_id,
             version=1,
-            principal_id="principal_astra_treasury",
+            principal_id="principal_treasury",
             agent_id="agent-auto-1",
             single_limit_minor=500_000,
             instant_threshold_minor=50_000,
@@ -151,9 +151,7 @@ class MandateService:
             signature=sig,
         )
         self._mandates[mandate_id] = mandate
-        self._mandates["mandate_default_sandbox"] = mandate
         self._history[mandate_id] = [mandate]
-        self._history["mandate_default_sandbox"] = [mandate]
 
     def get_active_mandate_for_agent(self, agent_id: str) -> Mandate | None:
         with self._lock:
@@ -801,6 +799,19 @@ class AuthorizationService:
                 request_state=current_req_state,
             )
             self._responses_by_id[request_id] = resp
+            if self._db_session_factory is not None:
+                try:
+                    with self._db_session_factory() as session, session.begin():
+                        repo = BudgetRepository(session)
+                        repo.record_decision(
+                            idempotency_key=intent.idempotency_key,
+                            agent_id=command.agent_id,
+                            intent_digest=intent_digest,
+                            decision=final_decision.value,
+                            response_payload=resp.model_dump_json(),
+                        )
+                except Exception:
+                    pass
             return resp
 
     def execute_approval(
@@ -1026,6 +1037,19 @@ class AuthorizationService:
                 request_state=current_req_state,
             )
             self._responses_by_id[command.request_id] = resp
+            if self._db_session_factory is not None:
+                try:
+                    with self._db_session_factory() as session, session.begin():
+                        repo = BudgetRepository(session)
+                        repo.record_decision(
+                            idempotency_key=intent.idempotency_key,
+                            agent_id=intent.agent_id,
+                            intent_digest=stored_digest,
+                            decision=final_decision.value,
+                            response_payload=resp.model_dump_json(),
+                        )
+                except Exception:
+                    pass
             return resp
 
     def get_request_state(self, request_id: str) -> RequestState | None:
@@ -1121,13 +1145,60 @@ class AuthorizationService:
 
     def get_payment_request(self, request_id: str) -> AuthorizationResponseDTO | None:
         with self._lock:
-            return self._responses_by_id.get(request_id)
+            resp = self._responses_by_id.get(request_id)
+            if resp:
+                return resp
+            if self._db_session_factory is not None:
+                try:
+                    import json
+
+                    from sqlalchemy import select
+
+                    from app.infrastructure.models import IdempotencyModel
+
+                    with self._db_session_factory() as session:
+                        stmt = (
+                            select(IdempotencyModel)
+                            .where(IdempotencyModel.response_payload.contains(request_id))
+                            .limit(1)
+                        )
+                        rec = session.scalar(stmt)
+                        if rec and rec.response_payload:
+                            data = json.loads(rec.response_payload)
+                            loaded = AuthorizationResponseDTO(**data)
+                            self._responses_by_id[request_id] = loaded
+                            return loaded
+                except Exception:
+                    pass
+            return None
 
     def get_decision(self, decision_id: str) -> AuthorizationResponseDTO | None:
         with self._lock:
             for resp in self._responses_by_id.values():
                 if resp.event_id == decision_id or resp.request_id == decision_id:
                     return resp
+            if self._db_session_factory is not None:
+                try:
+                    import json
+
+                    from sqlalchemy import select
+
+                    from app.infrastructure.models import IdempotencyModel
+
+                    with self._db_session_factory() as session:
+                        stmt = (
+                            select(IdempotencyModel)
+                            .where(IdempotencyModel.response_payload.contains(decision_id))
+                            .limit(1)
+                        )
+                        rec = session.scalar(stmt)
+                        if rec and rec.response_payload:
+                            data = json.loads(rec.response_payload)
+                            loaded = AuthorizationResponseDTO(**data)
+                            self._responses_by_id[loaded.request_id] = loaded
+                            return loaded
+                except Exception:
+                    pass
             return None
 
     def get_held_reservations(self) -> list[dict[str, Any]]:

@@ -2,7 +2,7 @@
 
 Actions:
 1. Verifies/creates database tables and append-only ledger triggers.
-2. Seeds demo mandate (mandate_default_astra) with validity no earlier than 31 Mar 2027.
+2. Seeds demo mandate (mandate_default_sandbox) with validity no earlier than 31 Mar 2027.
 3. Seeds initial budget allocation, payees, and pending supervisor approval.
 4. Fully idempotent: safe to run multiple times during startup or reboots.
 """
@@ -35,10 +35,42 @@ def run_boot() -> bool:
     logger.info("Starting PHALANX idempotent boot sequence...")
     engine = get_engine()
 
-    # Step 1: Database schema & triggers
+    # Step 1: Database schema & triggers via Alembic migrations
     try:
-        logger.info("Applying database schema and ledger immutability triggers...")
-        create_schema(engine)
+        from pathlib import Path
+
+        from alembic import command
+        from alembic.config import Config
+        from app.infrastructure.db_schema import install_ledger_triggers
+
+        ini_candidates = [
+            Path("alembic.ini"),
+            Path(__file__).resolve().parent.parent / "alembic.ini",
+            Path("/app/alembic.ini"),
+        ]
+        ini_path = next((p for p in ini_candidates if p.exists()), None)
+        applied = False
+        if ini_path:
+            logger.info("Applying database migrations via Alembic (%s)...", ini_path)
+            try:
+                alembic_cfg = Config(str(ini_path))
+                alembic_cfg.set_main_option("sqlalchemy.url", str(engine.url))
+                alembic_cfg.attributes["connection"] = engine
+                command.upgrade(alembic_cfg, "head")
+                logger.info("Alembic migrations successfully applied to head.")
+                applied = True
+            except Exception as alembic_err:
+                logger.warning(
+                    "Alembic upgrade encountered error: %s. Falling back to metadata schema.",
+                    alembic_err,
+                )
+
+        if not applied:
+            logger.info("Applying database schema via fallback metadata...")
+            create_schema(engine)
+            logger.info("Database schema applied via fallback metadata.")
+
+        install_ledger_triggers(engine)
         logger.info("Database schema and triggers successfully verified/created.")
     except Exception as exc:
         logger.warning(
@@ -58,7 +90,7 @@ def run_boot() -> bool:
                 logger.info("Seeding initial demo budget for agent-auto-1 ($10,000 USD)...")
                 budget = AgentBudgetModel(
                     agent_id="agent-auto-1",
-                    mandate_id="mandate_default_astra",
+                    mandate_id="mandate_default_sandbox",
                     currency="USD",
                     allocated_minor=1_000_000,
                     spent_minor=0,
@@ -78,7 +110,7 @@ def run_boot() -> bool:
                 logger.info("Seeding Genesis ledger block...")
                 genesis_payload = {
                     "event": "GENESIS_INITIALIZED",
-                    "mandate_id": "mandate_default_astra",
+                    "mandate_id": "mandate_default_sandbox",
                     "description": "PHALANX Autonomous Financial Governance Genesis",
                     "timestamp": now_utc.isoformat(),
                 }
