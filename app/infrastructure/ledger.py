@@ -34,14 +34,68 @@ class LedgerEntry:
 
 
 class InMemoryLedgerAdapter(LedgerPort):
-    """Thread-safe append-only ledger adapter maintaining a SHA-256 hash chain."""
+    """Append-only ledger adapter maintaining a SHA-256 hash chain with DB persistence."""
 
-    def __init__(self) -> None:
+    def __init__(self, db_session_factory: Any | None = None) -> None:
+        self._db_session_factory = db_session_factory
         self._events: list[ChainedLedgerEvent] = []
         self._entries: list[LedgerEntry] = []
         self._pristine_events: list[ChainedLedgerEvent] = []
         self._lock = Lock()
         self._counter = 0
+        if self._db_session_factory is not None:
+            self._load_from_db()
+
+    def _load_from_db(self) -> None:
+        if self._db_session_factory is None:
+            return
+        try:
+            import json
+
+            from sqlalchemy import select
+
+            from app.infrastructure.models import LedgerEventModel
+
+            with self._db_session_factory() as session:
+                stmt = select(LedgerEventModel).order_by(LedgerEventModel.event_seq.asc())
+                models = list(session.scalars(stmt))
+                if models:
+                    self._events.clear()
+                    self._entries.clear()
+                    for m in models:
+                        payload = (
+                            json.loads(m.payload_json)
+                            if isinstance(m.payload_json, str)
+                            else m.payload_json
+                        )
+                        chained = ChainedLedgerEvent(
+                            event_id=m.event_id,
+                            event_type=m.event_type,
+                            prev_hash=m.prev_hash,
+                            payload=payload,
+                            event_hash=m.event_hash,
+                        )
+                        self._events.append(chained)
+                        reasons = tuple(payload.get("reasons", ()))
+                        self._entries.append(
+                            LedgerEntry(
+                                event_id=m.event_id,
+                                event_type=m.event_type,
+                                agent_id=m.agent_id,
+                                recipient_id=m.recipient_id,
+                                amount_minor=m.amount_minor,
+                                currency=m.currency,
+                                purpose=payload.get("purpose", ""),
+                                idempotency_key=payload.get("idempotency_key", ""),
+                                decision=payload.get("decision", ""),
+                                reasons=reasons,
+                                recorded_at_utc=m.recorded_at_utc,
+                            )
+                        )
+                    self._counter = models[-1].event_seq
+                    self._pristine_events = list(self._events)
+        except Exception:
+            pass
 
     def append_event(
         self,
@@ -90,6 +144,31 @@ class InMemoryLedgerAdapter(LedgerPort):
                     recorded_at_utc=recorded_at_utc,
                 )
             )
+
+            if self._db_session_factory is not None:
+                try:
+                    import json
+
+                    from app.infrastructure.models import LedgerEventModel
+
+                    with self._db_session_factory() as session, session.begin():
+                        db_event = LedgerEventModel(
+                            event_id=event_id,
+                            event_seq=self._counter,
+                            prev_hash=prev_hash,
+                            event_hash=chained.event_hash,
+                            event_type=event_type,
+                            agent_id=intent.agent_id,
+                            recipient_id=intent.recipient_id,
+                            amount_minor=intent.money.amount_minor,
+                            currency=intent.money.currency,
+                            payload_json=json.dumps(payload),
+                            recorded_at_utc=recorded_at_utc,
+                        )
+                        session.add(db_event)
+                except Exception:
+                    pass
+
             return event_id
 
     @property

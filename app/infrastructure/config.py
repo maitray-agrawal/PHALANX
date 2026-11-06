@@ -3,7 +3,7 @@
 Rule: No secret defaults in code. Secrets must be injected via environment.
 """
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,6 +22,16 @@ class Settings(BaseSettings):
     database_url: str = Field(
         default="postgresql+psycopg://phalanx_app:phalanx_app_password@localhost:5432/phalanx_db"
     )
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalize_database_url(cls, v: str) -> str:
+        if isinstance(v, str):
+            if v.startswith("postgres://"):
+                return "postgresql+psycopg://" + v[len("postgres://") :]
+            if v.startswith("postgresql://") and not v.startswith("postgresql+psycopg://"):
+                return "postgresql+psycopg://" + v[len("postgresql://") :]
+        return v
 
     # Security: No secret defaults! Must be supplied via environment/.env
     secret_key: str = Field(default="")

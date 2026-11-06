@@ -10,8 +10,9 @@ from app.application.services import (
 )
 from app.domain.ports import PaymentRail
 from app.infrastructure.clock import SystemUtcClock
+from app.infrastructure.config import settings
 from app.infrastructure.ledger import InMemoryLedgerAdapter
-from app.infrastructure.paypal import FakePaymentRail
+from app.infrastructure.paypal import FakePaymentRail, PayPalPaymentRailAdapter
 
 
 @lru_cache(maxsize=1)
@@ -21,13 +22,22 @@ def get_clock() -> SystemUtcClock:
 
 @lru_cache(maxsize=1)
 def get_ledger() -> InMemoryLedgerAdapter:
-    ledger = InMemoryLedgerAdapter()
+    from app.infrastructure.database import check_database_readiness, get_session_factory
+
+    db_factory = None
+    is_ready, _ = check_database_readiness()
+    if is_ready:
+        db_factory = get_session_factory()
+
+    ledger = InMemoryLedgerAdapter(db_session_factory=db_factory)
     ledger.seed_demo_events()
     return ledger
 
 
 @lru_cache(maxsize=1)
 def get_payment_rail() -> PaymentRail:
+    if settings.paypal_client_id and settings.paypal_client_secret:
+        return PayPalPaymentRailAdapter()
     return FakePaymentRail()
 
 
@@ -38,11 +48,19 @@ def get_mandate_service() -> MandateService:
 
 @lru_cache(maxsize=1)
 def get_authorization_service() -> AuthorizationService:
+    from app.infrastructure.database import check_database_readiness, get_session_factory
+
+    db_factory = None
+    is_ready, _ = check_database_readiness()
+    if is_ready:
+        db_factory = get_session_factory()
+
     return AuthorizationService(
         clock=get_clock(),
         ledger=get_ledger(),
         mandate_service=get_mandate_service(),
         payment_rail=get_payment_rail(),
+        db_session_factory=db_factory,
     )
 
 

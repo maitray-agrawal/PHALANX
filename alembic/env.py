@@ -23,7 +23,9 @@ def get_url() -> str:
     url = config.get_main_option("sqlalchemy.url")
     if url:
         return url
-    return os.getenv("DATABASE_URL", settings.database_url)
+    if settings.database_url:
+        return settings.database_url
+    return os.getenv("DATABASE_URL", "sqlite:///./phalanx.db")
 
 
 def run_migrations_offline() -> None:
