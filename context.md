@@ -7,7 +7,7 @@ Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
 - app/api: Complete FastAPI REST suite with /v1/ and /api/v1/ contracts (/v1/payment-requests, /api/v1/authorize, /v1/mandates, /api/v1/mandates/{id}, /v1/decisions, /v1/approvals, /api/v1/approvals/{id}/approve, /api/v1/approvals/{id}/reject, /v1/ledger, /api/v1/ledger/verify, /v1/webhooks/paypal, /v1/admin/reset, /v1/auth/demo-token).
 - app/mcp: Model Context Protocol server exposing financial agent governance tools through identical application authorization boundary.
 - web: React + Vite + TypeScript security console with PHALANX visual identity and 0/90 geometric logo mark; 4 core operational scenes (Request Console, Step-Up Approvals, Tamper-Evident Ledger, Active Mandate) + Reconciliation & Security Center.
-- tests: 247 automated tests (unit, integration, concurrency, external failure, MCP parity, red-team A1-H2, security audit regressions, payment rail order lookup).
+- tests: 258 automated tests (unit, integration, concurrency, external failure, MCP parity, red-team A1-H2, security audit regressions, payment rail order lookup, metrics alignment).
 
 Completed R3 Milestones:
 - R3.1: PayPal Sandbox End-to-End verified live against `api.sandbox.paypal.com` with real transaction creation and order lookup (`3J77364339194024E`).
@@ -20,9 +20,10 @@ Completed R3 Milestones:
 - R3.8: Tests updated and verified green across Python and TypeScript test suites.
 - R3.9: Demo-state seeding and reset via `/v1/admin/reset` verified.
 - R3.10: Public UI and documentation cleansed of AstraX/KuberSetu references; evidence recorded in `docs/EVIDENCE.md`.
+- R3.11: Cleaned repository: moved prompt manual to `docs/reference/prompt_manual.md`, added `.gitattributes` and `.dockerignore`, replaced obsolete mandate/principal IDs with sandbox standards, and established `scripts/generate_test_report.py` as single source of truth for test counts and latencies.
 
 Test status:
-- Backend: 247/247 pytest tests passed in 25.41s
+- Backend: 254 passed, 4 skipped (258 total backend tests across 16 test files)
 - Red Team: 67/67 red-team tests passed in 4.67s
 - Concurrency / Transaction Audit: 15/15 passed in `tests/concurrency/test_transaction_audit.py`
 - Payment Rail Suite: 5/5 passed in `tests/unit/test_payment_rail.py`
@@ -30,4 +31,4 @@ Test status:
 - Static Analysis: ruff check clean (0 errors), ruff format clean, mypy app clean (0 errors across 38 source files)
 - Frontend: ESLint clean (0 errors), TypeScript clean (`npx tsc --noEmit`), Vitest passed (11/11 across 2 suites), Vite production build clean
 
-Next recommended action: Run final pre-flight verification gate, commit to main, and output final report.
+Next recommended action: Repository is clean and fully verified; all 4 items committed to main.

@@ -64,7 +64,7 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 ## Running Verification & Tests
 
 ```bash
-# Run all 247 backend tests (unit, integration, concurrency, and red-team)
+# Run all 258 backend tests (unit, integration, concurrency, and red-team)
 pytest -q
 
 # Run adversarial red-team suite only (67 threat catalog tests)
