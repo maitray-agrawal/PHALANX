@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     )
     postgres_port: int = Field(default=5433, description="PostgreSQL port (default host 5433)")
     app_port: int = Field(default=8000, description="Application HTTP server port")
+    payment_rail: str = Field(
+        default="paypal",
+        description="Active payment rail provider: 'paypal' or 'fake'",
+    )
     demo_mode: bool = Field(
         default=False,
         description="Demo mode: allows visitor role switching and simulated tampering",

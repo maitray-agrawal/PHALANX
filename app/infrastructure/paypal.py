@@ -7,7 +7,6 @@ using PayPal-Request-Id for idempotency.
 
 import json
 import os
-import uuid
 from pathlib import Path
 from typing import Any
 
@@ -126,18 +125,33 @@ class PayPalPaymentRailAdapter(PaymentRail):
     def pay(self, intent: TransactionIntent) -> PaymentResult:
         token = self._get_access_token()
         if not token:
-            # Fallback when credentials are unconfigured: simulate sanitized transaction
-            self._counter += 1
             return PaymentResult(
-                success=True,
-                transaction_id=f"sandbox_tx_{self._counter:08d}",
-                status="COMPLETED_SIMULATED",
-                details={"mode": "sandbox_unconfigured_fallback"},
+                success=False,
+                transaction_id="",
+                status="FAILED",
+                details={
+                    "error": (
+                        "PayPal credentials missing: PAYPAL_CLIENT_ID and "
+                        "PAYPAL_CLIENT_SECRET are required when PAYMENT_RAIL=paypal"
+                    )
+                },
             )
 
+        # Derive idempotent PayPal-Request-Id deterministically from intent digest
+        from app.application.services import compute_intent_digest
+
+        intent_digest = compute_intent_digest(
+            agent_id=intent.agent_id,
+            recipient_id=intent.recipient_id,
+            amount_minor=intent.money.amount_minor,
+            currency=intent.money.currency,
+            purpose=intent.purpose,
+            idempotency_key=intent.idempotency_key,
+        )
+        request_id = f"req_{intent_digest[:32]}"
+
         # Route A: Payouts API
-        batch_id = f"batch_{uuid.uuid4().hex[:12]}"
-        request_id = f"req_{uuid.uuid4().hex}"
+        batch_id = f"batch_{intent_digest[:16]}"
         amount_dollars = f"{intent.money.amount_minor / 100:.2f}"
         receiver_email = (
             intent.recipient_id if "@" in intent.recipient_id else "sandbox-vendor@example.com"
@@ -172,10 +186,20 @@ class PayPalPaymentRailAdapter(PaymentRail):
                 data = resp.json()
                 batch_header = data.get("batch_header", {})
                 payout_batch_id = batch_header.get("payout_batch_id", batch_id)
+                raw_batch_status = str(batch_header.get("batch_status", "")).upper()
+                if raw_batch_status == "SUCCESS":
+                    provider_state = "COMPLETED"
+                elif raw_batch_status in ("PENDING", "PROCESSING"):
+                    provider_state = "RECONCILE"
+                elif raw_batch_status in ("DENIED", "CANCELED"):
+                    provider_state = "FAILED"
+                else:
+                    provider_state = "RECONCILE"
+                data["provider_status"] = provider_state
                 return PaymentResult(
-                    success=True,
+                    success=(provider_state == "COMPLETED"),
                     transaction_id=payout_batch_id,
-                    status=batch_header.get("batch_status", "SUCCESS"),
+                    status=provider_state,
                     details=data,
                 )
             # If account lacks Payouts permissions (HTTP 403), trigger Orders v2 fallback
@@ -185,7 +209,7 @@ class PayPalPaymentRailAdapter(PaymentRail):
             return PaymentResult(
                 success=False,
                 transaction_id="",
-                status="PAYOUT_REJECTED",
+                status="FAILED",
                 details={
                     "error": self.normalize_error(resp.text),
                     "http_status": resp.status_code,
@@ -195,7 +219,7 @@ class PayPalPaymentRailAdapter(PaymentRail):
             return PaymentResult(
                 success=False,
                 transaction_id="",
-                status="PAYOUT_EXCEPTION",
+                status="RECONCILE",
                 details={"error": self.normalize_error(exc)},
             )
 
@@ -225,16 +249,22 @@ class PayPalPaymentRailAdapter(PaymentRail):
             if resp.status_code in (200, 201):
                 data = resp.json()
                 order_id = data.get("id", "")
+                has_buyer_action = any(
+                    link.get("rel") in ("payer-action", "approve") for link in data.get("links", [])
+                )
+                provider_state = "BUYER_APPROVAL_REQUIRED" if has_buyer_action else "ORDER_CREATED"
+                data["provider_status"] = provider_state
+                # Never label SETTLED before real sandbox capture
                 return PaymentResult(
                     success=True,
                     transaction_id=order_id,
-                    status="ORDER_CREATED_FALLBACK",
+                    status=provider_state,
                     details=data,
                 )
             return PaymentResult(
                 success=False,
                 transaction_id="",
-                status="FALLBACK_FAILED",
+                status="FAILED",
                 details={
                     "error": self.normalize_error(resp.text),
                     "http_status": resp.status_code,
@@ -244,7 +274,7 @@ class PayPalPaymentRailAdapter(PaymentRail):
             return PaymentResult(
                 success=False,
                 transaction_id="",
-                status="FALLBACK_EXCEPTION",
+                status="RECONCILE",
                 details={"error": self.normalize_error(exc)},
             )
 
@@ -252,10 +282,15 @@ class PayPalPaymentRailAdapter(PaymentRail):
         token = self._get_access_token()
         if not token:
             return PaymentResult(
-                success=True,
+                success=False,
                 transaction_id=transaction_id,
-                status="COMPLETED",
-                details={"lookup": "simulated"},
+                status="FAILED",
+                details={
+                    "error": (
+                        "PayPal credentials missing: PAYPAL_CLIENT_ID and "
+                        "PAYPAL_CLIENT_SECRET are required when PAYMENT_RAIL=paypal"
+                    )
+                },
             )
         url = f"{self._base_url}/v1/payments/payouts/{transaction_id}"
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
@@ -263,10 +298,18 @@ class PayPalPaymentRailAdapter(PaymentRail):
             resp = httpx.get(url, headers=headers, timeout=10.0)
             if resp.status_code == 200:
                 data = resp.json()
+                raw_batch_status = str(data.get("batch_header", {}).get("batch_status", "")).upper()
+                if raw_batch_status == "SUCCESS":
+                    provider_state = "COMPLETED"
+                elif raw_batch_status in ("DENIED", "CANCELED"):
+                    provider_state = "FAILED"
+                else:
+                    provider_state = "RECONCILE"
+                data["provider_status"] = provider_state
                 return PaymentResult(
-                    success=True,
+                    success=(provider_state == "COMPLETED"),
                     transaction_id=transaction_id,
-                    status=data.get("batch_header", {}).get("batch_status", "UNKNOWN"),
+                    status=provider_state,
                     details=data,
                 )
 
@@ -276,24 +319,54 @@ class PayPalPaymentRailAdapter(PaymentRail):
                 order_resp = httpx.get(order_url, headers=headers, timeout=10.0)
                 if order_resp.status_code == 200:
                     order_data = order_resp.json()
+                    raw_status = str(order_data.get("status", "CREATED")).upper()
+                    if raw_status == "COMPLETED":
+                        provider_state = "COMPLETED"
+                    elif raw_status == "APPROVED":
+                        provider_state = "APPROVED"
+                    elif raw_status == "CREATED":
+                        has_action = any(
+                            link_item.get("rel") in ("payer-action", "approve")
+                            for link_item in order_data.get("links", [])
+                        )
+                        provider_state = (
+                            "BUYER_APPROVAL_REQUIRED" if has_action else "ORDER_CREATED"
+                        )
+                    elif raw_status == "VOIDED":
+                        provider_state = "FAILED"
+                    else:
+                        provider_state = "RECONCILE"
+
+                    order_data["provider_status"] = provider_state
                     return PaymentResult(
-                        success=True,
+                        success=(
+                            provider_state
+                            in ("COMPLETED", "APPROVED", "ORDER_CREATED", "BUYER_APPROVAL_REQUIRED")
+                        ),
                         transaction_id=transaction_id,
-                        status=order_data.get("status", "CREATED"),
+                        status=provider_state,
                         details=order_data,
                     )
+
+            if resp.status_code >= 500:
+                return PaymentResult(
+                    success=False,
+                    transaction_id=transaction_id,
+                    status="RECONCILE",
+                    details={"error": self.normalize_error(resp.text)},
+                )
 
             return PaymentResult(
                 success=False,
                 transaction_id=transaction_id,
-                status="LOOKUP_FAILED",
+                status="FAILED",
                 details={"error": self.normalize_error(resp.text)},
             )
         except Exception as exc:
             return PaymentResult(
                 success=False,
                 transaction_id=transaction_id,
-                status="LOOKUP_ERROR",
+                status="RECONCILE",
                 details={"error": self.normalize_error(exc)},
             )
 

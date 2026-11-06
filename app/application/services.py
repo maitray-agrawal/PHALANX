@@ -713,7 +713,7 @@ class AuthorizationService:
                         or rail_res.details.get("http_status", 0) >= 500
                     )
 
-                    if rail_res.success:
+                    if rail_res.success and rail_res.status in ("COMPLETED", "SUCCESS"):
                         current_req_state = transition_request_state(
                             current_req_state, RequestState.SETTLED
                         )
@@ -728,7 +728,32 @@ class AuthorizationService:
                                     decision=final_decision.value,
                                     response_payload="",
                                 )
-                    elif is_ambiguous:
+                    elif rail_res.success and rail_res.status in (
+                        "ORDER_CREATED",
+                        "BUYER_APPROVAL_REQUIRED",
+                        "APPROVED",
+                        "CAPTURE_REQUESTED",
+                    ):
+                        # Never label an order SETTLED before a real sandbox capture
+                        current_req_state = transition_request_state(
+                            current_req_state,
+                            RequestState.RECONCILE,
+                            reason=f"Order awaiting sandbox capture: {rail_res.status}",
+                        )
+                        self._held_reservations[request_id] = {
+                            "agent_id": command.agent_id,
+                            "amount_minor": intent.money.amount_minor,
+                            "reservation_id": db_res_id,
+                            "intent": intent,
+                            "payout_id": payout_id,
+                            "intent_digest": intent_digest,
+                            "provider_status": rail_res.status,
+                        }
+                        if self._db_session_factory is not None and db_res_id:
+                            with self._db_session_factory() as session, session.begin():
+                                repo = BudgetRepository(session)
+                                repo.release_reservation(db_res_id, confirmed_failure=False)
+                    elif is_ambiguous or rail_res.status == "RECONCILE":
                         current_req_state = transition_request_state(
                             current_req_state,
                             RequestState.RECONCILE,
@@ -742,6 +767,7 @@ class AuthorizationService:
                             "intent": intent,
                             "payout_id": payout_id,
                             "intent_digest": intent_digest,
+                            "provider_status": rail_res.status,
                         }
                         if self._db_session_factory is not None and db_res_id:
                             with self._db_session_factory() as session, session.begin():
@@ -942,7 +968,7 @@ class AuthorizationService:
                             or rail_res.details.get("http_status", 0) >= 500
                         )
 
-                        if rail_res.success:
+                        if rail_res.success and rail_res.status in ("COMPLETED", "SUCCESS"):
                             current_req_state = transition_request_state(
                                 current_req_state, RequestState.SETTLED
                             )
@@ -957,7 +983,32 @@ class AuthorizationService:
                                         decision=final_decision.value,
                                         response_payload="",
                                     )
-                        elif is_ambiguous:
+                        elif rail_res.success and rail_res.status in (
+                            "ORDER_CREATED",
+                            "BUYER_APPROVAL_REQUIRED",
+                            "APPROVED",
+                            "CAPTURE_REQUESTED",
+                        ):
+                            # Never label an order SETTLED before a real sandbox capture
+                            current_req_state = transition_request_state(
+                                current_req_state,
+                                RequestState.RECONCILE,
+                                reason=f"Order awaiting sandbox capture: {rail_res.status}",
+                            )
+                            self._held_reservations[command.request_id] = {
+                                "agent_id": intent.agent_id,
+                                "amount_minor": intent.money.amount_minor,
+                                "reservation_id": db_res_id,
+                                "intent": intent,
+                                "payout_id": payout_id,
+                                "intent_digest": stored_digest,
+                                "provider_status": rail_res.status,
+                            }
+                            if self._db_session_factory is not None and db_res_id:
+                                with self._db_session_factory() as session, session.begin():
+                                    repo = BudgetRepository(session)
+                                    repo.release_reservation(db_res_id, confirmed_failure=False)
+                        elif is_ambiguous or rail_res.status == "RECONCILE":
                             current_req_state = transition_request_state(
                                 current_req_state,
                                 RequestState.RECONCILE,
@@ -970,6 +1021,7 @@ class AuthorizationService:
                                 "intent": intent,
                                 "payout_id": payout_id,
                                 "intent_digest": stored_digest,
+                                "provider_status": rail_res.status,
                             }
                             if self._db_session_factory is not None and db_res_id:
                                 with self._db_session_factory() as session, session.begin():

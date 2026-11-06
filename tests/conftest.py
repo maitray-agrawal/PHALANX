@@ -21,6 +21,8 @@ from app.infrastructure.tokens import Role, create_role_token
 from app.main import create_app
 
 # Set valid secret key, admin token, and webhook ID for deterministic test suite execution
+settings.environment = "test"
+settings.payment_rail = "fake"
 settings.secret_key = "test-secret-key-at-least-32-bytes-long-for-tests-1234"
 settings.admin_token = "test-admin-token-at-least-24-characters"
 settings.paypal_webhook_id = "WH-SANDBOX-TEST-12345"

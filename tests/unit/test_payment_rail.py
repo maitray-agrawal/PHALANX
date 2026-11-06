@@ -48,8 +48,9 @@ def test_fake_payment_rail_simulates_failure() -> None:
     assert "simulated_rail_failure" in rail.normalize_error(res.details)
 
 
-def test_paypal_adapter_unconfigured_fallback() -> None:
+def test_paypal_adapter_unconfigured_credentials_rejected(monkeypatch) -> None:
     adapter = PayPalPaymentRailAdapter()
+    monkeypatch.setattr(adapter, "_get_access_token", lambda: None)
     assert isinstance(adapter, PaymentRail)
 
     intent = TransactionIntent(
@@ -61,25 +62,21 @@ def test_paypal_adapter_unconfigured_fallback() -> None:
         occurred_at_utc=datetime.now(UTC),
     )
 
-    # When live env is unconfigured in local test runner, adapter safely uses fallback
+    # When live env is unconfigured, adapter returns explicit error (no silent simulation)
     res = adapter.pay(intent)
-    assert res.success is True
-    assert res.transaction_id != ""
-    assert "sandbox" in res.transaction_id or res.status in (
-        "COMPLETED_SIMULATED",
-        "SUCCESS",
-        "ORDER_CREATED_FALLBACK",
-    )
+    assert res.success is False
+    assert res.transaction_id == ""
+    assert res.status == "FAILED"
+    assert "credentials missing" in res.details.get("error", "").lower()
 
 
 def test_paypal_adapter_lookup_simulation_when_no_token(monkeypatch) -> None:
     adapter = PayPalPaymentRailAdapter()
     monkeypatch.setattr(adapter, "_get_access_token", lambda: "")
     res = adapter.lookup("mock-tx-12345")
-    assert res.success is True
-    assert res.status == "COMPLETED"
-    assert res.transaction_id == "mock-tx-12345"
-    assert res.details == {"lookup": "simulated"}
+    assert res.success is False
+    assert res.status == "FAILED"
+    assert "credentials missing" in res.details.get("error", "").lower()
 
 
 def test_paypal_adapter_lookup_order_fallback_mocked(monkeypatch) -> None:

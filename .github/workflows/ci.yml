@@ -10,6 +10,20 @@ jobs:
   backend-checks:
     name: Backend Lint, Types & Tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: phalanx_app
+          POSTGRES_PASSWORD: test_ci_password_12345
+          POSTGRES_DB: phalanx_db
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
@@ -36,11 +50,27 @@ jobs:
         run: |
           mypy app
 
+      - name: Run Boot Sequence
+        env:
+          DATABASE_URL: postgresql+psycopg://phalanx_app:test_ci_password_12345@localhost:5433/phalanx_db
+          POSTGRES_PASSWORD: test_ci_password_12345
+          SECRET_KEY: test-secret-key-at-least-32-bytes-long-ci-12345
+        run: |
+          python scripts/boot.py
+
       - name: Run Test Suite
+        env:
+          DATABASE_URL: postgresql+psycopg://phalanx_app:test_ci_password_12345@localhost:5433/phalanx_db
+          POSTGRES_PASSWORD: test_ci_password_12345
+          SECRET_KEY: test-secret-key-at-least-32-bytes-long-ci-12345
         run: |
           pytest -q
 
       - name: Run Red Team Adversarial Tests
+        env:
+          DATABASE_URL: postgresql+psycopg://phalanx_app:test_ci_password_12345@localhost:5433/phalanx_db
+          POSTGRES_PASSWORD: test_ci_password_12345
+          SECRET_KEY: test-secret-key-at-least-32-bytes-long-ci-12345
         run: |
           pytest -q -m redteam
 

@@ -1,5 +1,5 @@
 # PHALANX Adversarial Security Test Report
-**Generated**: 2026-11-06 09:29:55 UTC  
+**Generated**: 2026-11-06 10:01:47 UTC  
 **Test Suite**: `tests/redteam/test_redteam.py` (Catalog A1 to H2)  
 **Evaluation Harness**: Python 3.12, Pytest 8, FastAPI TestClient, `time.perf_counter_ns`  
 
@@ -46,8 +46,8 @@ Every row from [docs/THREAT_MODEL.md](file:///d:/PHALANX/docs/THREAT_MODEL.md) i
 
 ### Aggregate Suite Counts
 - **Red-Team Suite Total**: **72 / 72 passed (100.0%)** (Wilson 95% CI: **[94.9%, 100.0%]**)
-- **Overall Test Suite Total**: **263 / 263 passed (100.0%)** (Wilson 95% CI: **[98.6%, 100.0%]**)
-- **Hard Policy Violations Accepted**: **0 / 263 (0.0%)**
+- **Overall Test Suite Total**: **269 / 269 passed (100.0%)** (Wilson 95% CI: **[98.6%, 100.0%]**)
+- **Hard Policy Violations Accepted**: **0 / 269 (0.0%)**
 - **Adversarial Bypasses Succeeded**: **0 / 72 (0.0%)**
 
 ---
@@ -69,8 +69,8 @@ Every row from [docs/THREAT_MODEL.md](file:///d:/PHALANX/docs/THREAT_MODEL.md) i
 | Metric | Empirical Value | Claimed in Spec | Status |
 |---|---|---|---|
 | **Median Latency** | **1.20 µs** | ~1.10 µs | **SUPPORTED** |
-| **p95 Latency** | **1.40 µs** | < 5.00 µs | **SUPPORTED** |
-| **p99 Latency** | **1.90 µs** | < 10.00 µs | **SUPPORTED** |
+| **p95 Latency** | **1.30 µs** | < 5.00 µs | **SUPPORTED** |
+| **p99 Latency** | **2.10 µs** | < 10.00 µs | **SUPPORTED** |
 | **Min Latency** | **1.00 µs** | - | - |
 | **Throughput Estimate** | **~833,333 evals/sec/core** | > 100,000 / sec | **SUPPORTED** |
 

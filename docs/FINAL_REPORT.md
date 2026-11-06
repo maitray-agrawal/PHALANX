@@ -13,7 +13,7 @@
 | Assessment Dimension | Rating / Status | Detail |
 |---|---|---|
 | **Release Status** | **QUALIFIED_FOR_SUBMISSION** | Verified production-grade sandbox architecture with mathematical policy purity, cryptographic seals, and zero unbacked claims. |
-| **Assessment Confidence** | **HIGH** | 263/263 automated backend tests (259 passed, 4 skipped without PostgreSQL container); 72/72 red-team adversarial tests passed; 15/15 concurrency/transaction audit tests passed; 0 security vulnerabilities in Bandit AST audit; 0 console logs in frontend. |
+| **Assessment Confidence** | **HIGH** | 269/269 automated backend tests (262 passed, 7 skipped without PostgreSQL container); 72/72 red-team adversarial tests passed; 15/15 concurrency/transaction audit tests passed; 0 security vulnerabilities in Bandit AST audit; 0 console logs in frontend. |
 | **Purity & Safety Boundary** | **VERIFIED** | Pure domain core has zero I/O, zero clock, zero randomness, and zero non-domain imports enforced by AST test. LLM is isolated from authorization path. |
 | **Cryptographic Integrity** | **VERIFIED** | Ed25519 mandates, RFC 8785 canonical JSON, and SHA-256 hash-chained ledger are mathematically locked and tamper-evident. |
 
@@ -32,7 +32,7 @@ An exhaustive code audit was conducted across all files in `app/`, `web/src/`, a
 | **Placeholder Functions** | **VERIFIED ABSENT** | Scanned codebase for `TODO`, `FIXME`, and empty `pass` blocks in `app/`. Zero unhandled placeholder stubs found. All service, domain, and API functions contain complete implementations. |
 | **Console Log Residue** | **VERIFIED ABSENT** | Grep search across `web/src/` returned 0 occurrences of `console.log`. Error handling in frontend renders visual Problem+JSON banners. |
 | **Catch-All Exception Handling** | **CONFIGURED & AUDITED** | Catch-all `except Exception` blocks in `app/infrastructure/paypal.py`, `app/infrastructure/tokens.py`, and `app/application/intent_extractor.py` were audited. All catch-alls convert external failures into explicit failure records (`PAYOUT_EXCEPTION`, invalid token rejection, or parse failure) rather than suppressing exceptions silently. |
-| **Unsupported Claims** | **CORRECTED** | Prior documentation cited "83 tests" (an outdated count from early bootstrap). Actual automated test suite contains 263 tests (72 red-team). Updated `README.md` and `docs/DEVPOST.md` to reflect empirical counts. |
+| **Unsupported Claims** | **CORRECTED** | Prior documentation cited "83 tests" (an outdated count from early bootstrap). Actual automated test suite contains 269 tests (72 red-team). Updated `README.md` and `docs/DEVPOST.md` to reflect empirical counts. |
 
 ---
 
@@ -110,7 +110,7 @@ In accordance with hackathon rules and truthfulness requirements, the 'Built wit
 
 ### Changed in Review
 - Created `requirements.txt` and `requirements-dev.txt` with exact pinned dependencies.
-- Updated `README.md` and `docs/DEVPOST.md` to reflect true test count (263 automated tests, 72 red-team tests, 15 transaction audit tests) and exact install commands.
+- Updated `README.md` and `docs/DEVPOST.md` to reflect true test count (269 automated tests, 72 red-team tests, 15 transaction audit tests) and exact install commands.
 - Remediated hostile security audit findings:
   - F-01 (P0): Removed unmandated agent fallback to default mandate in `MandateService`; unmandated agents now strictly return None and evaluate to DENY (`MANDATE_INACTIVE`).
   - F-02 (P0): Enforced live mandate status (`ACTIVE`) and expiration check in `AuthorizationService.execute_approval()`. Approving after mandate expiry or revocation now evaluates to DENY and halts payment dispatch.

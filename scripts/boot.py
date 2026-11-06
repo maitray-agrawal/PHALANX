@@ -10,7 +10,7 @@ Actions:
 import json
 import logging
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,7 +18,6 @@ from sqlalchemy.orm import Session
 from app.application.services import compute_intent_digest
 from app.domain.canonical_json import canonical_json_bytes
 from app.infrastructure.database import get_engine
-from app.infrastructure.db_schema import create_schema
 from app.infrastructure.models import (
     AgentBudgetModel,
     ApprovalStatus,
@@ -44,12 +43,23 @@ def run_boot() -> bool:
 
     engine = get_engine()
 
-    # Step 1: Database schema & triggers via Alembic migrations
+    # Step 1: Database connectivity verification & schema migrations via Alembic
+    from sqlalchemy import text
+
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as db_err:
+        logger.error("Boot aborted: database connection failure: %s", db_err)
+        return False
+
     try:
         from pathlib import Path
 
         from alembic import command
         from alembic.config import Config
+        from alembic.migration import MigrationContext
+        from alembic.script import ScriptDirectory
         from app.infrastructure.db_schema import install_ledger_triggers
 
         ini_candidates = [
@@ -58,38 +68,45 @@ def run_boot() -> bool:
             Path("/app/alembic.ini"),
         ]
         ini_path = next((p for p in ini_candidates if p.exists()), None)
-        applied = False
-        if ini_path:
-            logger.info("Applying database migrations via Alembic (%s)...", ini_path)
-            try:
-                alembic_cfg = Config(str(ini_path))
-                alembic_cfg.set_main_option("sqlalchemy.url", str(engine.url))
-                alembic_cfg.attributes["connection"] = engine
-                command.upgrade(alembic_cfg, "head")
-                logger.info("Alembic migrations successfully applied to head.")
-                applied = True
-            except Exception as alembic_err:
-                logger.warning(
-                    "Alembic upgrade encountered error: %s. Falling back to metadata schema.",
-                    alembic_err,
-                )
+        if not ini_path:
+            logger.error("Boot aborted: alembic.ini configuration file not found")
+            return False
 
-        if not applied:
-            logger.info("Applying database schema via fallback metadata...")
-            create_schema(engine)
-            logger.info("Database schema applied via fallback metadata.")
+        logger.info("Applying database migrations via Alembic (%s)...", ini_path)
+        alembic_cfg = Config(str(ini_path))
+        alembic_cfg.set_main_option("sqlalchemy.url", str(engine.url))
+        alembic_cfg.attributes["connection"] = engine
+        command.upgrade(alembic_cfg, "head")
+        logger.info("Alembic migrations successfully applied to head.")
+
+        # Verify the migration revision matches the declarative models
+        script = ScriptDirectory.from_config(alembic_cfg)
+        head_rev = script.get_current_head()
+        with engine.connect() as conn:
+            m_context = MigrationContext.configure(conn)
+            current_rev = m_context.get_current_revision()
+
+        if current_rev != head_rev:
+            logger.error(
+                "Boot aborted: Alembic revision mismatch (current db: %s, head: %s)",
+                current_rev,
+                head_rev,
+            )
+            return False
+        logger.info("Verified database revision '%s' matches migration head.", current_rev)
 
         install_ledger_triggers(engine)
-        logger.info("Database schema and triggers successfully verified/created.")
+        logger.info("Database schema and append-only triggers successfully verified/created.")
     except Exception as exc:
-        logger.warning(
-            "Database unreachable or schema creation failed: %s. Using runtime fallbacks.",
-            exc,
-        )
-        return True
+        logger.error("Boot aborted: migration or schema initialization failure: %s", exc)
+        return False
 
-    # Step 2: Seed initial AgentBudget if not present
+    # Step 2: Seed initial AgentBudget if missing
     now_utc = datetime.now(UTC)
+    valid_until_mar_2027 = max(
+        now_utc + timedelta(days=365),
+        datetime(2027, 3, 31, 23, 59, 59, tzinfo=UTC),
+    )
     try:
         with Session(engine) as session:
             existing_budget = session.scalar(
@@ -113,7 +130,7 @@ def run_boot() -> bool:
             else:
                 logger.info("Demo budget for agent-auto-1 already exists (idempotent skip).")
 
-            # Step 3: Seed Genesis ledger block if empty
+            # Step 3: Seed Genesis ledger block if missing
             existing_event = session.scalar(select(LedgerEventModel).limit(1))
             if not existing_event:
                 logger.info("Seeding Genesis ledger block...")
@@ -122,6 +139,7 @@ def run_boot() -> bool:
                     "mandate_id": "mandate_default_sandbox",
                     "description": "PHALANX Autonomous Financial Governance Genesis",
                     "timestamp": now_utc.isoformat(),
+                    "valid_until": valid_until_mar_2027.isoformat(),
                 }
                 genesis_bytes = canonical_json_bytes(genesis_payload)
                 import hashlib
@@ -147,7 +165,7 @@ def run_boot() -> bool:
             else:
                 logger.info("Ledger already initialized (idempotent skip).")
 
-            # Step 4: Seed pending step-up request for Scene 2 demo
+            # Step 4: Seed pending step-up request for Scene 2 demo if missing
             existing_stepup = session.scalar(
                 select(StepUpApprovalModel).where(
                     StepUpApprovalModel.request_id == "req_stepup_1001"
@@ -171,7 +189,6 @@ def run_boot() -> bool:
                     purpose="Equipment invoice review",
                     idempotency_key="stepup_seed_1001",
                 )
-                from datetime import timedelta
 
                 stepup = StepUpApprovalModel(
                     request_id="req_stepup_1001",
@@ -179,7 +196,7 @@ def run_boot() -> bool:
                     expected_digest=digest,
                     intent_payload=json.dumps(intent_payload),
                     status=ApprovalStatus.PENDING.value,
-                    expires_at_utc=now_utc + timedelta(days=30),
+                    expires_at_utc=valid_until_mar_2027,
                     created_at_utc=now_utc,
                     updated_at_utc=now_utc,
                 )
@@ -190,7 +207,8 @@ def run_boot() -> bool:
                 logger.info("Demo step-up request already present (idempotent skip).")
 
     except Exception as exc:
-        logger.warning("Error during data seeding: %s (continuing boot).", exc)
+        logger.error("Boot aborted: error during data seeding: %s", exc)
+        return False
 
     logger.info("PHALANX boot sequence complete. Ready to serve traffic.")
     return True

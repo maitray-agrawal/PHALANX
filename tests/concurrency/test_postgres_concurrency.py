@@ -303,3 +303,234 @@ def test_postgres_reconciliation_lifecycle(pg_session_factory):
         budget = session.scalar(stmt)
         assert budget.reserved_minor == 0
         assert budget.spent_minor == amount  # Only first tx is spent
+
+
+def test_postgres_restart_persistence_budgets_idempotency_approvals_ledger(pg_session_factory):
+    """Verify persistence of budgets, idempotency, approvals, and ledger across service restart."""
+    from app.application.dtos import AuthorizeTransactionCommand
+    from app.application.services import AuthorizationService, MandateService
+    from app.domain.models import DecisionOutcome
+    from app.infrastructure.clock import SystemUtcClock
+    from app.infrastructure.db_ledger_repo import DatabaseLedgerAdapter
+    from app.infrastructure.paypal import FakePaymentRail
+
+    clock = SystemUtcClock()
+    mandate_svc = MandateService(clock=clock)
+    ledger_1 = DatabaseLedgerAdapter(session_factory=pg_session_factory)
+    rail_1 = FakePaymentRail()
+
+    service_1 = AuthorizationService(
+        clock=clock,
+        ledger=ledger_1,
+        mandate_service=mandate_svc,
+        payment_rail=rail_1,
+        db_session_factory=pg_session_factory,
+    )
+
+    agent_id = f"agent-persist-{uuid.uuid4().hex[:8]}"
+    mandate = mandate_svc.get_active_mandate_for_agent("agent-auto-1")
+    assert mandate is not None
+
+    with pg_session_factory() as session, session.begin():
+        repo = BudgetRepository(session)
+        repo.get_or_create_budget(
+            agent_id=agent_id,
+            mandate_id=mandate.mandate_id,
+            currency="USD",
+            allocated_minor=100_000,
+        )
+
+    # 1. Authorize transaction on instance 1 ($25.00 -> 2,500 minor units)
+    idem_key = f"idem-persist-{uuid.uuid4().hex}"
+    cmd = AuthorizeTransactionCommand(
+        agent_id=agent_id,
+        recipient_id="vendor-persist-1",
+        amount_minor=2_500,
+        currency="USD",
+        purpose="Persistent subscription payment",
+        idempotency_key=idem_key,
+    )
+    resp_1 = service_1.authorize(cmd)
+    assert resp_1.decision == DecisionOutcome.ALLOW
+    assert resp_1.event_id != ""
+
+    # 2. Simulate complete service shutdown & restart (new instance, new ledger adapter)
+    del service_1
+    del ledger_1
+
+    ledger_2 = DatabaseLedgerAdapter(session_factory=pg_session_factory)
+    service_2 = AuthorizationService(
+        clock=clock,
+        ledger=ledger_2,
+        mandate_service=mandate_svc,
+        payment_rail=FakePaymentRail(),
+        db_session_factory=pg_session_factory,
+    )
+
+    # Verify budget spent persisted
+    assert service_2.get_lifetime_spent(agent_id) == 2_500
+
+    # Verify idempotency decision replay persisted
+    resp_replay = service_2.authorize(cmd)
+    assert resp_replay.decision == DecisionOutcome.ALLOW
+    assert "Idempotency match" in resp_replay.reasons[0]
+
+    # Verify ledger integrity persisted
+    is_valid, msg = ledger_2.verify_chain()
+    assert is_valid is True
+    assert "events verified" in msg
+
+
+def test_postgres_two_service_instances_sharing_budget(pg_session_factory):
+    """Verify that two independent service instances share a single authoritative budget."""
+    from app.application.dtos import AuthorizeTransactionCommand
+    from app.application.services import AuthorizationService, MandateService
+    from app.domain.models import DecisionOutcome
+    from app.infrastructure.clock import SystemUtcClock
+    from app.infrastructure.db_ledger_repo import DatabaseLedgerAdapter
+    from app.infrastructure.paypal import FakePaymentRail
+
+    clock = SystemUtcClock()
+    mandate_svc = MandateService(clock=clock)
+    agent_id = f"agent-share-{uuid.uuid4().hex[:8]}"
+    mandate = mandate_svc.get_active_mandate_for_agent("agent-auto-1")
+    assert mandate is not None
+
+    # Seed budget with $100.00 (10,000 minor units)
+    with pg_session_factory() as session, session.begin():
+        repo = BudgetRepository(session)
+        repo.get_or_create_budget(
+            agent_id=agent_id,
+            mandate_id=mandate.mandate_id,
+            currency="USD",
+            allocated_minor=10_000,
+        )
+
+    # Spin up two concurrent service instances connected to the same PostgreSQL DB
+    instance_a = AuthorizationService(
+        clock=clock,
+        ledger=DatabaseLedgerAdapter(session_factory=pg_session_factory),
+        mandate_service=mandate_svc,
+        payment_rail=FakePaymentRail(),
+        db_session_factory=pg_session_factory,
+    )
+    instance_b = AuthorizationService(
+        clock=clock,
+        ledger=DatabaseLedgerAdapter(session_factory=pg_session_factory),
+        mandate_service=mandate_svc,
+        payment_rail=FakePaymentRail(),
+        db_session_factory=pg_session_factory,
+    )
+
+    # Instance A spends $60.00 (6,000 minor units) -> ALLOW
+    cmd_a = AuthorizeTransactionCommand(
+        agent_id=agent_id,
+        recipient_id="vendor-share-a",
+        amount_minor=6_000,
+        currency="USD",
+        purpose="Instance A spend",
+        idempotency_key=f"share-a-{uuid.uuid4().hex}",
+    )
+    res_a = instance_a.authorize(cmd_a)
+    assert res_a.decision == DecisionOutcome.ALLOW
+
+    # Instance B immediately observes the spent budget
+    assert instance_b.get_lifetime_spent(agent_id) == 6_000
+
+    # Instance B attempts to spend $50.00 (60 + 50 = 110 > 100) -> DENY
+    cmd_b_fail = AuthorizeTransactionCommand(
+        agent_id=agent_id,
+        recipient_id="vendor-share-b",
+        amount_minor=5_000,
+        currency="USD",
+        purpose="Instance B overspend",
+        idempotency_key=f"share-b-fail-{uuid.uuid4().hex}",
+    )
+    res_b_fail = instance_b.authorize(cmd_b_fail)
+    assert res_b_fail.decision == DecisionOutcome.DENY
+
+    # Instance B spends the exact remaining $40.00 (4,000 minor units) -> ALLOW
+    cmd_b_ok = AuthorizeTransactionCommand(
+        agent_id=agent_id,
+        recipient_id="vendor-share-b",
+        amount_minor=4_000,
+        currency="USD",
+        purpose="Instance B exact spend",
+        idempotency_key=f"share-b-ok-{uuid.uuid4().hex}",
+    )
+    res_b_ok = instance_b.authorize(cmd_b_ok)
+    assert res_b_ok.decision == DecisionOutcome.ALLOW
+
+    # Both instances reflect total spent of exactly 10,000 minor units
+    assert instance_a.get_lifetime_spent(agent_id) == 10_000
+    assert instance_b.get_lifetime_spent(agent_id) == 10_000
+
+
+def test_postgres_50_parallel_requests_on_one_budget(pg_session_factory):
+    """Verify 50 parallel requests on one budget strictly respect database constraints."""
+    from app.application.dtos import AuthorizeTransactionCommand
+    from app.application.services import AuthorizationService, MandateService
+    from app.domain.models import DecisionOutcome
+    from app.infrastructure.clock import SystemUtcClock
+    from app.infrastructure.db_ledger_repo import DatabaseLedgerAdapter
+    from app.infrastructure.paypal import FakePaymentRail
+
+    clock = SystemUtcClock()
+    mandate_svc = MandateService(clock=clock)
+    agent_id = f"agent-parallel-{uuid.uuid4().hex[:8]}"
+    mandate = mandate_svc.get_active_mandate_for_agent("agent-auto-1")
+    assert mandate is not None
+
+    # Total allocated budget: $500.00 (50,000 minor units)
+    # Each request: $20.00 (2,000 minor units)
+    # Exactly 25 requests should succeed (25 * 2,000 = 50,000)
+    # The remaining 25 requests must be DENIED (LIFETIME_BUDGET_EXCEEDED)
+    with pg_session_factory() as session, session.begin():
+        repo = BudgetRepository(session)
+        repo.get_or_create_budget(
+            agent_id=agent_id,
+            mandate_id=mandate.mandate_id,
+            currency="USD",
+            allocated_minor=50_000,
+        )
+
+    service = AuthorizationService(
+        clock=clock,
+        ledger=DatabaseLedgerAdapter(session_factory=pg_session_factory),
+        mandate_service=mandate_svc,
+        payment_rail=FakePaymentRail(),
+        db_session_factory=pg_session_factory,
+    )
+
+    decisions: list[DecisionOutcome] = []
+
+    def run_auth(index: int) -> DecisionOutcome:
+        cmd = AuthorizeTransactionCommand(
+            agent_id=agent_id,
+            recipient_id=f"vendor-p-{index}",
+            amount_minor=2_000,
+            currency="USD",
+            purpose=f"Parallel request {index}",
+            idempotency_key=f"parallel-req-{index}-{uuid.uuid4().hex}",
+        )
+        resp = service.authorize(cmd)
+        return resp.decision
+
+    with ThreadPoolExecutor(max_workers=50) as executor:
+        futures = [executor.submit(run_auth, i) for i in range(50)]
+        for f in futures:
+            decisions.append(f.result())
+
+    allowed_count = sum(1 for d in decisions if d == DecisionOutcome.ALLOW)
+    denied_count = sum(1 for d in decisions if d == DecisionOutcome.DENY)
+
+    assert allowed_count == 25, f"Expected exactly 25 ALLOW, got {allowed_count}"
+    assert denied_count == 25, f"Expected exactly 25 DENY, got {denied_count}"
+
+    with pg_session_factory() as session:
+        stmt = select(AgentBudgetModel).where(AgentBudgetModel.agent_id == agent_id)
+        budget = session.scalar(stmt)
+        assert budget is not None
+        assert budget.spent_minor == 50_000
+        assert budget.reserved_minor == 0
+        assert budget.available_minor == 0
