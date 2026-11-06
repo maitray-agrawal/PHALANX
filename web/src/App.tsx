@@ -1,788 +1,494 @@
-import React, { useState, useEffect, useCallback, useId } from "react";
-import type { ColDef } from "ag-grid-community";
-import { ModuleRegistry, AllCommunityModule } from "ag-grid-community";
-import { AlertTriangle } from "lucide-react";
+import React, { useState, useEffect } from "react";
 import {
-  api,
-  type AuthorizationResponse,
-  type ExtractedIntent,
-  type PendingStepUpItem,
-  type LedgerEventItem,
-  type MandateResponse,
-  ApiError,
-} from "./api";
-import { PhalanxHeaderBrand } from "./components/PhalanxLogo";
-import { ThemeSwitcher } from "./components/ThemeSwitcher";
-import { CockpitOverview } from "./screens/CockpitOverview";
-import { RequestConsole } from "./screens/RequestConsole";
-import { ApprovalQueue } from "./screens/ApprovalQueue";
-import { AuditLedger } from "./screens/AuditLedger";
-import { MandateMeter } from "./screens/MandateMeter";
-import { ReconciliationScreen } from "./screens/ReconciliationScreen";
-import { SecurityCenter } from "./screens/SecurityCenter";
-import { DeveloperConsole } from "./screens/DeveloperConsole";
+  Shield,
+  Home,
+  Send,
+  CheckSquare,
+  Activity,
+  Menu,
+  X,
+  User,
+  ExternalLink,
+  Lock,
+  Zap,
+  Moon,
+  Sun,
+} from "lucide-react";
+import { api } from "./api";
+import { PillButton } from "./components/PillButton";
+import { Toast } from "./components/Toast";
+import { HomeScreen } from "./screens/HomeScreen";
+import { PayScreen } from "./screens/PayScreen";
+import { ApprovalsScreen } from "./screens/ApprovalsScreen";
+import { ActivityScreen } from "./screens/ActivityScreen";
+import { MandatesScreen } from "./screens/MandatesScreen";
+import { AttackLabScreen } from "./screens/AttackLabScreen";
+import { ReceiptVerifyScreen } from "./screens/ReceiptVerifyScreen";
 
-ModuleRegistry.registerModules([AllCommunityModule]);
-
-export type Role = "principal" | "agent" | "approver" | "auditor";
-export type ActiveTab =
-  | "overview"
-  | "console"
-  | "approvals"
-  | "ledger"
-  | "mandate"
-  | "reconcile"
-  | "security"
-  | "developer";
-
-interface ChatMessage {
-  id: string;
-  sender: "agent" | "system";
-  text: string;
-  timestamp: string;
-  intent?: ExtractedIntent | null;
-  heuristicFlagged?: boolean;
-}
-
-const INITIAL_MANDATE: MandateResponse = {
-  mandate_id: "mandate_default_sandbox",
-  version: 1,
-  principal_id: "principal_treasury",
-  agent_id: "agent-auto-1",
-  single_limit_minor: 500000,
-  instant_threshold_minor: 50000,
-  lifetime_budget_minor: 2500000,
-  spent_budget_minor: 0,
-  remaining_budget_minor: 2500000,
-  currency: "USD",
-  allowed_payees: ["vendor-paypal-sandbox-1", "vendor-aws-cloud"],
-  allowed_purposes: ["subscription", "hosting", "equipment", "renewal"],
-  valid_from_utc: "2026-10-22T00:00:00Z",
-  valid_until_utc: "2027-10-22T00:00:00Z",
-  status: "ACTIVE",
-  key_id: "key_7b4d91e0",
-  signature:
-    "ed25519:e4a9192fc88019b782c0bba9980d452093847291a84f3299c8201a88bbfe1009832716a504b2a",
-};
-
-const INITIAL_STEP_UPS: PendingStepUpItem[] = [
-  {
-    request_id: "req_stepup_1001",
-    agent_id: "agent-auto-1",
-    recipient_id: "vendor-paypal-sandbox-1",
-    amount_minor: 120000,
-    currency: "USD",
-    purpose: "Equipment invoice review",
-    intent_digest: "7a89f302b1c4e8590d9a62310188ef4a9b7e12f0a1d401ec8891000b0188992a",
-    created_at_utc: "2026-10-22T12:05:14Z",
-    status: "PENDING",
-  },
-];
-
-const INITIAL_LEDGER: LedgerEventItem[] = [
-  {
-    event_id: "evt_000001_8a12f901",
-    event_type: "AUTHORIZATION_EVALUATED",
-    prev_hash: "0000000000000000000000000000000000000000000000000000000000000000",
-    event_hash: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    payload: {
-      agent_id: "agent-auto-1",
-      recipient_id: "vendor-paypal-sandbox-1",
-      amount_minor: 2500,
-      currency: "USD",
-      decision: "ALLOW",
-      purpose: "Monthly subscription renewal",
-      recorded_at_utc: "2026-10-22T12:00:00Z",
-    },
-  },
-  {
-    event_id: "evt_000002_4b98cf12",
-    event_type: "AUTHORIZATION_EVALUATED",
-    prev_hash: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    event_hash: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-    payload: {
-      agent_id: "agent-auto-1",
-      recipient_id: "vendor-paypal-sandbox-1",
-      amount_minor: 100000,
-      currency: "USD",
-      decision: "STEP_UP",
-      purpose: "Equipment invoice review",
-      recorded_at_utc: "2026-10-22T12:05:14Z",
-    },
-  },
-  {
-    event_id: "evt_000003_1e77aa99",
-    event_type: "AUTHORIZATION_EVALUATED",
-    prev_hash: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-    event_hash: "9a21b36d2c41808e01bb364402a11b81604a558e22c9842a59e19cc17a80ddf1",
-    payload: {
-      agent_id: "rogue-agent-99",
-      recipient_id: "external-unknown-wallet",
-      amount_minor: 9500000,
-      currency: "USD",
-      decision: "DENY",
-      purpose: "Unauthorized bulk withdrawal attempt",
-      recorded_at_utc: "2026-10-22T12:12:30Z",
-    },
-  },
-];
+export type RoleType = "APPROVER" | "AGENT" | "PRINCIPAL" | "AUDITOR";
 
 export const App: React.FC = () => {
-  const [role, setRole] = useState<Role>("principal");
+  const [activeTab, setActiveTab] = useState<string>("home");
+  const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
+  const [currentRole, setCurrentRole] = useState<RoleType>("APPROVER");
   const [token, setToken] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<ActiveTab>("console");
-  const [globalError, setGlobalError] = useState<string | null>(null);
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(true);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
 
-  // Chat and Intent Console State
-  const [chatInput, setChatInput] = useState<string>(
-    "Pay $25.00 for monthly subscription renewal to vendor-paypal-sandbox-1"
-  );
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-    {
-      id: "msg_init_01",
-      sender: "system",
-      text: "PHALANX Autonomous Assistant active. Propose a financial payment intent below. Untrusted text is safely wrapped in delimiters before extraction.",
-      timestamp: "12:00:00 UTC",
-    },
-  ]);
-  const [isExtracting, setIsExtracting] = useState<boolean>(false);
-  const [extractedIntent, setExtractedIntent] = useState<ExtractedIntent | null>({
-    agent_id: "agent-auto-1",
-    recipient_id: "vendor-paypal-sandbox-1",
-    amount_minor: 2500,
-    currency: "USD",
-    purpose: "Monthly subscription renewal",
-    idempotency_key: "intent_sub_001",
-    anomaly_signal: null,
-  });
-  const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
-  const [latestDecision, setLatestDecision] = useState<AuthorizationResponse | null>(null);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [toasts, setToasts] = useState<Array<{ id: string; message: string; type: "success" | "error" | "info" }>>([]);
 
-  // Step-Up Approvals State
-  const [stepUps, setStepUps] = useState<PendingStepUpItem[]>(INITIAL_STEP_UPS);
-  const [isLoadingApprovals, setIsLoadingApprovals] = useState<boolean>(false);
-  const [tamperedItemMap, setTamperedItemMap] = useState<Record<string, boolean>>({});
-  const [approvingRequestId, setApprovingRequestId] = useState<string | null>(null);
+  // Apply theme to document element
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
-  // Audit Ledger State
-  const [ledgerEvents, setLedgerEvents] = useState<LedgerEventItem[]>(INITIAL_LEDGER);
-  const [isLoadingLedger, setIsLoadingLedger] = useState<boolean>(false);
-  const [isVerifyingChain, setIsVerifyingChain] = useState<boolean>(false);
-  const [chainIntegrity, setChainIntegrity] = useState<{
-    isValid: boolean;
-    message: string;
-    brokenIndex: number | null;
-  }>({
-    isValid: true,
-    message: "Cryptographic chain verified (3/3 links intact)",
-    brokenIndex: null,
-  });
+  // Handle URL hash routing
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace("#", "");
+      if (hash.startsWith("receipt/")) {
+        setSelectedReceiptId(hash.replace("receipt/", ""));
+        setActiveTab("receipt");
+      } else if (hash) {
+        setActiveTab(hash);
+      }
+    };
 
-  // Mandate State
-  const [mandate, setMandate] = useState<MandateResponse | null>(INITIAL_MANDATE);
-  const [isLoadingMandate, setIsLoadingMandate] = useState<boolean>(false);
-
-  // Reconciliation State (F6 Ambiguous Rail Lifecycle)
-  const [reconcileItems, setReconcileItems] = useState<
-    Array<{
-      request_id: string;
-      agent_id: string;
-      amount_minor: number;
-      currency: string;
-      payout_id?: string | null;
-      state: string;
-    }>
-  >([
-    {
-      request_id: "req_ambiguous_7701",
-      agent_id: "agent-auto-1",
-      amount_minor: 45000,
-      currency: "USD",
-      payout_id: "PAYOUT_NET_TIMEOUT_7701",
-      state: "RECONCILE",
-    },
-  ]);
-  const [reconcileFeedback, setReconcileFeedback] = useState<string | null>(null);
-
-  const handleResolveReconcile = async (
-    requestId: string,
-    status: "SUCCESS" | "FAILED" | "UNKNOWN"
-  ) => {
-    try {
-      const res = await api.resolveReconcile(requestId, status, token, role);
-      setReconcileFeedback(`Transaction ${requestId} updated: state transitioned to ${res.state}`);
-      setReconcileItems((prev) =>
-        prev.map((item) =>
-          item.request_id === requestId ? { ...item, state: res.state } : item
-        )
-      );
-    } catch {
-      const simulatedState =
-        status === "SUCCESS" ? "SETTLED" : status === "FAILED" ? "FAILED" : "RECONCILE";
-      setReconcileFeedback(`[Rail Simulator] ${requestId} transitioned to ${simulatedState}`);
-      setReconcileItems((prev) =>
-        prev.map((item) =>
-          item.request_id === requestId ? { ...item, state: simulatedState } : item
-        )
-      );
-    }
-  };
-
-  // Accessible Form IDs
-  const chatInputId = useId();
-  const agentFieldId = useId();
-  const recipientFieldId = useId();
-  const amountFieldId = useId();
-  const purposeFieldId = useId();
-
-  // Acquire role demo token
-  const refreshRoleToken = useCallback(async (newRole: Role) => {
-    try {
-      const res = await api.getDemoToken(newRole, "demo-principal", "agent-auto-1");
-      setToken(res.access_token);
-    } catch {
-      // Fallback in test environment or offline
-      setToken(`demo-token-${newRole}`);
-    }
+    handleHashChange();
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
 
+  // Fetch initial token for selected role
   useEffect(() => {
-    refreshRoleToken(role);
-  }, [role, refreshRoleToken]);
-
-  // Load approvals from real backend
-  const loadApprovals = useCallback(async () => {
-    setIsLoadingApprovals(true);
-    setGlobalError(null);
-    try {
-      const items = await api.getPendingApprovals(token, role);
-      setStepUps(items);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 403) {
-        setStepUps([]);
-      } else {
-        setGlobalError(err instanceof Error ? err.message : "Failed to load approval queue");
+    const fetchToken = async () => {
+      try {
+        const resp = await api.getDemoToken(
+          currentRole.toLowerCase(),
+          "principal_treasury",
+          currentRole === "AGENT" ? "agent-auto-1" : undefined
+        );
+        setToken(resp.access_token);
+        setIsDemoMode(true);
+      } catch {
+        // Production mode without demo token endpoint
+        setIsDemoMode(false);
       }
-    } finally {
-      setIsLoadingApprovals(false);
-    }
-  }, [token, role]);
-
-  // Load ledger from real backend
-  const loadLedger = useCallback(async () => {
-    setIsLoadingLedger(true);
-    setGlobalError(null);
-    try {
-      const events = await api.getLedgerEvents(token, role);
-      setLedgerEvents(events);
-      const verifyRes = await api.verifyLedger(token, role);
-      setChainIntegrity({
-        isValid: verifyRes.is_valid,
-        message: verifyRes.message,
-        brokenIndex: verifyRes.broken_index,
-      });
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 403) {
-        // Agent lacks permission to browse ledger
-      } else {
-        setGlobalError(err instanceof Error ? err.message : "Failed to load ledger events");
-      }
-    } finally {
-      setIsLoadingLedger(false);
-    }
-  }, [token, role]);
-
-  // Load mandate from real backend
-  const loadMandate = useCallback(async () => {
-    setIsLoadingMandate(true);
-    setGlobalError(null);
-    try {
-      const m = await api.getMandate("mandate_default_sandbox", token, role);
-      setMandate(m);
-    } catch (err) {
-      setGlobalError(err instanceof Error ? err.message : "Failed to load active mandate");
-    } finally {
-      setIsLoadingMandate(false);
-    }
-  }, [token, role]);
-
-  // Load view data on tab change
-  useEffect(() => {
-    if (activeTab === "approvals") {
-      loadApprovals();
-    } else if (activeTab === "ledger") {
-      loadLedger();
-    } else if (activeTab === "mandate") {
-      loadMandate();
-    }
-  }, [activeTab, loadApprovals, loadLedger, loadMandate]);
-
-  // Handler: Natural language chat intent extraction
-  const handleAssistantChat = async (promptText = chatInput) => {
-    if (!promptText.trim()) return;
-    setIsExtracting(true);
-    setGlobalError(null);
-
-    const newMsg: ChatMessage = {
-      id: `msg_${Date.now()}`,
-      sender: "agent",
-      text: promptText,
-      timestamp: new Date().toLocaleTimeString(),
     };
-    setChatMessages((prev) => [...prev, newMsg]);
+    fetchToken();
+  }, [currentRole]);
 
-    try {
-      const res = await api.assistantChat(promptText, "agent-auto-1", token, role);
-      const replyMsg: ChatMessage = {
-        id: `msg_sys_${Date.now()}`,
-        sender: "system",
-        text: res.reply,
-        timestamp: new Date().toLocaleTimeString(),
-        intent: res.intent,
-        heuristicFlagged: res.heuristic_flagged,
-      };
-      setChatMessages((prev) => [...prev, replyMsg]);
-      if (res.intent) {
-        setExtractedIntent(res.intent);
+  const addToast = (message: string, type: "success" | "error" | "info" = "info") => {
+    const id = `toast_${Date.now()}_${Math.random()}`;
+    setToasts((prev) => [...prev, { id, message, type }]);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const navigateTo = (tab: string, receiptId?: string) => {
+    if (receiptId) {
+      setSelectedReceiptId(receiptId);
+      window.location.hash = `receipt/${receiptId}`;
+    } else {
+      window.location.hash = tab;
+    }
+    setActiveTab(tab);
+    setIsMoreMenuOpen(false);
+    setIsProfileMenuOpen(false);
+    if (typeof window !== "undefined" && typeof window.scrollTo === "function") {
+      try {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } catch {
+        // Fallback for jsdom
       }
-    } catch (err) {
-      setGlobalError(err instanceof Error ? err.message : "Assistant extraction failed");
-    } finally {
-      setIsExtracting(false);
     }
   };
 
-  const handlePresetSelect = (text: string) => {
-    setChatInput(text);
-    handleAssistantChat(text);
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === "light" ? "dark" : "light"));
   };
-
-  // Handler: Submit payment intent to policy core
-  const handleEvaluateIntent = async () => {
-    if (!extractedIntent) return;
-    setIsEvaluating(true);
-    setGlobalError(null);
-
-    try {
-      const cmd = {
-        agent_id: extractedIntent.agent_id,
-        recipient_id: extractedIntent.recipient_id,
-        amount_minor: extractedIntent.amount_minor,
-        currency: extractedIntent.currency,
-        purpose: extractedIntent.purpose,
-        idempotency_key: extractedIntent.idempotency_key || `key_${Date.now()}`,
-        anomaly_signal: extractedIntent.anomaly_signal || null,
-      };
-      const res = await api.createPaymentRequest(cmd, token, role);
-      setLatestDecision(res);
-
-      if (res.decision === "STEP_UP") {
-        loadApprovals();
-      }
-    } catch (err) {
-      setGlobalError(err instanceof Error ? err.message : "Policy evaluation failed");
-    } finally {
-      setIsEvaluating(false);
-    }
-  };
-
-  // Handler: Human supervisor approval decision
-  const handleApprovalDecision = async (
-    reqId: string,
-    digest: string,
-    decision: "ALLOW" | "DENY",
-    reason: string
-  ) => {
-    if (role === "agent") {
-      setGlobalError(
-        "Security Violation: Autonomous agent role cannot authorize transactions (manual 18, 56.16)."
-      );
-      return;
-    }
-
-    setApprovingRequestId(reqId);
-    setGlobalError(null);
-
-    try {
-      const isTampered = tamperedItemMap[reqId];
-      const digestToSend = isTampered
-        ? "0000000000000000000000000000000000000000000000000000000000000000"
-        : digest;
-
-      await api.submitApproval(
-        reqId,
-        digestToSend,
-        decision,
-        reason,
-        token,
-        role
-      );
-
-      await loadApprovals();
-    } catch (err) {
-      setGlobalError(err instanceof Error ? err.message : "Approval execution failed");
-    } finally {
-      setApprovingRequestId(null);
-    }
-  };
-
-  const toggleTamper = (reqId: string) => {
-    setTamperedItemMap((prev) => ({
-      ...prev,
-      [reqId]: !prev[reqId],
-    }));
-  };
-
-  // Handler: Verify Ledger Chain
-  const handleVerifyChain = async () => {
-    setIsVerifyingChain(true);
-    setGlobalError(null);
-    try {
-      const res = await api.verifyLedger(token, role);
-      setChainIntegrity({
-        isValid: res.is_valid,
-        message: res.message,
-        brokenIndex: res.broken_index,
-      });
-    } catch (err) {
-      setGlobalError(err instanceof Error ? err.message : "Ledger verification failed");
-    } finally {
-      setIsVerifyingChain(false);
-    }
-  };
-
-  // Handler: Simulate Database Tampering
-  const handleTamperLedger = async () => {
-    setGlobalError(null);
-    try {
-      await api.tamperLedger(token, role);
-      await loadLedger();
-    } catch {
-      setChainIntegrity({
-        isValid: false,
-        message: "CRITICAL: Broken hash chain link at Block 2! Hash mismatch detected.",
-        brokenIndex: 1,
-      });
-      setLedgerEvents((rows) =>
-        rows.map((r, i) =>
-          i === 1
-            ? {
-                ...r,
-                payload: { ...r.payload, amount_minor: 99999999 },
-              }
-            : r
-        )
-      );
-    }
-  };
-
-  // Handler: Restore True Ledger
-  const handleRestoreLedger = async () => {
-    setGlobalError(null);
-    try {
-      await api.restoreLedger(token, role);
-      await loadLedger();
-    } catch {
-      setChainIntegrity({
-        isValid: true,
-        message: "Cryptographic chain verified (3/3 links intact)",
-        brokenIndex: null,
-      });
-      setLedgerEvents(INITIAL_LEDGER);
-    }
-  };
-
-  // AG Grid column definitions
-  const ledgerColDefs: ColDef<LedgerEventItem>[] = [
-    { field: "event_id", headerName: "Event ID", width: 170 },
-    {
-      field: "prev_hash",
-      headerName: "Previous Hash",
-      width: 140,
-      valueFormatter: (p) => (p.value ? `${p.value.slice(0, 10)}...` : "GENESIS"),
-    },
-    {
-      field: "event_hash",
-      headerName: "Block Hash",
-      width: 140,
-      valueFormatter: (p) => (p.value ? `${p.value.slice(0, 10)}...` : ""),
-    },
-    {
-      headerName: "Agent ID",
-      width: 150,
-      valueGetter: (p) => p.data?.payload?.agent_id || "system",
-    },
-    {
-      headerName: "Recipient",
-      width: 170,
-      valueGetter: (p) => p.data?.payload?.recipient_id || "treasury",
-    },
-    {
-      headerName: "Amount",
-      width: 130,
-      cellClass: "tabular-nums",
-      valueGetter: (p) => {
-        const minor = p.data?.payload?.amount_minor;
-        return typeof minor === "number" ? `$${(minor / 100).toFixed(2)}` : "$0.00";
-      },
-    },
-    {
-      headerName: "Decision",
-      width: 120,
-      cellRenderer: (p: { data?: LedgerEventItem }) => {
-        const val = p.data?.payload?.decision || "ALLOW";
-        const cls =
-          val === "ALLOW"
-            ? "badge-allow"
-            : val === "STEP_UP"
-              ? "badge-step-up"
-              : "badge-deny";
-        return <span className={cls}>{val}</span>;
-      },
-    },
-    {
-      headerName: "Purpose & Invariants",
-      flex: 1,
-      valueGetter: (p) => p.data?.payload?.purpose || "Authorization ledger entry",
-    },
-  ];
 
   return (
-    <div className="app-container">
-      {/* Top Header & Role Switcher */}
-      <header className="header" role="banner">
-        <div className="brand">
-          <PhalanxHeaderBrand size={42} showTagline={true} />
-        </div>
+    <div className="phalanx-app-shell">
+      {/* Toast Notification Container */}
+      <div className="toast-viewport" aria-live="assertive">
+        {toasts.map((t) => (
+          <Toast
+            key={t.id}
+            id={t.id}
+            type={t.type}
+            message={t.message}
+            onDismiss={() => removeToast(t.id)}
+          />
+        ))}
+      </div>
 
-        <div className="header-controls">
-          <ThemeSwitcher />
-
+      {/* Top Navigation Bar (Desktop & Mobile Header) */}
+      <header className="app-topbar">
+        <div className="topbar-inner">
+          {/* Brand Wordmark & Subtle Shield */}
           <div
-            className="role-switcher"
-            role="radiogroup"
-            aria-label="Active Operator Role"
+            className="brand-group"
+            onClick={() => navigateTo("home")}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === "Enter" && navigateTo("home")}
           >
-            <span className="role-label" id="role-label">
-              Active Persona:
+            <div className="brand-shield-icon" aria-hidden="true">
+              <Shield size={20} className="shield-svg" />
+            </div>
+            <h1 className="brand-wordmark">PHALANX</h1>
+            <span className="sandbox-indicator" title="PayPal Sandbox Guard Active">
+              SANDBOX
             </span>
-            {(["principal", "agent", "approver", "auditor"] as Role[]).map((r) => (
-              <button
-                key={r}
-                type="button"
-                role="radio"
-                aria-checked={role === r}
-                className={`role-btn ${role === r ? "active" : ""}`}
-                onClick={() => setRole(r)}
-              >
-                {r.toUpperCase()}
-              </button>
-            ))}
           </div>
 
-          <div className="status-badge" role="status" aria-label="System Security Status">
-            <span className="pulse-dot" aria-hidden="true"></span>
-            <span>PAYPAL SANDBOX GUARD ACTIVE</span>
+          {/* Desktop Navigation Links */}
+          <nav className="desktop-nav-links" aria-label="Main Navigation">
+            <button
+              type="button"
+              className={`nav-link-btn ${activeTab === "home" ? "active" : ""}`}
+              onClick={() => navigateTo("home")}
+            >
+              Home
+            </button>
+            <button
+              type="button"
+              className={`nav-link-btn ${activeTab === "pay" ? "active" : ""}`}
+              onClick={() => navigateTo("pay")}
+            >
+              Pay
+            </button>
+            <button
+              type="button"
+              className={`nav-link-btn ${activeTab === "approvals" ? "active" : ""}`}
+              onClick={() => navigateTo("approvals")}
+            >
+              Approvals
+            </button>
+            <button
+              type="button"
+              className={`nav-link-btn ${activeTab === "activity" ? "active" : ""}`}
+              onClick={() => navigateTo("activity")}
+            >
+              Activity
+            </button>
+            <button
+              type="button"
+              className={`nav-link-btn ${activeTab === "mandates" ? "active" : ""}`}
+              onClick={() => navigateTo("mandates")}
+            >
+              Mandates
+            </button>
+            <button
+              type="button"
+              className={`nav-link-btn ${activeTab === "attack-lab" ? "active" : ""}`}
+              onClick={() => navigateTo("attack-lab")}
+            >
+              Attack Lab
+            </button>
+          </nav>
+
+          {/* Desktop Right Controls (Theme & Profile Persona) */}
+          <div className="desktop-right-controls">
+            <button
+              type="button"
+              className="theme-toggle-btn"
+              onClick={toggleTheme}
+              aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
+            >
+              {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
+            </button>
+
+            {/* Profile Menu Trigger */}
+            <div className="profile-menu-container">
+              <button
+                type="button"
+                className="profile-pill-trigger"
+                onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                aria-expanded={isProfileMenuOpen}
+                aria-haspopup="true"
+              >
+                <User size={16} className="inline-icon" />
+                <span className="current-role-label mono">{currentRole}</span>
+              </button>
+
+              {/* Profile Dropdown */}
+              {isProfileMenuOpen && (
+                <div className="profile-dropdown-menu card" role="menu">
+                  <div className="dropdown-header">
+                    <span className="dropdown-title">Active Persona Role</span>
+                    <span className="dropdown-hint">Object-Level Authorization</span>
+                  </div>
+                  <div className="role-switcher-grid">
+                    {(["APPROVER", "AGENT", "PRINCIPAL", "AUDITOR"] as RoleType[]).map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        className={`role-option-btn ${currentRole === r ? "selected" : ""}`}
+                        onClick={() => {
+                          setCurrentRole(r);
+                          setIsProfileMenuOpen(false);
+                          addToast(`Switched active persona to ${r}`, "info");
+                        }}
+                        role="menuitem"
+                      >
+                        <span className="mono">{r}</span>
+                        {currentRole === r && <span className="active-dot" />}
+                      </button>
+                    ))}
+                  </div>
+                  {isDemoMode && (
+                    <div className="demo-mode-note">
+                      Demo mode active: Signed role tokens minted automatically.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Global Error Banner (Problem+JSON display) */}
-      {globalError && (
-        <div className="error-banner" role="alert">
-          <AlertTriangle className="error-icon" aria-hidden="true" />
-          <span>{globalError}</span>
-          <button
-            type="button"
-            className="dismiss-btn"
-            onClick={() => setGlobalError(null)}
-            aria-label="Dismiss Error"
+      {/* Main Content Envelope (Max Width 1120px) */}
+      <main className="app-main-content">
+        <div className="content-container">
+          {activeTab === "home" && (
+            <HomeScreen
+              token={token}
+              onNavigate={navigateTo}
+              onNotify={addToast}
+            />
+          )}
+
+          {activeTab === "pay" && (
+            <PayScreen
+              token={token}
+              onNavigate={navigateTo}
+              onNotify={addToast}
+            />
+          )}
+
+          {activeTab === "approvals" && (
+            <ApprovalsScreen
+              token={token}
+              role={currentRole}
+              onNavigate={navigateTo}
+              onNotify={addToast}
+            />
+          )}
+
+          {activeTab === "activity" && (
+            <ActivityScreen
+              token={token}
+              onNavigate={navigateTo}
+              onNotify={addToast}
+            />
+          )}
+
+          {activeTab === "mandates" && (
+            <MandatesScreen
+              token={token}
+              onNavigate={navigateTo}
+              onNotify={addToast}
+            />
+          )}
+
+          {activeTab === "attack-lab" && (
+            <AttackLabScreen
+              token={token}
+              onNotify={addToast}
+            />
+          )}
+
+          {activeTab === "receipt" && (
+            <ReceiptVerifyScreen
+              receiptId={selectedReceiptId}
+              token={token}
+              onBack={() => navigateTo("activity")}
+              onNotify={addToast}
+            />
+          )}
+        </div>
+      </main>
+
+      {/* Mobile Sticky Action (Below 768px on Home) */}
+      {activeTab === "home" && (
+        <div className="mobile-sticky-action-bar">
+          <PillButton
+            variant="primary"
+            size="lg"
+            icon={<Send size={18} />}
+            className="w-full"
+            onClick={() => navigateTo("pay")}
           >
-            ✕
-          </button>
+            Pay & Request
+          </PillButton>
         </div>
       )}
 
-      {/* Navigation Tabs */}
-      <nav className="tab-nav" role="tablist" aria-label="Dashboard Scenes">
+      {/* Mobile Bottom Tab Bar (Below 768px) */}
+      <nav className="mobile-bottom-tabbar" aria-label="Mobile Navigation">
         <button
           type="button"
-          role="tab"
-          id="tab-overview"
-          aria-selected={activeTab === "overview"}
-          aria-controls="panel-overview"
-          className={`tab-btn ${activeTab === "overview" ? "active" : ""}`}
-          onClick={() => setActiveTab("overview")}
+          className={`tabbar-item ${activeTab === "home" ? "active" : ""}`}
+          onClick={() => navigateTo("home")}
         >
-          Overview
+          <Home size={20} />
+          <span>Home</span>
         </button>
+
         <button
           type="button"
-          role="tab"
-          id="tab-console"
-          aria-selected={activeTab === "console"}
-          aria-controls="panel-console"
-          className={`tab-btn ${activeTab === "console" ? "active" : ""}`}
-          onClick={() => setActiveTab("console")}
+          className={`tabbar-item ${activeTab === "pay" ? "active" : ""}`}
+          onClick={() => navigateTo("pay")}
         >
-          Scene 1: Request Console
+          <Send size={20} />
+          <span>Pay</span>
         </button>
+
         <button
           type="button"
-          role="tab"
-          id="tab-approvals"
-          aria-selected={activeTab === "approvals"}
-          aria-controls="panel-approvals"
-          className={`tab-btn ${activeTab === "approvals" ? "active" : ""}`}
-          onClick={() => setActiveTab("approvals")}
+          className={`tabbar-item ${activeTab === "approvals" ? "active" : ""}`}
+          onClick={() => navigateTo("approvals")}
         >
-          Scene 2: Step-Up Approvals
-          {stepUps.length > 0 && (
-            <span className="tab-badge" aria-label={`${stepUps.length} pending items`}>
-              {stepUps.length}
-            </span>
-          )}
+          <CheckSquare size={20} />
+          <span>Approvals</span>
         </button>
+
         <button
           type="button"
-          role="tab"
-          id="tab-ledger"
-          aria-selected={activeTab === "ledger"}
-          aria-controls="panel-ledger"
-          className={`tab-btn ${activeTab === "ledger" ? "active" : ""}`}
-          onClick={() => setActiveTab("ledger")}
+          className={`tabbar-item ${activeTab === "activity" ? "active" : ""}`}
+          onClick={() => navigateTo("activity")}
         >
-          Scene 3: Cryptographic Audit Ledger
+          <Activity size={20} />
+          <span>Activity</span>
         </button>
+
         <button
           type="button"
-          role="tab"
-          id="tab-mandate"
-          aria-selected={activeTab === "mandate"}
-          aria-controls="panel-mandate"
-          className={`tab-btn ${activeTab === "mandate" ? "active" : ""}`}
-          onClick={() => setActiveTab("mandate")}
+          className={`tabbar-item ${isMoreMenuOpen ? "active" : ""}`}
+          onClick={() => setIsMoreMenuOpen(true)}
+          aria-haspopup="dialog"
+          aria-expanded={isMoreMenuOpen}
         >
-          Ed25519 Mandate
-        </button>
-        <button
-          type="button"
-          role="tab"
-          id="tab-reconcile"
-          aria-selected={activeTab === "reconcile"}
-          aria-controls="panel-reconcile"
-          className={`tab-btn ${activeTab === "reconcile" ? "active" : ""}`}
-          onClick={() => setActiveTab("reconcile")}
-        >
-          Rail Reconciliation (F6)
-          {reconcileItems.length > 0 && (
-            <span className="tab-badge" aria-label={`${reconcileItems.length} held reservations`}>
-              {reconcileItems.length}
-            </span>
-          )}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          id="tab-security"
-          aria-selected={activeTab === "security"}
-          aria-controls="panel-security"
-          className={`tab-btn ${activeTab === "security" ? "active" : ""}`}
-          onClick={() => setActiveTab("security")}
-        >
-          Security Center
-        </button>
-        <button
-          type="button"
-          role="tab"
-          id="tab-developer"
-          aria-selected={activeTab === "developer"}
-          aria-controls="panel-developer"
-          className={`tab-btn ${activeTab === "developer" ? "active" : ""}`}
-          onClick={() => setActiveTab("developer")}
-        >
-          Developer & MCP
+          <Menu size={20} />
+          <span>More</span>
         </button>
       </nav>
 
-      {/* Main Content Area */}
-      <main className="main-content">
-        {activeTab === "overview" && (
-          <CockpitOverview
-            stepUpsCount={stepUps.length}
-            chainIntegrity={chainIntegrity}
-            ledgerEventsCount={ledgerEvents.length}
-            setActiveTab={setActiveTab}
-            onNavigate={(tab) => setActiveTab(tab as ActiveTab)}
-          />
-        )}
+      {/* Mobile "More" Sheet Modal */}
+      {isMoreMenuOpen && (
+        <div className="mobile-more-backdrop" onClick={() => setIsMoreMenuOpen(false)}>
+          <div
+            className="mobile-more-sheet"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="More Navigation Options"
+          >
+            <div className="sheet-handle-bar" />
+            <div className="sheet-header">
+              <h3 className="sheet-title">More Services & Options</h3>
+              <button
+                type="button"
+                className="sheet-close-btn"
+                onClick={() => setIsMoreMenuOpen(false)}
+                aria-label="Close menu"
+              >
+                <X size={20} />
+              </button>
+            </div>
 
-        {activeTab === "console" && (
-          <RequestConsole
-            chatInput={chatInput}
-            setChatInput={setChatInput}
-            chatMessages={chatMessages}
-            isExtracting={isExtracting}
-            handleAssistantChat={handleAssistantChat}
-            handlePresetSelect={handlePresetSelect}
-            extractedIntent={extractedIntent}
-            setExtractedIntent={setExtractedIntent}
-            isEvaluating={isEvaluating}
-            handleEvaluateIntent={handleEvaluateIntent}
-            latestDecision={latestDecision}
-            chatInputId={chatInputId}
-            agentFieldId={agentFieldId}
-            recipientFieldId={recipientFieldId}
-            amountFieldId={amountFieldId}
-            purposeFieldId={purposeFieldId}
-          />
-        )}
+            <div className="sheet-nav-list">
+              <button
+                type="button"
+                className="sheet-nav-item"
+                onClick={() => navigateTo("mandates")}
+              >
+                <Lock size={18} className="sheet-icon" />
+                <div className="sheet-text">
+                  <span className="sheet-item-title">Ed25519 Authority Mandate</span>
+                  <span className="sheet-item-sub">Budget limits and allowlists</span>
+                </div>
+              </button>
 
-        {activeTab === "approvals" && (
-          <ApprovalQueue
-            role={role}
-            stepUps={stepUps}
-            isLoadingApprovals={isLoadingApprovals}
-            loadApprovals={loadApprovals}
-            tamperedItemMap={tamperedItemMap}
-            toggleTamper={toggleTamper}
-            approvingRequestId={approvingRequestId}
-            handleApprovalDecision={handleApprovalDecision}
-          />
-        )}
+              <button
+                type="button"
+                className="sheet-nav-item"
+                onClick={() => navigateTo("attack-lab")}
+              >
+                <Zap size={18} className="sheet-icon text-accent" />
+                <div className="sheet-text">
+                  <span className="sheet-item-title">Adversarial Attack Lab</span>
+                  <span className="sheet-item-sub">Test 6 canned threat vectors</span>
+                </div>
+              </button>
 
-        {activeTab === "ledger" && (
-          <AuditLedger
-            ledgerEvents={ledgerEvents}
-            isLoadingLedger={isLoadingLedger}
-            isVerifyingChain={isVerifyingChain}
-            chainIntegrity={chainIntegrity}
-            loadLedger={loadLedger}
-            handleVerifyChain={handleVerifyChain}
-            handleTamperLedger={handleTamperLedger}
-            handleRestoreLedger={handleRestoreLedger}
-            ledgerColDefs={ledgerColDefs}
-          />
-        )}
+              <button
+                type="button"
+                className="sheet-nav-item"
+                onClick={() => navigateTo("receipt")}
+              >
+                <ExternalLink size={18} className="sheet-icon" />
+                <div className="sheet-text">
+                  <span className="sheet-item-title">Receipt & Proof Verifier</span>
+                  <span className="sheet-item-sub">Public SHA-256 chain verification</span>
+                </div>
+              </button>
+            </div>
 
-        {activeTab === "mandate" && (
-          <MandateMeter mandate={mandate} isLoadingMandate={isLoadingMandate} />
-        )}
+            {/* Persona Switcher in More Sheet */}
+            {isDemoMode && (
+              <div className="sheet-persona-section">
+                <span className="sheet-section-title">Demo Persona Switcher</span>
+                <div className="persona-grid">
+                  {(["APPROVER", "AGENT", "PRINCIPAL", "AUDITOR"] as RoleType[]).map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      className={`persona-pill ${currentRole === r ? "active" : ""}`}
+                      onClick={() => {
+                        setCurrentRole(r);
+                        setIsMoreMenuOpen(false);
+                        addToast(`Switched active persona to ${r}`, "info");
+                      }}
+                    >
+                      <span className="mono">{r}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
-        {activeTab === "reconcile" && (
-          <ReconciliationScreen
-            reconcileItems={reconcileItems}
-            setReconcileItems={setReconcileItems}
-            reconcileFeedback={reconcileFeedback}
-            setReconcileFeedback={setReconcileFeedback}
-            handleResolveReconcile={handleResolveReconcile}
-          />
-        )}
+            <div className="sheet-theme-row">
+              <span>Theme Appearance</span>
+              <PillButton
+                variant="secondary"
+                size="sm"
+                icon={theme === "light" ? <Moon size={14} /> : <Sun size={14} />}
+                onClick={toggleTheme}
+              >
+                {theme === "light" ? "Dark Theme" : "Light Theme"}
+              </PillButton>
+            </div>
+          </div>
+        </div>
+      )}
 
-        {activeTab === "security" && <SecurityCenter />}
-
-        {activeTab === "developer" && <DeveloperConsole />}
-      </main>
+      {/* Global Footer on All Views */}
+      <footer className="app-footer">
+        <div className="footer-inner">
+          <p className="footer-disclaimer">Not affiliated with PayPal.</p>
+          <p className="footer-meta">
+            PHALANX Autonomous Financial Agent Authorization Layer • PayPal AI Hackathon 2026 Entry • Sandbox Only
+          </p>
+        </div>
+      </footer>
     </div>
   );
 };

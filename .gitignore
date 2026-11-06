@@ -39,6 +39,7 @@ web/dist/
 web/.vite/
 web/test-results/
 web/playwright-report/
+web/screenshots/
 npm-debug.log*
 
 # IDE & OS

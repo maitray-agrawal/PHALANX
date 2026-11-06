@@ -2,91 +2,93 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
 import App from "./App";
 
-describe("PHALANX Dashboard App", () => {
-  it("renders header, brand, and role switcher", () => {
+describe("PHALANX PayPal-Inspired Shell & Navigation", () => {
+  it("renders topbar with brand wordmark, sandbox guard, and footer disclaimer", () => {
     render(<App />);
     expect(screen.getByText("PHALANX")).toBeInTheDocument();
-    expect(screen.getByText("PAYPAL SANDBOX GUARD ACTIVE")).toBeInTheDocument();
-    expect(screen.getByText("PRINCIPAL")).toBeInTheDocument();
-    expect(screen.getByText("AGENT")).toBeInTheDocument();
-    expect(screen.getByText("APPROVER")).toBeInTheDocument();
-    expect(screen.getByText("AUDITOR")).toBeInTheDocument();
+    expect(screen.getByText("SANDBOX")).toBeInTheDocument();
+    expect(screen.getByText("Not affiliated with PayPal.")).toBeInTheDocument();
   });
 
-  it("renders the 4 operational tabs", () => {
+  it("renders Home screen by default with three numbers and primary action", () => {
     render(<App />);
-    expect(screen.getByText(/Scene 1: Request Console/i)).toBeInTheDocument();
-    expect(screen.getByText(/Scene 2: Step-Up Approvals/i)).toBeInTheDocument();
-    expect(screen.getByText(/Scene 3: Cryptographic Audit Ledger/i)).toBeInTheDocument();
-    expect(screen.getByText(/Ed25519 Mandate/i)).toBeInTheDocument();
+    expect(screen.getByText("REMAINING AUTHORITY")).toBeInTheDocument();
+    expect(screen.getByText("PENDING APPROVALS")).toBeInTheDocument();
+    expect(screen.getByText("LAST RECORDED ACTIVITY")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Pay & Request/i })[0]).toBeInTheDocument();
   });
 
-  it("Scene 1: Request Console renders presets and submits intent", () => {
+  it("navigates to Pay screen and renders presets and submit button", () => {
     render(<App />);
-    expect(screen.getByText("Agent Intent Proposer")).toBeInTheDocument();
-    expect(screen.getByText("Extracted Transaction Draft")).toBeInTheDocument();
+    const payBtns = screen.getAllByRole("button", { name: "Pay" });
+    fireEvent.click(payBtns[0]);
 
-    // Verify presets exist
+    expect(screen.getByText("Scenario Presets")).toBeInTheDocument();
     expect(screen.getByText("Under Limit ($25 - ALLOW)")).toBeInTheDocument();
-    expect(screen.getByText("Step-Up ($1,200 - REVIEW)")).toBeInTheDocument();
-    expect(screen.getByText("Over Limit ($9,500 - DENY)")).toBeInTheDocument();
-    expect(screen.getByText("Prompt Injection Test")).toBeInTheDocument();
-
-    // Submit button exists
-    const submitBtn = screen.getByText("Evaluate & Submit Intent to Policy Core");
-    expect(submitBtn).toBeInTheDocument();
+    expect(screen.getByText("High Value ($1,200 - STEP_UP)")).toBeInTheDocument();
+    expect(screen.getByText("Over Cap ($6,000 - DENY)")).toBeInTheDocument();
+    expect(screen.getByText("Evaluate & Submit Intent to Policy Core")).toBeInTheDocument();
   });
 
-  it("Scene 2: Step-Up Approvals displays pending items and enforces agent role lock", async () => {
+  it("navigates to Approvals screen and enforces agent role restriction", async () => {
     render(<App />);
-    const approvalsTab = screen.getByText(/Scene 2: Step-Up Approvals/i);
-    fireEvent.click(approvalsTab);
+    const approvalsBtns = screen.getAllByRole("button", { name: "Approvals" });
+    fireEvent.click(approvalsBtns[0]);
 
-    // Verify pending item is displayed
-    expect(screen.getByText("req_stepup_1001")).toBeInTheDocument();
-    expect(screen.getByText("Authorize Transaction")).toBeInTheDocument();
-    expect(screen.getByText("Deny Exception")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Human Supervisor Step-Up Review Queue" })).toBeInTheDocument();
 
-    // Switch persona to AGENT
-    const agentRadio = screen.getByText("AGENT");
-    fireEvent.click(agentRadio);
+    // Open profile menu to switch to AGENT role
+    const profileBtn = screen.getByRole("button", { name: /APPROVER/i });
+    fireEvent.click(profileBtn);
 
-    // Verify warning banner and button disabling
+    const agentOption = screen.getByRole("menuitem", { name: /AGENT/i });
+    fireEvent.click(agentOption);
+
+    // Verify warning banner is displayed
     await waitFor(() => {
-      expect(
-        screen.getByText(/Role: AGENT — Approval actions disabled/i)
-      ).toBeInTheDocument();
-      const approveBtn = screen.getByText("Authorize Transaction").closest("button");
-      expect(approveBtn).toBeDisabled();
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(screen.getByText(/Role Restriction:/i)).toBeInTheDocument();
     });
   });
 
-  it("Scene 3: Cryptographic Audit Ledger renders block chain and verify button", () => {
+  it("navigates to Activity screen and renders chain sequence and activity journal", () => {
     render(<App />);
-    const ledgerTab = screen.getByText(/Scene 3: Cryptographic Audit Ledger/i);
-    fireEvent.click(ledgerTab);
+    const activityBtns = screen.getAllByRole("button", { name: "Activity" });
+    fireEvent.click(activityBtns[0]);
 
-    expect(screen.getByText("Cryptographic Shield-Wall Ledger")).toBeInTheDocument();
-    expect(screen.getByText(/Verify Chain/i)).toBeInTheDocument();
-    expect(screen.getByText("Simulate Database Tamper")).toBeInTheDocument();
-    expect(screen.getByText("Block #1")).toBeInTheDocument();
-    expect(screen.getByText("Block #2")).toBeInTheDocument();
-    expect(screen.getByText("Block #3")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Cryptographic Shield-Wall Ledger" })).toBeInTheDocument();
+    expect(screen.getByText("Transaction Activity Journal")).toBeInTheDocument();
   });
 
-  it("Mandate view displays Ed25519 parameters and remaining budget", () => {
+  it("navigates to Mandates screen and renders Ed25519 parameters", () => {
     render(<App />);
-    const mandateTab = screen.getByText(/Ed25519 Mandate/i);
-    fireEvent.click(mandateTab);
+    const mandatesBtns = screen.getAllByRole("button", { name: "Mandates" });
+    fireEvent.click(mandatesBtns[0]);
 
-    expect(screen.getByText("Active Ed25519 Authority Mandate")).toBeInTheDocument();
-    expect(screen.getByText(/mandate_default_sandbox/i)).toBeInTheDocument();
-    expect(screen.getByText("Remaining Budget")).toBeInTheDocument();
-    expect(screen.getByText(/Single Transaction Cap/i)).toBeInTheDocument();
-    expect(screen.getByText(/Instant Autonomous Threshold/i)).toBeInTheDocument();
-    expect(screen.getByText(/Lifetime Budget Cap/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/Signature is an integrity seal, not human non-repudiation/i)
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ed25519 Authority Mandate" })).toBeInTheDocument();
+    expect(screen.getByText("SINGLE TRANSACTION CAP")).toBeInTheDocument();
+    expect(screen.getByText("INSTANT AUTONOMOUS THRESHOLD")).toBeInTheDocument();
+  });
+
+  it("navigates to Attack Lab screen and displays threat vectors", () => {
+    render(<App />);
+    const attackLabBtns = screen.getAllByRole("button", { name: "Attack Lab" });
+    fireEvent.click(attackLabBtns[0]);
+
+    expect(screen.getByRole("heading", { name: "Adversarial Attack Simulation Lab" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Run Attack Lab/i })).toBeInTheDocument();
+    expect(screen.getByText("PROMPT INJECTION")).toBeInTheDocument();
+    expect(screen.getByText("PAYEE SWAP")).toBeInTheDocument();
+  });
+
+  it("switches theme between light and dark", () => {
+    render(<App />);
+    const themeBtn = screen.getByLabelText(/Switch to dark theme/i);
+    fireEvent.click(themeBtn);
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+
+    const lightBtn = screen.getByLabelText(/Switch to light theme/i);
+    fireEvent.click(lightBtn);
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
   });
 });

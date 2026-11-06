@@ -2,78 +2,89 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
 import App from "./App";
 
-describe("PHALANX Security & Operational Features", () => {
-  it("renders Overview tab with cockpit metrics and architecture pipeline", () => {
+describe("PHALANX Seven Operational Screens & Shell Features", () => {
+  it("Screen 1: Home renders three numbers, sticky action, and recent activity", () => {
     render(<App />);
-    const overviewTab = screen.getByRole("tab", { name: "Overview" });
-    fireEvent.click(overviewTab);
-
-    expect(screen.getByText("PHALANX Operational Authorization Pipeline")).toBeInTheDocument();
-    expect(screen.getByText("Intent Delimiters")).toBeInTheDocument();
-    expect(screen.getByText("Pure Policy Core")).toBeInTheDocument();
-    expect(screen.getByText("Autonomous Allow")).toBeInTheDocument();
-    expect(screen.getByText("66.7%")).toBeInTheDocument();
-    expect(screen.getByText("Adversarial Blocks")).toBeInTheDocument();
-    expect(screen.getByText("67 / 67")).toBeInTheDocument();
+    expect(screen.getByText("REMAINING AUTHORITY")).toBeInTheDocument();
+    expect(screen.getByText("PENDING APPROVALS")).toBeInTheDocument();
+    expect(screen.getByText("LAST RECORDED ACTIVITY")).toBeInTheDocument();
+    expect(screen.getByText("Recent Activity")).toBeInTheDocument();
   });
 
-  it("renders Rail Reconciliation tab and executes resolution actions", async () => {
+  it("Screen 2: Pay renders preset buttons, intent inputs, and triggers evaluation", async () => {
     render(<App />);
-    const reconcileTab = screen.getByRole("tab", { name: /Rail Reconciliation/i });
-    fireEvent.click(reconcileTab);
+    const payBtns = screen.getAllByRole("button", { name: "Pay" });
+    fireEvent.click(payBtns[0]);
 
-    expect(screen.getByText(/Ambiguous Rail Reconciliation/i)).toBeInTheDocument();
-    expect(screen.getByText("req_ambiguous_7701")).toBeInTheDocument();
-    expect(screen.getByText("$450.00 USD")).toBeInTheDocument();
+    expect(screen.getByText("Scenario Presets")).toBeInTheDocument();
+    const presetBtn = screen.getByText("Under Limit ($25 - ALLOW)");
+    fireEvent.click(presetBtn);
 
-    // Click Confirm Success
-    const confirmBtn = screen.getByText("Confirm Success");
-    fireEvent.click(confirmBtn);
+    const submitBtn = screen.getByRole("button", { name: "Evaluate & Submit Intent to Policy Core" });
+    expect(submitBtn).toBeInTheDocument();
+  });
+
+  it("Screen 3: Approvals renders step-up queue and digest tamper diff", () => {
+    render(<App />);
+    const approvalsBtns = screen.getAllByRole("button", { name: "Approvals" });
+    fireEvent.click(approvalsBtns[0]);
+
+    expect(screen.getByRole("heading", { name: "Human Supervisor Step-Up Review Queue" })).toBeInTheDocument();
+    expect(screen.getByText("req_stepup_1001")).toBeInTheDocument();
+
+    const inspectBtn = screen.getByRole("button", { name: /Inspect Diff/i });
+    fireEvent.click(inspectBtn);
+    expect(screen.getByText("Cryptographic Lock Canonical Integrity")).toBeInTheDocument();
+  });
+
+  it("Screen 4: Activity renders ledger feed and chain sequence", () => {
+    render(<App />);
+    const activityBtns = screen.getAllByRole("button", { name: "Activity" });
+    fireEvent.click(activityBtns[0]);
+
+    expect(screen.getByRole("heading", { name: "Cryptographic Shield-Wall Ledger" })).toBeInTheDocument();
+    expect(screen.getByText("Transaction Activity Journal")).toBeInTheDocument();
+  });
+
+  it("Screen 5: Mandates renders read-only limits and budget utilization meter", () => {
+    render(<App />);
+    const mandatesBtns = screen.getAllByRole("button", { name: "Mandates" });
+    fireEvent.click(mandatesBtns[0]);
+
+    expect(screen.getByRole("heading", { name: "Ed25519 Authority Mandate" })).toBeInTheDocument();
+    expect(screen.getByText("Budget Utilization")).toBeInTheDocument();
+    expect(screen.getByText("SINGLE TRANSACTION CAP")).toBeInTheDocument();
+  });
+
+  it("Screen 6: Attack Lab renders six cards and execution trigger", () => {
+    render(<App />);
+    const attackLabBtns = screen.getAllByRole("button", { name: "Attack Lab" });
+    fireEvent.click(attackLabBtns[0]);
+
+    expect(screen.getByRole("heading", { name: "Adversarial Attack Simulation Lab" })).toBeInTheDocument();
+    expect(screen.getByText("PROMPT INJECTION")).toBeInTheDocument();
+    expect(screen.getByText("PAYEE SWAP")).toBeInTheDocument();
+    expect(screen.getByText("AMOUNT TAMPER AFTER APPROVAL")).toBeInTheDocument();
+    expect(screen.getByText("REPLAY")).toBeInTheDocument();
+    expect(screen.getByText("FORGED WEBHOOK")).toBeInTheDocument();
+    expect(screen.getByText("AGENT SELF APPROVAL")).toBeInTheDocument();
+  });
+
+  it("Mobile Sheet: opens and closes more options modal", async () => {
+    render(<App />);
+    const moreBtn = screen.getByRole("button", { name: "More" });
+    fireEvent.click(moreBtn);
+
+    expect(screen.getByRole("heading", { name: "More Services & Options" })).toBeInTheDocument();
+    expect(screen.getByText("Ed25519 Authority Mandate")).toBeInTheDocument();
+    expect(screen.getByText("Adversarial Attack Lab")).toBeInTheDocument();
+    expect(screen.getByText("Receipt & Proof Verifier")).toBeInTheDocument();
+
+    const closeBtn = screen.getByLabelText("Close menu");
+    fireEvent.click(closeBtn);
 
     await waitFor(() => {
-      expect(screen.getByText(/transitioned to SETTLED/i)).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "More Services & Options" })).not.toBeInTheDocument();
     });
-
-    // Trigger simulation
-    const simulateBtn = screen.getByText(/\+ Simulate PayPal 504 Gateway Timeout Event/i);
-    fireEvent.click(simulateBtn);
-
-    expect(screen.getByText(/Simulated PayPal 504 Timeout/i)).toBeInTheDocument();
-  });
-
-  it("renders Security Center with red team invariants", () => {
-    render(<App />);
-    const secTab = screen.getByRole("tab", { name: "Security Center" });
-    fireEvent.click(secTab);
-
-    expect(screen.getByText(/PHALANX Security Invariants & Red Team Posture/i)).toBeInTheDocument();
-    expect(screen.getByText("Pure Domain Core")).toBeInTheDocument();
-    expect(screen.getByText("Zero LLM in Auth Path")).toBeInTheDocument();
-    expect(screen.getByText("Atomic Concurrent Idempotency (F4)")).toBeInTheDocument();
-    expect(screen.getByText("Persistent Budget Accounting (F5)")).toBeInTheDocument();
-    expect(screen.getByText("Ambiguous Rail Hold (F6)")).toBeInTheDocument();
-    expect(screen.getByText("Shield-Wall Audit Ledger")).toBeInTheDocument();
-  });
-
-  it("renders Developer & MCP Tools Catalog", () => {
-    render(<App />);
-    const devTab = screen.getByRole("tab", { name: "Developer & MCP" });
-    fireEvent.click(devTab);
-
-    expect(screen.getByText(/Model Context Protocol \(MCP\) & Developer Integration/i)).toBeInTheDocument();
-    expect(screen.getByText("tool: phalanx_authorize_transaction")).toBeInTheDocument();
-    expect(screen.getByText("tool: phalanx_get_mandate")).toBeInTheDocument();
-  });
-
-  it("switches theme mode via ThemeSwitcher", () => {
-    render(<App />);
-    const lightBtn = screen.getByRole("radio", { name: /Light/i });
-    const darkBtn = screen.getByRole("radio", { name: /Dark/i });
-
-    fireEvent.click(darkBtn);
-    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
-
-    fireEvent.click(lightBtn);
-    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
   });
 });

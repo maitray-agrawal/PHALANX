@@ -2,9 +2,9 @@
  * PHALANX Real Backend API Client.
  *
  * Invariants (manual 56.41):
- * - The UI talks to the real backend only; no mocked responses in production code.
- * - All authenticated requests attach Bearer tokens and X-Phalanx-Role.
+ * - The UI communicates strictly with real application backend endpoints; no mocks in production code.
  * - Handles RFC 7807 Problem+JSON error envelopes.
+ * - Supports authenticated role tokens (Bearer) and demo mode credentials.
  */
 
 export interface DemoTokenResponse {
@@ -12,6 +12,79 @@ export interface DemoTokenResponse {
   token_type: string;
   role: string;
   expires_in_seconds: number;
+}
+
+export interface OverviewResponse {
+  remaining_authority: number;
+  pending_approval_count: number;
+  last_activity: string | null;
+}
+
+export interface ActivityItem {
+  receipt_id: string;
+  decision: "ALLOW" | "STEP_UP" | "DENY";
+  amount: number;
+  payee: string;
+  reason_code: string;
+  provider_state: string;
+  timestamp_utc: string;
+}
+
+export interface PaginatedActivityResponse {
+  items: ActivityItem[];
+  next_cursor: string | null;
+  has_more: boolean;
+}
+
+export interface HashChainProof {
+  event_id: string;
+  event_seq: number;
+  prev_hash: string;
+  event_hash: string;
+  canonical_payload_hash: string;
+  is_valid: boolean;
+}
+
+export interface ReceiptResponse {
+  receipt_id: string;
+  intent_digest: string;
+  mandate_id: string;
+  mandate_version: number;
+  decision: "ALLOW" | "STEP_UP" | "DENY";
+  reason_codes: string[];
+  ledger_sequence: number;
+  hash_chain_proof: HashChainProof;
+  amount_minor: number;
+  currency: string;
+  payee: string;
+  created_at_utc: string;
+}
+
+export interface ReceiptVerificationResponse {
+  status: "PASS" | "FAIL";
+  is_valid: boolean;
+  receipt_id: string;
+  decision: string;
+  ledger_sequence: number;
+  event_hash: string;
+  broken_block: number | null;
+  message: string;
+}
+
+export interface AttackLabItem {
+  attack_name: string;
+  target: string;
+  blocked: boolean;
+  decision: string;
+  reason_code: string;
+  description: string;
+  reached_paypal: boolean;
+}
+
+export interface AttackLabResponse {
+  attacks_run: number;
+  all_defended: boolean;
+  results: AttackLabItem[];
 }
 
 export interface ExtractedIntent {
@@ -51,6 +124,7 @@ export interface AuthorizeTransactionCommand {
   purpose: string;
   idempotency_key: string;
   anomaly_signal?: string | null;
+  invoice_reference?: string | null;
 }
 
 export interface PendingStepUpItem {
@@ -127,17 +201,13 @@ export class ApiError extends Error {
 async function request<T>(
   path: string,
   options: RequestInit = {},
-  token?: string,
-  role?: string
+  token?: string
 ): Promise<T> {
   const headers = new Headers(options.headers || {});
   headers.set("Content-Type", "application/json");
 
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
-  }
-  if (role) {
-    headers.set("X-Phalanx-Role", role);
   }
 
   const res = await fetch(path, {
@@ -162,44 +232,61 @@ async function request<T>(
 }
 
 export const api = {
-  getDemoToken: (role: string, principalId = "demo-principal", agentId?: string) =>
+  getDemoToken: (role: string, principalId = "principal_treasury", agentId?: string) =>
     request<DemoTokenResponse>("/v1/auth/demo-token", {
       method: "POST",
       body: JSON.stringify({ role, principal_id: principalId, agent_id: agentId }),
     }),
 
-  assistantChat: (message: string, agentId = "agent-auto-1", token?: string, role = "agent") =>
+  getOverview: (token?: string) =>
+    request<OverviewResponse>("/v1/overview", { method: "GET" }, token),
+
+  getActivity: (cursor?: string, limit = 20, token?: string) => {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    if (limit) params.set("limit", limit.toString());
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return request<PaginatedActivityResponse>(`/v1/activity${query}`, { method: "GET" }, token);
+  },
+
+  getReceipt: (receiptId: string, token?: string) =>
+    request<ReceiptResponse>(`/v1/receipts/${receiptId}`, { method: "GET" }, token),
+
+  verifyReceipt: (receiptId: string) =>
+    request<ReceiptVerificationResponse>(`/v1/receipts/${receiptId}/verify`, { method: "GET" }),
+
+  runAttackLab: (token?: string) =>
+    request<AttackLabResponse>("/v1/attack-lab/run", { method: "POST" }, token),
+
+  assistantChat: (message: string, agentId = "agent-auto-1", token?: string) =>
     request<AssistantChatResponse>(
       "/v1/assistant/chat",
       {
         method: "POST",
-        body: JSON.stringify({ message, agent_id: agentId, session_id: "demo-session" }),
+        body: JSON.stringify({ message, agent_id: agentId, session_id: "phalanx-session" }),
       },
-      token,
-      role
+      token
     ),
 
-  createPaymentRequest: (cmd: AuthorizeTransactionCommand, token?: string, role = "agent") =>
+  createPaymentRequest: (cmd: AuthorizeTransactionCommand, token?: string) =>
     request<AuthorizationResponse>(
       "/v1/payment-requests",
       {
         method: "POST",
         body: JSON.stringify(cmd),
       },
-      token,
-      role
+      token
     ),
 
-  getPendingApprovals: (token?: string, role = "approver") =>
-    request<PendingStepUpItem[]>("/v1/approvals", { method: "GET" }, token, role),
+  getPendingApprovals: (token?: string) =>
+    request<PendingStepUpItem[]>("/v1/approvals", { method: "GET" }, token),
 
   submitApproval: (
     requestId: string,
     expectedDigest: string,
     decision: "ALLOW" | "DENY",
     reason: string,
-    token?: string,
-    role = "approver"
+    token?: string
   ) =>
     request<AuthorizationResponse>(
       `/v1/approvals/${requestId}`,
@@ -211,55 +298,21 @@ export const api = {
           reason,
         }),
       },
-      token,
-      role
+      token
     ),
 
-  getLedgerEvents: (token?: string, role = "auditor") =>
-    request<LedgerEventItem[]>("/v1/ledger", { method: "GET" }, token, role),
+  getLedgerEvents: (token?: string) =>
+    request<LedgerEventItem[]>("/v1/ledger", { method: "GET" }, token),
 
-  verifyLedger: (token?: string, role = "auditor") =>
-    request<LedgerVerificationResponse>("/v1/ledger/verify", { method: "GET" }, token, role),
+  verifyLedger: (token?: string) =>
+    request<LedgerVerificationResponse>("/v1/ledger/verify", { method: "GET" }, token),
 
-  tamperLedger: (token?: string, role = "auditor") =>
-    request<{ status: string; message: string }>(
-      "/v1/ledger/tamper",
-      { method: "POST" },
-      token,
-      role
-    ),
+  tamperLedger: (token?: string) =>
+    request<{ status: string; message: string }>("/v1/ledger/tamper", { method: "POST" }, token),
 
-  restoreLedger: (token?: string, role = "auditor") =>
-    request<{ status: string; message: string }>(
-      "/v1/ledger/restore",
-      { method: "POST" },
-      token,
-      role
-    ),
+  restoreLedger: (token?: string) =>
+    request<{ status: string; message: string }>("/v1/ledger/restore", { method: "POST" }, token),
 
-  getMandate: (mandateId = "mandate_default_sandbox", token?: string, role = "principal") =>
-    request<MandateResponse>(`/v1/mandates/${mandateId}`, { method: "GET" }, token, role),
-
-  getReconcileItems: (token?: string, role = "approver") =>
-    request<
-      Array<{
-        request_id: string;
-        agent_id: string;
-        amount_minor: number;
-        currency: string;
-        payout_id?: string | null;
-        state: string;
-      }>
-    >("/v1/reconcile", { method: "GET" }, token, role),
-
-  resolveReconcile: (requestId: string, status: string, token?: string, role = "approver") =>
-    request<{ request_id: string; state: string }>(
-      `/v1/reconcile/${requestId}`,
-      {
-        method: "POST",
-        body: JSON.stringify({ status }),
-      },
-      token,
-      role
-    ),
+  getMandate: (mandateId = "mandate_default_sandbox", token?: string) =>
+    request<MandateResponse>(`/v1/mandates/${mandateId}`, { method: "GET" }, token),
 };
