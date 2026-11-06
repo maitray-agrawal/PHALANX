@@ -2,11 +2,12 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
-  timeout: 30000,
+  timeout: 45000,
   expect: {
-    timeout: 5000,
+    timeout: 10000,
   },
   fullyParallel: false,
+  workers: 2,
   reporter: "list",
   use: {
     baseURL: "http://localhost:5173",
@@ -21,10 +22,39 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "chromium",
+      name: "Chromium",
       use: {
         ...devices["Desktop Chrome"],
-        channel: "chrome",
+      },
+    },
+    {
+      name: "WebKit",
+      use: {
+        ...devices["Desktop Safari"],
+      },
+    },
+    {
+      name: "Firefox",
+      use: {
+        ...devices["Desktop Firefox"],
+      },
+    },
+    {
+      name: "iPhone SE size",
+      use: {
+        ...devices["iPhone SE"],
+      },
+    },
+    {
+      name: "Pixel 7 size",
+      use: {
+        ...devices["Pixel 7"],
+      },
+    },
+    {
+      name: "iPad size",
+      use: {
+        ...devices["iPad Mini"],
       },
     },
   ],

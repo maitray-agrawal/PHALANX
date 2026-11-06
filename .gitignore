@@ -40,6 +40,7 @@ web/.vite/
 web/test-results/
 web/playwright-report/
 web/screenshots/
+web/lighthouse-report.json
 npm-debug.log*
 
 # IDE & OS

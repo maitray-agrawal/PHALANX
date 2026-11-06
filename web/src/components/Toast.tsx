@@ -27,7 +27,7 @@ export const Toast: React.FC<ToastProps> = ({
 
   return (
     <div
-      className={`toast-container toast-${type}`}
+      className={`toast-container toast toast-${type}`}
       role="status"
       aria-live="polite"
     >

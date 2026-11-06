@@ -5,7 +5,7 @@ import json
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
-from threading import Lock
+from threading import RLock
 from typing import Any
 
 from sqlalchemy import select
@@ -34,7 +34,7 @@ class DatabaseLedgerAdapter(LedgerPort):
     ) -> None:
         self.session = session
         self.session_factory = session_factory
-        self._lock = Lock()
+        self._lock = RLock()
         self._tampered_events: list[ChainedLedgerEvent] | None = None
 
     @contextmanager

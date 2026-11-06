@@ -15,8 +15,25 @@ test.describe("PHALANX PayPal-Inspired Shell & Operational Screens", () => {
     }
   });
 
+  test.beforeEach(async ({ page }, testInfo) => {
+    // Throttle to slow 4G in Chromium project
+    if (testInfo.project.name.toLowerCase().includes("chromium")) {
+      try {
+        const client = await page.context().newCDPSession(page);
+        await client.send("Network.emulateNetworkConditions", {
+          offline: false,
+          downloadThroughput: (1.6 * 1024 * 1024) / 8, // 1.6 Mb/s Slow 4G profile
+          uploadThroughput: (750 * 1024) / 8, // 750 kb/s
+          latency: 150, // 150 ms RTT
+        });
+      } catch {
+        // Fallback for non-CDP engines
+      }
+    }
+  });
+
   test("App Shell & Footer Invariant", async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    test.slow();
     await page.goto("/#home");
 
     // Brand wordmark and sandbox indicator
@@ -33,7 +50,6 @@ test.describe("PHALANX PayPal-Inspired Shell & Operational Screens", () => {
   });
 
   test("Scene 1: Pay / Request Console with Intent Card & Instant Decision", async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/#pay");
 
     await expect(page.getByRole("heading", { name: "Propose Financial Transaction" })).toBeVisible();
@@ -59,7 +75,6 @@ test.describe("PHALANX PayPal-Inspired Shell & Operational Screens", () => {
   });
 
   test("Scene 2: Human Supervisor Step-Up Review Queue & Digest Binding", async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/#approvals");
 
     await expect(page.getByRole("heading", { name: "Human Supervisor Step-Up Review Queue" })).toBeVisible();
@@ -92,7 +107,6 @@ test.describe("PHALANX PayPal-Inspired Shell & Operational Screens", () => {
   });
 
   test("Scene 3: Cryptographic Shield-Wall Ledger & Hash Chain Sequence", async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/#activity");
 
     await expect(page.getByRole("heading", { name: "Cryptographic Shield-Wall Ledger" })).toBeVisible();
@@ -109,6 +123,7 @@ test.describe("PHALANX PayPal-Inspired Shell & Operational Screens", () => {
   });
 
   test("Multi-Viewport Screenshots: 1280px Desktop, 768px Tablet, 375px Mobile", async ({ page }) => {
+    test.slow();
     // 1. Desktop Viewport (1280 x 800)
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/#home");
@@ -143,6 +158,12 @@ test.describe("PHALANX PayPal-Inspired Shell & Operational Screens", () => {
     // Check sticky action bar and bottom tab bar on mobile
     await expect(page.locator(".mobile-bottom-tabbar")).toBeVisible();
     await expect(page.locator(".mobile-sticky-action-bar")).toBeVisible();
+
+    // Verify no horizontal overflow at 375px
+    const hasHorizontalOverflow = await page.evaluate(() => {
+      return document.documentElement.scrollWidth > document.documentElement.clientWidth;
+    });
+    expect(hasHorizontalOverflow).toBe(false);
 
     const mobilePath = path.join(LOCAL_SCREENSHOTS_DIR, "screenshot-375-mobile.png");
     const artifactMobile = path.join(ARTIFACT_DIR, "screenshot-375-mobile.png");

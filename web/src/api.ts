@@ -301,8 +301,8 @@ export const api = {
       token
     ),
 
-  getLedgerEvents: (token?: string) =>
-    request<LedgerEventItem[]>("/v1/ledger", { method: "GET" }, token),
+  getLedgerEvents: (token?: string, limit: number = 50) =>
+    request<LedgerEventItem[]>(`/v1/ledger?limit=${limit}`, { method: "GET" }, token),
 
   verifyLedger: (token?: string) =>
     request<LedgerVerificationResponse>("/v1/ledger/verify", { method: "GET" }, token),

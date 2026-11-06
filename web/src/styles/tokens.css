@@ -42,7 +42,7 @@
 
   --text-primary: #111827;
   --text-secondary: #4B5563;
-  --text-muted: #6B7280;
+  --text-muted: #4B5563;
   --text-inverse: #FFFFFF;
 
   /* PillButton & Actions */
@@ -57,18 +57,18 @@
   --action-blue-border: #0070BA;
   --action-blue-text: #0070BA;
 
-  /* Semantic Decision Tokens */
-  --decision-allow: #059669;
-  --decision-allow-bg: rgba(5, 150, 105, 0.10);
-  --decision-allow-border: #059669;
+  /* Semantic Decision Tokens (WCAG 2.1 AA Compliant on Light Backgrounds) */
+  --decision-allow: #047857;
+  --decision-allow-bg: rgba(4, 120, 87, 0.10);
+  --decision-allow-border: #047857;
 
-  --decision-stepup: #D97706;
-  --decision-stepup-bg: rgba(217, 119, 6, 0.10);
-  --decision-stepup-border: #D97706;
+  --decision-stepup: #9A3412;
+  --decision-stepup-bg: rgba(154, 52, 18, 0.10);
+  --decision-stepup-border: #9A3412;
 
-  --decision-deny: #DC2626;
-  --decision-deny-bg: rgba(220, 38, 38, 0.10);
-  --decision-deny-border: #DC2626;
+  --decision-deny: #B91C1C;
+  --decision-deny-bg: rgba(185, 28, 28, 0.10);
+  --decision-deny-border: #B91C1C;
 
   /* Transitions */
   --transition-fast: 150ms ease-in-out;

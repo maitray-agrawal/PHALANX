@@ -24,6 +24,9 @@ export const ChainStrip: React.FC<ChainStripProps> = ({
 }) => {
   const isChainValid = verification ? verification.is_valid : true;
   const brokenIndex = verification ? verification.broken_index : null;
+  const maxDisplay = 20;
+  const offset = events.length > maxDisplay ? events.length - maxDisplay : 0;
+  const displayEvents = events.slice(offset);
 
   return (
     <div className={`chain-strip-card card ${className}`.trim()} data-testid="chain-strip">
@@ -31,6 +34,11 @@ export const ChainStrip: React.FC<ChainStripProps> = ({
         <div className="chain-header-title-box">
           <Link2 size={18} className="text-accent" aria-hidden="true" />
           <h3 className="card-title">Cryptographic Hash Chain Sequence</h3>
+          {offset > 0 && (
+            <span className="chain-window-tag mono text-muted">
+              (Showing latest {displayEvents.length} of {events.length} blocks)
+            </span>
+          )}
         </div>
         <div className="chain-strip-actions">
           {onVerify && (
@@ -92,7 +100,8 @@ export const ChainStrip: React.FC<ChainStripProps> = ({
       {/* Visual Chain of Blocks */}
       <div className="chain-blocks-scroll">
         <div className="chain-blocks">
-          {events.map((ev, index) => {
+          {displayEvents.map((ev, i) => {
+            const index = offset + i;
             const blockNum = index + 1;
             const isBroken = brokenIndex !== null && blockNum >= brokenIndex;
             return (
@@ -129,7 +138,7 @@ export const ChainStrip: React.FC<ChainStripProps> = ({
                   </div>
                 </div>
 
-                {index < events.length - 1 && (
+                {i < displayEvents.length - 1 && (
                   <div className={`chain-link-connector ${isBroken ? "link-severed" : "link-intact"}`}>
                     <ArrowRight size={14} aria-hidden="true" />
                   </div>

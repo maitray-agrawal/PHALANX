@@ -66,3 +66,4 @@ export default function (data) {
 
   sleep(0.2);
 }
+

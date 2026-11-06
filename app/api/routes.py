@@ -136,7 +136,8 @@ def _check_demo_token_rate_limit(client_ip: str) -> None:
     history = _demo_token_rate_limits.setdefault(client_ip, [])
     # Retain timestamps within the last 60 seconds
     _demo_token_rate_limits[client_ip] = [t for t in history if now - t < 60.0]
-    if len(_demo_token_rate_limits[client_ip]) >= 10:
+    max_tokens = int(os.getenv("DEMO_TOKEN_RATE_LIMIT", "120"))
+    if len(_demo_token_rate_limits[client_ip]) >= max_tokens:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=(
@@ -541,10 +542,16 @@ def list_ledger_events(
         Depends(require_roles(Role.AUDITOR, Role.PRINCIPAL, Role.APPROVER)),
     ],
     service: Annotated[LedgerService, Depends(get_ledger_service)],
+    limit: int | None = Query(
+        default=None, ge=1, le=50000, description="Optional max events to return"
+    ),
 ) -> list[LedgerEventDTO]:
     """Retrieve full append-only audit trail. Agents cannot browse system ledger."""
     _ = identity
-    return service.get_all_events()
+    events = service.get_all_events()
+    if limit is not None:
+        return events[-limit:]
+    return events
 
 
 @router.get(

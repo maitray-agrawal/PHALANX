@@ -72,7 +72,14 @@ export const MandateMeter: React.FC<MandateMeterProps> = ({
             {formatMoney(spent)} / {formatMoney(lifetimeTotal)} ({spentPct}%)
           </span>
         </div>
-        <div className="progress-track" role="progressbar" aria-valuenow={spentPct} aria-valuemin={0} aria-valuemax={100}>
+        <div
+          className="progress-track"
+          role="progressbar"
+          aria-label="Mandate lifetime authority budget utilization"
+          aria-valuenow={spentPct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
           <div
             className={`progress-fill ${spentPct > 90 ? "fill-danger" : spentPct > 70 ? "fill-warning" : "fill-primary"}`}
             style={{ width: `${spentPct}%` }}
