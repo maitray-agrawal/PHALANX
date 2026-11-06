@@ -39,14 +39,20 @@ export const ActivityRow: React.FC<ActivityRowProps> = ({
   if (providerState === "COMPLETED" || providerState === "SUCCESS") {
     providerDisplay = "Completed";
     providerClass = "provider-completed";
-  } else if (
-    providerState === "BUYER_APPROVAL_REQUIRED" ||
-    providerState === "ORDER_CREATED"
-  ) {
+  } else if (providerState === "BUYER_APPROVAL_REQUIRED") {
     providerDisplay = "Needs buyer approval";
     providerClass = "provider-pending";
-  } else if (providerState === "RECONCILE") {
+  } else if (providerState === "ORDER_CREATED") {
     providerDisplay = "Order created";
+    providerClass = "provider-pending";
+  } else if (providerState === "APPROVED") {
+    providerDisplay = "Approved by buyer";
+    providerClass = "provider-approved";
+  } else if (providerState === "CAPTURE_REQUESTED") {
+    providerDisplay = "Capture requested";
+    providerClass = "provider-reconcile";
+  } else if (providerState === "RECONCILE") {
+    providerDisplay = "Reconciliation";
     providerClass = "provider-reconcile";
   } else if (providerState === "FAILED") {
     providerDisplay = "Payment failed";

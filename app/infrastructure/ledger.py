@@ -103,6 +103,7 @@ class InMemoryLedgerAdapter(LedgerPort):
         intent: TransactionIntent,
         result: PolicyEvaluationResult,
         recorded_at_utc: datetime,
+        provider_state: str | None = None,
     ) -> str:
         with self._lock:
             self._counter += 1
@@ -121,6 +122,8 @@ class InMemoryLedgerAdapter(LedgerPort):
                 "reasons": list(result.reasons),
                 "recorded_at_utc": recorded_at_utc.isoformat(),
             }
+            if provider_state:
+                payload["provider_state"] = provider_state
 
             chained = create_chained_event(
                 event_id=event_id,
@@ -269,6 +272,7 @@ class InMemoryLedgerAdapter(LedgerPort):
         intent: TransactionIntent,
         result: PolicyEvaluationResult,
         recorded_at_utc: datetime,
+        provider_state: str | None = None,
     ) -> str:
         self._counter += 1
         key_hash = hashlib.sha256(intent.idempotency_key.encode()).hexdigest()[:8]
@@ -286,6 +290,8 @@ class InMemoryLedgerAdapter(LedgerPort):
             "reasons": list(result.reasons),
             "recorded_at_utc": recorded_at_utc.isoformat(),
         }
+        if provider_state:
+            payload["provider_state"] = provider_state
 
         chained = create_chained_event(
             event_id=event_id,

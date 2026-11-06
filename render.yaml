@@ -21,6 +21,8 @@ services:
         value: "true"
       - key: LOG_LEVEL
         value: INFO
+      - key: PAYMENT_RAIL
+        value: paypal
       - key: DATABASE_URL
         fromDatabase:
           name: phalanx-postgres

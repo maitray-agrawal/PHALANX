@@ -111,6 +111,22 @@ class FakePaymentRail(PaymentRail):
         # Only signatures matching stubbed/fixture set are accepted
         return sig in self.valid_signatures
 
+    def capture_order(self, order_id: str, request_id: str | None = None) -> PaymentResult:
+        _ = request_id
+        if self.should_succeed:
+            return PaymentResult(
+                success=True,
+                transaction_id=order_id,
+                status="COMPLETED",
+                details={"captured": True, "order_id": order_id, "provider_status": "COMPLETED"},
+            )
+        return PaymentResult(
+            success=False,
+            transaction_id=order_id,
+            status="FAILED",
+            details={"error": "simulated_capture_failure"},
+        )
+
 
 class PayPalPaymentRailAdapter(PaymentRail):
     """Production PayPal Sandbox adapter implementing Route A (Payouts) with Orders fallback."""
@@ -393,6 +409,69 @@ class PayPalPaymentRailAdapter(PaymentRail):
         if isinstance(raw_error, dict):
             return str(raw_error.get("message") or raw_error.get("name") or "Rail execution error")
         return str(raw_error)
+
+    def capture_order(self, order_id: str, request_id: str | None = None) -> PaymentResult:
+        """Capture an approved order on PayPal Orders v2 rail.
+
+        Documentation:
+        POST https://api-m.sandbox.paypal.com/v2/checkout/orders/{order_id}/capture
+        """
+        token = self._get_access_token()
+        if not token:
+            return PaymentResult(
+                success=False,
+                transaction_id=order_id,
+                status="FAILED",
+                details={
+                    "error": (
+                        "PayPal credentials missing: PAYPAL_CLIENT_ID and "
+                        "PAYPAL_CLIENT_SECRET are required when PAYMENT_RAIL=paypal"
+                    )
+                },
+            )
+
+        url = f"{self._base_url}/v2/checkout/orders/{order_id}/capture"
+        req_id = request_id or f"req_cap_{order_id[:24]}"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "PayPal-Request-Id": req_id,
+        }
+        try:
+            resp = httpx.post(url, json={}, headers=headers, timeout=15.0)
+            if resp.status_code in (200, 201):
+                data = resp.json()
+                raw_status = str(data.get("status", "")).upper()
+                if raw_status == "COMPLETED":
+                    provider_state = "COMPLETED"
+                elif raw_status == "PENDING":
+                    provider_state = "RECONCILE"
+                else:
+                    provider_state = "RECONCILE"
+                data["provider_status"] = provider_state
+                return PaymentResult(
+                    success=(provider_state == "COMPLETED"),
+                    transaction_id=order_id,
+                    status=provider_state,
+                    details=data,
+                )
+            return PaymentResult(
+                success=False,
+                transaction_id=order_id,
+                status="FAILED",
+                details={
+                    "error": self.normalize_error(resp.text),
+                    "http_status": resp.status_code,
+                    "raw": resp.text,
+                },
+            )
+        except Exception as exc:
+            return PaymentResult(
+                success=False,
+                transaction_id=order_id,
+                status="RECONCILE",
+                details={"error": self.normalize_error(exc)},
+            )
 
     def verify_webhook(self, headers: dict[str, str], body_bytes: bytes) -> bool:
         """Verify webhook signature via PayPal's verify-webhook-signature API.

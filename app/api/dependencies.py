@@ -64,7 +64,13 @@ def get_ledger() -> LedgerPort:
 def get_payment_rail() -> PaymentRail:
     if is_fake_rail():
         return FakePaymentRail()
-    return PayPalPaymentRailAdapter()
+    adapter = PayPalPaymentRailAdapter()
+    if not adapter._client_id or not adapter._client_secret:
+        raise RuntimeError(
+            "PayPal credentials missing: PAYPAL_CLIENT_ID and "
+            "PAYPAL_CLIENT_SECRET are required when PAYMENT_RAIL=paypal"
+        )
+    return adapter
 
 
 @lru_cache(maxsize=1)

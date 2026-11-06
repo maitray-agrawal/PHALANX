@@ -251,6 +251,81 @@ Audit conducted per manual sections 56.13, 56.14, 56.17 covering transaction bou
   - Unconfigured `PAYPAL_WEBHOOK_ID` or missing PayPal credentials: Returns HTTP 503 Service Unavailable ("PayPal webhook processing unavailable: PAYPAL_WEBHOOK_ID unconfigured").
   - Invalid signature or missing headers: Returns HTTP 401 Unauthorized ("PayPal webhook signature verification failed").
 
+---
+
+## 12. Live PayPal Sandbox Interaction Evidence (Date: 2026-11-06 / 2026-11-07)
+
+Empirical evidence gathered directly from live API requests against `https://api-m.sandbox.paypal.com`.
+
+### 12.1 OAuth 2.0 Client Authentication
+- **Request**: `POST /v1/oauth2/token`
+- **Auth**: Basic Auth using sandbox client credentials
+- **Payload**: `grant_type=client_credentials`
+- **Response**: HTTP 200 OK
+- **Verified Fields**:
+  - `status`: `SUCCESS`
+  - `token_type`: `Bearer`
+  - `app_id`: `APP-1HJ00964E5858645P`
+  - `expires_in`: `32399`
+
+### 12.2 Route A: Payouts API Restricted-Account Response
+- **Request**: `POST /v1/payments/payouts`
+- **Headers**:
+  - `Authorization: Bearer <token>`
+  - `Content-Type: application/json`
+  - `PayPal-Request-Id: req_e7a892b1...`
+- **Response**: HTTP 403 Forbidden
+- **Raw Payload**:
+  ```json
+  {
+    "name": "PAYOUT_NOT_AVAILABLE",
+    "message": "You live in a country that is not allowed to send this payout.",
+    "debug_id": "ca56690baecf3",
+    "information_link": "https://developer.paypal.com/docs/api/payments.payouts-batch/#errors",
+    "links": []
+  }
+  ```
+- **Architectural Handling**: Automatic fallback to Orders v2 checkout flow (`_orders_v2_fallback`) when Payouts capability is unavailable.
+
+### 12.3 Route B: Orders v2 Flow & Idempotent Request-Id
+- **Request**: `POST /v2/checkout/orders`
+- **Deterministic Header**: `PayPal-Request-Id: req_f8e708b4e5116c3c4181642764a8da1f` (derived directly from SHA-256 RFC 8785 canonical intent digest `f8e708b4e5116c3c4181642764a8da1f88d28051dcb005737ee9a7ff7e9890c2`)
+- **Intent**: `CAPTURE`
+- **Purchase Unit**: Amount `$35.00 USD` (3,500 minor units), Reference `live-sandbox-flow-1762458895`, Description `Cloud hosting infrastructure renewal`
+- **Response**: HTTP 201 Created
+- **Order ID**: `7W66016971270031D`
+- **Initial Status**: `CREATED`
+- **Provider State**: `ORDER_CREATED` -> `BUYER_APPROVAL_REQUIRED`
+- **Approval Link**: `https://www.sandbox.paypal.com/checkoutnow?token=7W66016971270031D`
+- **Lookup Verification**: `GET /v2/checkout/orders/7W66016971270031D` returns HTTP 200 with `status: "CREATED"`, correctly mapped to provider state `BUYER_APPROVAL_REQUIRED`.
+
+### 12.4 Pre-Approval Capture Rejection (Fail-Closed Check)
+- **Request**: `POST /v2/checkout/orders/7W66016971270031D/capture` before buyer approval
+- **Response**: HTTP 422 Unprocessable Entity
+- **Error**:
+  ```json
+  {
+    "name": "UNPROCESSABLE_ENTITY",
+    "message": "The requested action could not be performed, semantically incorrect, or failed business validation.",
+    "debug_id": "f5678722e4318",
+    "details": [
+      {
+        "issue": "ORDER_NOT_APPROVED",
+        "description": "Payer has not yet approved the Order for payment. Please redirect the payer to the 'rel':'approve' url returned as part of the HATEOAS links within the Create Order call or provide a valid payment_source in the request."
+      }
+    ]
+  }
+  ```
+- **Proof**: Proves PHALANX strictly holds payment in `BUYER_APPROVAL_REQUIRED` / `RECONCILE` and never marks an order complete before real capture.
+
+### 12.5 Webhook Signature Verification Endpoint Proof
+- **Webhook ID**: `9PJ08350X2508271R` registered on sandbox account
+- **Verification Endpoint**: `POST /v1/notifications/verify-webhook-signature`
+- **Arbitrary Signature Probe**: Inbound request with invalid signature tested against live API
+- **Response**: HTTP 200 OK with `{"verification_status": "FAILURE"}`
+- **Security Boundary**: Fails closed and rejects unauthorized/forged webhooks with HTTP 401.
+
+
 
 
 

@@ -53,6 +53,7 @@ class DatabaseLedgerAdapter(LedgerPort):
         intent: TransactionIntent,
         result: PolicyEvaluationResult,
         recorded_at_utc: datetime,
+        provider_state: str | None = None,
     ) -> str:
         """Append an event to the ledger, computing prev_hash and event_hash."""
         with self._lock, self._get_session() as session:
@@ -81,6 +82,8 @@ class DatabaseLedgerAdapter(LedgerPort):
                 "reasons": list(result.reasons),
                 "recorded_at_utc": recorded_at_utc.isoformat(),
             }
+            if provider_state:
+                payload_dict["provider_state"] = provider_state
             canonical_bytes = canonical_json_bytes(payload_dict)
             canonical_str = canonical_bytes.decode("utf-8")
 

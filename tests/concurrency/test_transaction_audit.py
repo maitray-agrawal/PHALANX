@@ -49,8 +49,16 @@ class MemoryLedger(LedgerPort):
     def __init__(self) -> None:
         self.events: list[dict[str, Any]] = []
 
-    def append_event(self, event_type: str, intent: Any, result: Any, recorded_at_utc: Any) -> str:
-        _ = recorded_at_utc
+    def append_event(
+        self,
+        event_type: str,
+        intent: Any,
+        result: Any,
+        recorded_at_utc: Any,
+        *args: Any,
+        **kwargs: Any,
+    ) -> str:
+        _ = (recorded_at_utc, args, kwargs)
         eid = f"evt_{len(self.events) + 1:06d}"
         self.events.append(
             {"event_id": eid, "type": event_type, "intent": intent, "result": result}

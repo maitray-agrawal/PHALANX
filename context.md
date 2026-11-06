@@ -1,5 +1,5 @@
 # context.md
-Phase: R12 Complete (Dependabot PR Cleanup, Grouped Updates, Branching Model: main + dev)   Branches: main, dev   Last green CI: local-verified
+Phase: R13 Live PayPal Sandbox Verification (Orders v2 Two-Phase Flow, Payouts 403 Restriced Proof, Webhook Verification)   Branches: main, dev   Last green CI: local-verified
 Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
 - app/domain: Pure deterministic policy engine, Ed25519 mandate invariants, canonical RFC 8785 JSON, cryptographic hash-chained ledger. AST purity test enforced.
 - app/application: AuthorizationService, MandateService, LedgerService, ProviderAgnosticLLMClient (quotas, timeouts, retries), IntentExtractor (delimiter isolation, strict Pydantic draft), GroundedExplanationValidator, PrincipalSessionMemory, DeterministicKnowledgeBase, CompositeAdvisoryPipeline. SubmitApprovalRequestDTO enforces strict mass-assignment prevention (`extra="forbid"`).

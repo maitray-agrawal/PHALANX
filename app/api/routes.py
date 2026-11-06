@@ -760,6 +760,54 @@ async def paypal_webhook(
 
 
 # ---------------------------------------------------------------------------
+# Orders v2 Live Management Endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get("/v1/orders/{order_id}", status_code=status.HTTP_200_OK)
+def get_order_status(
+    order_id: str,
+    identity: Annotated[Identity, Depends(get_current_identity)],
+    rail: Annotated[PaymentRail, Depends(get_payment_rail)],
+) -> dict[str, Any]:
+    """Query external order provider state from PayPal rail."""
+    _ = identity
+    result = rail.lookup(order_id)
+    return {
+        "order_id": order_id,
+        "success": result.success,
+        "status": result.status,
+        "details": result.details,
+    }
+
+
+@router.post("/v1/orders/{order_id}/capture", status_code=status.HTTP_200_OK)
+def capture_order(
+    order_id: str,
+    identity: Annotated[Identity, Depends(get_current_identity)],
+    auth_service: Annotated[AuthorizationService, Depends(get_authorization_service)],
+) -> dict[str, Any]:
+    """Capture an approved PayPal order upon buyer confirmation."""
+    if identity.role not in (Role.APPROVER, Role.PRINCIPAL):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Only APPROVER or PRINCIPAL can execute order capture",
+        )
+    result = auth_service.capture_order(order_id)
+    if not result.success and result.status == "FAILED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Order capture failed: {result.details.get('error', 'unknown error')}",
+        )
+    return {
+        "order_id": order_id,
+        "success": result.success,
+        "status": result.status,
+        "details": result.details,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Demo Reset Endpoint (POST /v1/admin/reset)
 # ---------------------------------------------------------------------------
 
@@ -910,14 +958,16 @@ def get_activity(
             else ("PRE_AUTHORIZED" if decision_val == "ALLOW" else "POLICY_RESTRICTION")
         )
 
-        if decision_val == "ALLOW":
-            provider_state = "COMPLETED"
-        elif decision_val == "STEP_UP":
-            provider_state = "BUYER_APPROVAL_REQUIRED"
-        elif decision_val == "DENY":
-            provider_state = "FAILED"
-        else:
-            provider_state = "RECONCILE"
+        provider_state = str(p.get("provider_state") or p.get("provider_status") or "")
+        if not provider_state:
+            if decision_val == "ALLOW":
+                provider_state = "COMPLETED"
+            elif decision_val == "STEP_UP":
+                provider_state = "BUYER_APPROVAL_REQUIRED"
+            elif decision_val == "DENY":
+                provider_state = "FAILED"
+            else:
+                provider_state = "RECONCILE"
 
         items.append(
             ActivityItemDTO(

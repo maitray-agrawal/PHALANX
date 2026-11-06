@@ -26,6 +26,7 @@ class LedgerPort(Protocol):
         intent: TransactionIntent,
         result: PolicyEvaluationResult,
         recorded_at_utc: datetime,
+        provider_state: str | None = None,
     ) -> str:
         """Record an immutable ledger event and return event_id."""
         ...
@@ -59,4 +60,8 @@ class PaymentRail(Protocol):
 
     def verify_webhook(self, headers: dict[str, str], body_bytes: bytes) -> bool:
         """Verify authenticity of inbound webhook event signatures."""
+        ...
+
+    def capture_order(self, order_id: str, request_id: str | None = None) -> PaymentResult:
+        """Capture an approved order on external rail."""
         ...

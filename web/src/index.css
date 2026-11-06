@@ -778,6 +778,11 @@ body {
   color: var(--decision-stepup);
 }
 
+.provider-approved {
+  background-color: rgba(0, 112, 186, 0.12);
+  color: var(--action-blue);
+}
+
 .provider-reconcile {
   background-color: rgba(0, 112, 186, 0.10);
   color: var(--action-blue);

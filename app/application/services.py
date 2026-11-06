@@ -41,7 +41,7 @@ from app.domain.policy import (
     PolicyState,
     evaluate_policy,
 )
-from app.domain.ports import ClockPort, LedgerPort, PaymentRail
+from app.domain.ports import ClockPort, LedgerPort, PaymentRail, PaymentResult
 from app.domain.state_machine import RequestState, transition_request_state
 from app.infrastructure.crypto import (
     load_or_generate_keypair,
@@ -696,6 +696,7 @@ class AuthorizationService:
                     )
                     rail_res = self._payment_rail.pay(intent)
                     payout_id = rail_res.transaction_id
+                    active_provider_state = rail_res.status
 
                     AMBIGUOUS_STATUSES = {
                         "PAYOUT_EXCEPTION",
@@ -805,12 +806,25 @@ class AuthorizationService:
                 evaluated_at_utc=now_utc,
             )
 
-            event_id = self._ledger.append_event(
-                event_type="AUTHORIZATION_EVALUATED",
-                intent=intent,
-                result=domain_result,
-                recorded_at_utc=now_utc,
-            )
+            kwargs: dict[str, Any] = {}
+            act_st = locals().get("active_provider_state")
+            if act_st:
+                kwargs["provider_state"] = act_st
+            try:
+                event_id = self._ledger.append_event(
+                    event_type="AUTHORIZATION_EVALUATED",
+                    intent=intent,
+                    result=domain_result,
+                    recorded_at_utc=now_utc,
+                    **kwargs,
+                )
+            except TypeError:
+                event_id = self._ledger.append_event(
+                    event_type="AUTHORIZATION_EVALUATED",
+                    intent=intent,
+                    result=domain_result,
+                    recorded_at_utc=now_utc,
+                )
 
             resp = AuthorizationResponseDTO(
                 request_id=request_id,
@@ -952,6 +966,7 @@ class AuthorizationService:
                         )
                         rail_res = self._payment_rail.pay(intent)
                         payout_id = rail_res.transaction_id
+                        active_approval_provider_state = rail_res.status
 
                         AMBIGUOUS_STATUSES = {
                             "PAYOUT_EXCEPTION",
@@ -1070,12 +1085,25 @@ class AuthorizationService:
                 evaluated_at_utc=now_utc,
             )
 
-            event_id = self._ledger.append_event(
-                event_type="HUMAN_STEP_UP_RESOLVED",
-                intent=intent,
-                result=domain_result,
-                recorded_at_utc=now_utc,
-            )
+            kwargs_step: dict[str, Any] = {}
+            act_app_st = locals().get("active_approval_provider_state")
+            if act_app_st:
+                kwargs_step["provider_state"] = act_app_st
+            try:
+                event_id = self._ledger.append_event(
+                    event_type="HUMAN_STEP_UP_RESOLVED",
+                    intent=intent,
+                    result=domain_result,
+                    recorded_at_utc=now_utc,
+                    **kwargs_step,
+                )
+            except TypeError:
+                event_id = self._ledger.append_event(
+                    event_type="HUMAN_STEP_UP_RESOLVED",
+                    intent=intent,
+                    result=domain_result,
+                    recorded_at_utc=now_utc,
+                )
 
             resp = AuthorizationResponseDTO(
                 request_id=command.request_id,
@@ -1253,6 +1281,54 @@ class AuthorizationService:
                 except Exception:
                     pass  # nosec: B110
             return None
+
+    def capture_order(self, order_id: str, request_id: str | None = None) -> PaymentResult:
+        """Capture an approved PayPal order and update ledger/budget reservations."""
+        with self._lock:
+            result = self._payment_rail.capture_order(order_id, request_id)
+            now_utc = self._clock.now_utc()
+
+            target_req_id = request_id
+            if not target_req_id:
+                for req_k, held_info in list(self._held_reservations.items()):
+                    if held_info.get("payout_id") == order_id:
+                        target_req_id = req_k
+                        break
+
+            if target_req_id and target_req_id in self._held_reservations:
+                held = self._held_reservations[target_req_id]
+                res_id = held.get("reservation_id")
+                intent = held.get("intent")
+                if result.success and result.status == "COMPLETED":
+                    self._request_states[target_req_id] = RequestState.SETTLED
+                    if self._db_session_factory is not None and res_id:
+                        with self._db_session_factory() as session, session.begin():
+                            repo = BudgetRepository(session)
+                            repo.confirm_reservation(res_id)
+                    self._held_reservations.pop(target_req_id, None)
+
+                    if intent:
+                        eval_result = PolicyEvaluationResult(
+                            outcome=DecisionOutcome.ALLOW,
+                            reasons=("ORDER_CAPTURED_COMPLETED",),
+                            evaluated_at_utc=now_utc,
+                        )
+                        self._ledger.append_event(
+                            event_type="ORDER_CAPTURED",
+                            intent=intent,
+                            result=eval_result,
+                            recorded_at_utc=now_utc,
+                            provider_state="COMPLETED",
+                        )
+                elif result.status == "FAILED":
+                    self._request_states[target_req_id] = RequestState.FAILED
+                    if self._db_session_factory is not None and res_id:
+                        with self._db_session_factory() as session, session.begin():
+                            repo = BudgetRepository(session)
+                            repo.release_reservation(res_id, confirmed_failure=True)
+                    self._held_reservations.pop(target_req_id, None)
+
+            return result
 
     def get_held_reservations(self) -> list[dict[str, Any]]:
         with self._lock:
