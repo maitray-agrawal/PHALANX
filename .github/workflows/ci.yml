@@ -228,7 +228,7 @@ jobs:
           tags: phalanx:ci
 
       - name: Scan Image with Trivy
-        uses: aquasecurity/trivy-action@v0.29.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: phalanx:ci
           format: table

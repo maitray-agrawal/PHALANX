@@ -20,8 +20,18 @@ import pytest
 BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
 
+def _is_server_reachable() -> bool:
+    try:
+        with httpx.Client(base_url=BASE_URL, timeout=2.0) as client:
+            return client.get("/healthz").status_code == 200
+    except Exception:
+        return False
+
+
 @pytest.fixture(scope="module")
 def agent_token():
+    if not _is_server_reachable():
+        pytest.skip(f"API server not running at {BASE_URL}")
     with httpx.Client(base_url=BASE_URL, timeout=10.0) as client:
         res = client.post("/v1/auth/demo-token", json={"role": "agent", "agent_id": "agent-auto-1"})
         assert res.status_code == 200, f"Failed to get agent token: {res.text}"
@@ -30,6 +40,8 @@ def agent_token():
 
 @pytest.fixture(scope="module")
 def approver_token():
+    if not _is_server_reachable():
+        pytest.skip(f"API server not running at {BASE_URL}")
     with httpx.Client(base_url=BASE_URL, timeout=10.0) as client:
         res = client.post("/v1/auth/demo-token", json={"role": "approver"})
         assert res.status_code == 200, f"Failed to get approver token: {res.text}"
@@ -71,6 +83,8 @@ def test_mandate_etag_and_304_not_modified(agent_token):
 
 def test_static_asset_cache_headers():
     """Hashed assets are immutable; index.html carries no-cache."""
+    if not _is_server_reachable():
+        pytest.skip(f"API server not running at {BASE_URL}")
     with httpx.Client(base_url=BASE_URL, timeout=10.0) as client:
         # Root index.html
         res = client.get("/")

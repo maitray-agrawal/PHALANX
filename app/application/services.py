@@ -1282,6 +1282,27 @@ class AuthorizationService:
             self._held_reservations.clear()
             self._seed_default_step_up()
 
+            if self._db_session_factory is not None:
+                from sqlalchemy import delete, update
+
+                from app.infrastructure.models import (
+                    AgentBudgetModel,
+                    ApprovalStatus,
+                    BudgetReservationModel,
+                    IdempotencyModel,
+                    StepUpApprovalModel,
+                )
+
+                with self._db_session_factory() as session, session.begin():
+                    session.execute(delete(BudgetReservationModel))
+                    session.execute(delete(IdempotencyModel))
+                    session.execute(
+                        update(AgentBudgetModel).values(spent_minor=0, reserved_minor=0)
+                    )
+                    session.execute(
+                        update(StepUpApprovalModel).values(status=ApprovalStatus.PENDING.value)
+                    )
+
 
 class LedgerService:
     """Application service for querying and cryptographically verifying the audit ledger."""

@@ -32,7 +32,7 @@ services:
     environment:
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
-      - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://phalanx_app:${POSTGRES_PASSWORD}@db:5432/phalanx_db}
+      - DATABASE_URL=${CONTAINER_DATABASE_URL:-postgresql+psycopg://phalanx_app:${POSTGRES_PASSWORD:-postgres}@db:5432/phalanx_db}
       - SECRET_KEY=${SECRET_KEY}
       - ADMIN_TOKEN=${ADMIN_TOKEN}
       - DEMO_MODE=${DEMO_MODE:-true}

@@ -44,13 +44,24 @@ def run_boot() -> bool:
     engine = get_engine()
 
     # Step 1: Database connectivity verification & schema migrations via Alembic
+    import time
+
     from sqlalchemy import text
 
-    try:
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-    except Exception as db_err:
-        logger.error("Boot aborted: database connection failure: %s", db_err)
+    connected = False
+    for attempt in range(1, 6):
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            connected = True
+            break
+        except Exception as db_err:
+            logger.warning("Database connection attempt %d/5 failed: %s", attempt, db_err)
+            if attempt < 5:
+                time.sleep(2)
+
+    if not connected:
+        logger.error("Boot aborted: database connection failure (fail closed).")
         return False
 
     try:

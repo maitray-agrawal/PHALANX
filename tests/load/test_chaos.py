@@ -26,8 +26,18 @@ from app.infrastructure.paypal import PayPalPaymentRailAdapter
 BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
 
+def _is_server_reachable() -> bool:
+    try:
+        with httpx.Client(base_url=BASE_URL, timeout=2.0) as client:
+            return client.get("/healthz").status_code == 200
+    except Exception:
+        return False
+
+
 @pytest.fixture(scope="module")
 def agent_token():
+    if not _is_server_reachable():
+        pytest.skip(f"API server not running at {BASE_URL}")
     with httpx.Client(base_url=BASE_URL, timeout=10.0) as client:
         res = client.post("/v1/auth/demo-token", json={"role": "agent", "agent_id": "agent-auto-1"})
         assert res.status_code == 200
@@ -73,6 +83,8 @@ def test_clock_skew_defense(agent_token):
 
 def test_duplicate_webhook_deduplication():
     """Verify PayPal webhooks are deduplicated by event ID."""
+    if not _is_server_reachable():
+        pytest.skip(f"API server not running at {BASE_URL}")
     with httpx.Client(base_url=BASE_URL, timeout=10.0) as client:
         # Duplicate payload
         evt_id = f"WH-EVT-{uuid.uuid4().hex[:12]}"
@@ -99,6 +111,8 @@ def test_duplicate_webhook_deduplication():
 
 def test_api_recovery_after_restart():
     """Verify that the API recovers immediately after a restart without manual intervention."""
+    if not _is_server_reachable():
+        pytest.skip(f"API server not running at {BASE_URL}")
     with httpx.Client(base_url=BASE_URL, timeout=10.0) as client:
         # Pre-check
         res = client.get("/readyz")
@@ -108,6 +122,8 @@ def test_api_recovery_after_restart():
 
 def test_postgres_unavailability_fails_closed():
     """Verify that during DB connection issues, the app fails closed and does not allow payments."""
+    if not _is_server_reachable():
+        pytest.skip(f"API server not running at {BASE_URL}")
     with httpx.Client(base_url=BASE_URL, timeout=10.0) as client:
         res = client.get("/readyz")
         assert res.status_code == 200

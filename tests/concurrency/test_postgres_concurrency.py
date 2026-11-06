@@ -22,6 +22,7 @@ import pytest
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import sessionmaker
 
+from app.application.dtos import CreateMandateCommand
 from app.infrastructure.db_budget_repo import (
     BudgetRepository,
     IdempotencyReplayError,
@@ -328,8 +329,17 @@ def test_postgres_restart_persistence_budgets_idempotency_approvals_ledger(pg_se
     )
 
     agent_id = f"agent-persist-{uuid.uuid4().hex[:8]}"
-    mandate = mandate_svc.get_active_mandate_for_agent("agent-auto-1")
-    assert mandate is not None
+    mandate = mandate_svc.create_mandate(
+        CreateMandateCommand(
+            mandate_id=f"mandate-{agent_id}",
+            principal_id="demo-principal",
+            agent_id=agent_id,
+            single_limit_minor=100_000,
+            instant_threshold_minor=100_000,
+            lifetime_budget_minor=100_000,
+            allow_unregistered_payees=True,
+        )
+    )
 
     with pg_session_factory() as session, session.begin():
         repo = BudgetRepository(session)
@@ -393,8 +403,17 @@ def test_postgres_two_service_instances_sharing_budget(pg_session_factory):
     clock = SystemUtcClock()
     mandate_svc = MandateService(clock=clock)
     agent_id = f"agent-share-{uuid.uuid4().hex[:8]}"
-    mandate = mandate_svc.get_active_mandate_for_agent("agent-auto-1")
-    assert mandate is not None
+    mandate = mandate_svc.create_mandate(
+        CreateMandateCommand(
+            mandate_id=f"mandate-{agent_id}",
+            principal_id="demo-principal",
+            agent_id=agent_id,
+            single_limit_minor=100_000,
+            instant_threshold_minor=100_000,
+            lifetime_budget_minor=10_000,
+            allow_unregistered_payees=True,
+        )
+    )
 
     # Seed budget with $100.00 (10,000 minor units)
     with pg_session_factory() as session, session.begin():
@@ -478,8 +497,17 @@ def test_postgres_50_parallel_requests_on_one_budget(pg_session_factory):
     clock = SystemUtcClock()
     mandate_svc = MandateService(clock=clock)
     agent_id = f"agent-parallel-{uuid.uuid4().hex[:8]}"
-    mandate = mandate_svc.get_active_mandate_for_agent("agent-auto-1")
-    assert mandate is not None
+    mandate = mandate_svc.create_mandate(
+        CreateMandateCommand(
+            mandate_id=f"mandate-{agent_id}",
+            principal_id="demo-principal",
+            agent_id=agent_id,
+            single_limit_minor=100_000,
+            instant_threshold_minor=100_000,
+            lifetime_budget_minor=50_000,
+            allow_unregistered_payees=True,
+        )
+    )
 
     # Total allocated budget: $500.00 (50,000 minor units)
     # Each request: $20.00 (2,000 minor units)

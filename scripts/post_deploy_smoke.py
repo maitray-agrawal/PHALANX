@@ -60,6 +60,18 @@ class SmokeTestRunner:
                 parsed = {"raw": raw}
             return exc.code, parsed
 
+    def _get_demo_token(self, role: str, agent_id: str | None = None) -> str:
+        body: dict[str, Any] = {"role": role}
+        if agent_id:
+            body["agent_id"] = agent_id
+        code, data = self._request("POST", "/v1/auth/demo-token", body=body)
+        if code == 200 and "access_token" in data:
+            return data["access_token"]
+        logger.warning(
+            "Could not acquire signed demo token for role '%s' (code=%d, %s)", role, code, data
+        )
+        return ""
+
     def run_all(self) -> bool:
         logger.info("=== STARTING PHALANX POST-DEPLOY SMOKE TEST ===")
         logger.info("Target URL: %s", self.base_url)
@@ -82,6 +94,27 @@ class SmokeTestRunner:
         assert data.get("status") == "reset_completed"
         logger.info("Scene 0 (Admin Reset) passed.")
 
+        # Acquire signed role tokens via /v1/auth/demo-token
+        agent_token = self._get_demo_token("agent", "agent-auto-1")
+        approver_token = self._get_demo_token("approver")
+        auditor_token = self._get_demo_token("auditor")
+
+        agent_headers = (
+            {"Authorization": f"Bearer {agent_token}"}
+            if agent_token
+            else {"x-phalanx-role": "agent"}
+        )
+        approver_headers = (
+            {"Authorization": f"Bearer {approver_token}"}
+            if approver_token
+            else {"x-phalanx-role": "approver"}
+        )
+        auditor_headers = (
+            {"Authorization": f"Bearer {auditor_token}"}
+            if auditor_token
+            else {"x-phalanx-role": "auditor"}
+        )
+
         # 2. Scene 1 - Request Console (Pre-authorized autonomous agent payment)
         logger.info("[SCENE 1] Testing Request Console: Autonomous Agent Payment (ALLOW)...")
         tx_key = f"smoke_tx_{int(time.time())}"
@@ -97,7 +130,7 @@ class SmokeTestRunner:
             "POST",
             "/api/v1/authorize",
             body=payload,
-            headers={"x-phalanx-role": "agent"},
+            headers=agent_headers,
         )
         assert code == 200, f"Scene 1 authorization failed: {code} {data}"
         assert data["decision"] == "ALLOW", f"Expected ALLOW, got {data['decision']}"
@@ -111,7 +144,7 @@ class SmokeTestRunner:
         code, stepups = self._request(
             "GET",
             "/v1/approvals",
-            headers={"x-phalanx-role": "approver"},
+            headers=approver_headers,
         )
         assert code == 200, f"Failed to fetch pending approvals: {code} {stepups}"
         assert len(stepups) > 0, "Expected at least 1 pending step-up request in demo queue!"
@@ -130,7 +163,7 @@ class SmokeTestRunner:
             "POST",
             f"/v1/approvals/{req_id}",
             body=approval_body,
-            headers={"x-phalanx-role": "approver"},
+            headers=approver_headers,
         )
         assert code == 200, f"Scene 2 supervisor approval failed: {code} {approval_res}"
         assert approval_res["decision"] == "ALLOW", f"Approval failed: {approval_res}"
@@ -142,7 +175,7 @@ class SmokeTestRunner:
         code, verify_res = self._request(
             "GET",
             "/v1/ledger/verify",
-            headers={"x-phalanx-role": "auditor"},
+            headers=auditor_headers,
         )
         assert code == 200, f"Ledger verification failed: {code} {verify_res}"
         assert verify_res["is_valid"] is True, f"Pristine ledger chain invalid: {verify_res}"
@@ -157,13 +190,13 @@ class SmokeTestRunner:
             "POST",
             "/v1/ledger/tamper",
             body={"index": 1, "new_amount": 99999999},
-            headers={"x-phalanx-role": "auditor"},
+            headers=auditor_headers,
         )
         assert code == 200, "Tamper endpoint failed"
         code, tampered_verify = self._request(
             "GET",
             "/v1/ledger/verify",
-            headers={"x-phalanx-role": "auditor"},
+            headers=auditor_headers,
         )
         assert code == 200
         assert tampered_verify["is_valid"] is False, "Tampering was NOT detected by verify_chain!"
@@ -173,16 +206,17 @@ class SmokeTestRunner:
         )
 
         # Step 3c: Restore pristine chain
+        logger.info("Testing Auditor Ledger Chain Restoration...")
         code, _ = self._request(
             "POST",
             "/v1/ledger/restore",
-            headers={"x-phalanx-role": "auditor"},
+            headers=auditor_headers,
         )
         assert code == 200
         code, restored_verify = self._request(
             "GET",
             "/v1/ledger/verify",
-            headers={"x-phalanx-role": "auditor"},
+            headers=auditor_headers,
         )
         assert code == 200 and restored_verify["is_valid"] is True
         logger.info("Scene 3 (Audit Ledger Verification & Tamper Detection) passed.")
