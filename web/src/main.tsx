@@ -11,3 +11,10 @@ if (rootElement) {
     </React.StrictMode>
   );
 }
+
+// Register service worker for static assets (no API caching)
+if (typeof window !== "undefined" && "serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}
