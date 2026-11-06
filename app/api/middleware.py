@@ -57,7 +57,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response: Response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Content-Security-Policy"] = "default-src 'self'"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; frame-ancestors 'none'; form-action 'self'"
+        )
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         response.headers["Referrer-Policy"] = "no-referrer"
 

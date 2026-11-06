@@ -62,6 +62,7 @@ from app.application.dtos import (
     PendingStepUpDTO,
     ReceiptResponseDTO,
     ReceiptVerificationResponseDTO,
+    SubmitApprovalRequestDTO,
 )
 from app.application.llm_proposer import MockLLMProposer
 from app.application.services import (
@@ -195,9 +196,9 @@ def create_demo_token(request: DemoTokenRequestDTO, raw_request: Request) -> Dem
 )
 def get_demo_token(
     raw_request: Request,
-    role: Annotated[str, Query()] = "principal",
-    principal_id: Annotated[str, Query()] = "demo-principal",
-    agent_id: Annotated[str | None, Query()] = None,
+    role: Annotated[str, Query(min_length=1, max_length=32)] = "principal",
+    principal_id: Annotated[str, Query(min_length=1, max_length=128)] = "demo-principal",
+    agent_id: Annotated[str | None, Query(max_length=128)] = None,
 ) -> DemoTokenResponseDTO:
     """Query parameter version for browser console demo token fetching."""
     return create_demo_token(
@@ -418,7 +419,11 @@ def list_pending_approvals(
     service: Annotated[AuthorizationService, Depends(get_authorization_service)],
 ) -> list[PendingStepUpDTO]:
     """List transactions currently pending human supervisor review in step-up queue."""
-    _ = identity
+    if identity.role == Role.AGENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Autonomous agents cannot access the supervisor approval queue.",
+        )
     return service.get_pending_step_ups()
 
 
@@ -429,7 +434,7 @@ def list_pending_approvals(
 )
 def submit_approval(
     request_id: str,
-    payload: dict[str, Any],
+    payload: SubmitApprovalRequestDTO,
     identity: Annotated[Identity, Depends(get_current_identity)],
     service: Annotated[AuthorizationService, Depends(get_authorization_service)],
 ) -> AuthorizationResponseDTO:
@@ -462,9 +467,9 @@ def submit_approval(
     try:
         cmd = ApprovalCommand(
             request_id=request_id,
-            expected_digest=payload.get("expected_digest", ""),
-            decision=DecisionOutcome(payload.get("decision", "DENY")),
-            reason=payload.get("reason", "Human review decision"),
+            expected_digest=payload.expected_digest,
+            decision=payload.decision,
+            reason=payload.reason,
         )
         return service.execute_approval(cmd, caller_role=identity.role.value)
     except KeyError as exc:
@@ -487,9 +492,12 @@ def approve_request_api(
     service: Annotated[AuthorizationService, Depends(get_authorization_service)],
 ) -> AuthorizationResponseDTO:
     """Direct approve endpoint binding human approval to exact intent."""
-    payload_copy = dict(payload)
-    payload_copy["decision"] = "ALLOW"
-    return submit_approval(request_id, payload_copy, identity, service)
+    approval_dto = SubmitApprovalRequestDTO(
+        decision=DecisionOutcome.ALLOW,
+        reason=payload.get("reason", "Approved via legacy API"),
+        expected_digest=payload.get("expected_digest", ""),
+    )
+    return submit_approval(request_id, approval_dto, identity, service)
 
 
 @router.post(
@@ -504,9 +512,12 @@ def reject_request_api(
     service: Annotated[AuthorizationService, Depends(get_authorization_service)],
 ) -> AuthorizationResponseDTO:
     """Direct reject endpoint for human rejection."""
-    payload_copy = dict(payload)
-    payload_copy["decision"] = "DENY"
-    return submit_approval(request_id, payload_copy, identity, service)
+    approval_dto = SubmitApprovalRequestDTO(
+        decision=DecisionOutcome.DENY,
+        reason=payload.get("reason", "Rejected via legacy API"),
+        expected_digest=payload.get("expected_digest", ""),
+    )
+    return submit_approval(request_id, approval_dto, identity, service)
 
 
 # ---------------------------------------------------------------------------

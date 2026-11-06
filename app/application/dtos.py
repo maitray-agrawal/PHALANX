@@ -148,6 +148,21 @@ class AssistantChatResponseDTO(BaseModel):
     heuristic_reason: str | None = None
 
 
+class SubmitApprovalRequestDTO(BaseModel):
+    """Payload for human supervisor step-up authorization endpoint."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_digest: str = Field(
+        ...,
+        min_length=64,
+        max_length=64,
+        description="SHA-256 digest of the canonical intent. Must match to prevent tampering.",
+    )
+    decision: DecisionOutcome = Field(..., description="ALLOW or DENY")
+    reason: str = Field(default="Human supervisor review", max_length=500)
+
+
 class ApprovalCommand(BaseModel):
     """Human supervisor step-up authorization command."""
 

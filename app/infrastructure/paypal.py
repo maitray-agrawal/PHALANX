@@ -89,6 +89,25 @@ class FakePaymentRail(PaymentRail):
         )
         if not sig:
             return False
+        cert_url = (
+            headers.get("PAYPAL-CERT-URL")
+            or headers.get("paypal-cert-url")
+            or headers.get("Paypal-Cert-Url")
+        )
+        if cert_url:
+            from urllib.parse import urlparse
+
+            try:
+                parsed = urlparse(cert_url)
+                if parsed.scheme != "https" or not (
+                    parsed.netloc == "api.paypal.com"
+                    or parsed.netloc == "api-m.paypal.com"
+                    or parsed.netloc == "api-m.sandbox.paypal.com"
+                    or parsed.netloc.endswith(".paypal.com")
+                ):
+                    return False
+            except Exception:
+                return False
         # Only signatures matching stubbed/fixture set are accepted
         return sig in self.valid_signatures
 
@@ -411,6 +430,21 @@ class PayPalPaymentRailAdapter(PaymentRail):
         if not (
             auth_algo and cert_url and transmission_id and transmission_sig and transmission_time
         ):
+            return False
+
+        # SSRF defense: Validate cert_url must be HTTPS and hosted on a legitimate paypal.com domain
+        from urllib.parse import urlparse
+
+        try:
+            parsed_cert = urlparse(cert_url)
+            if parsed_cert.scheme != "https" or not (
+                parsed_cert.netloc == "api.paypal.com"
+                or parsed_cert.netloc == "api-m.paypal.com"
+                or parsed_cert.netloc == "api-m.sandbox.paypal.com"
+                or parsed_cert.netloc.endswith(".paypal.com")
+            ):
+                return False
+        except Exception:
             return False
 
         webhook_id = os.getenv("PAYPAL_WEBHOOK_ID") or ""
