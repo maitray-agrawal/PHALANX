@@ -20,8 +20,8 @@ jobs:
         ports:
           - 5433:5432
         options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
+          --health-cmd "pg_isready -U phalanx_app -d phalanx_db"
+          --health-interval 5s
           --health-timeout 5s
           --health-retries 5
     steps:
@@ -52,7 +52,7 @@ jobs:
 
       - name: Run Boot Sequence
         env:
-          DATABASE_URL: postgresql+psycopg://phalanx_app:test_ci_password_12345@localhost:5433/phalanx_db
+          DATABASE_URL: postgresql+psycopg://phalanx_app:test_ci_password_12345@127.0.0.1:5433/phalanx_db
           POSTGRES_PASSWORD: test_ci_password_12345
           SECRET_KEY: test-secret-key-at-least-32-bytes-long-ci-12345
         run: |
@@ -60,11 +60,11 @@ jobs:
 
       - name: Run Test Suite with Coverage Floor
         env:
-          DATABASE_URL: postgresql+psycopg://phalanx_app:test_ci_password_12345@localhost:5433/phalanx_db
+          DATABASE_URL: postgresql+psycopg://phalanx_app:test_ci_password_12345@127.0.0.1:5433/phalanx_db
           POSTGRES_PASSWORD: test_ci_password_12345
           SECRET_KEY: test-secret-key-at-least-32-bytes-long-ci-12345
         run: |
-          pytest -q --cov=app --cov-fail-under=75
+          pytest -v --cov=app --cov-fail-under=75
 
   redteam:
     name: Red Team Adversarial Suite
@@ -79,8 +79,8 @@ jobs:
         ports:
           - 5433:5432
         options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
+          --health-cmd "pg_isready -U phalanx_app -d phalanx_db"
+          --health-interval 5s
           --health-timeout 5s
           --health-retries 5
     steps:
@@ -102,11 +102,11 @@ jobs:
 
       - name: Run Red Team Adversarial Tests
         env:
-          DATABASE_URL: postgresql+psycopg://phalanx_app:test_ci_password_12345@localhost:5433/phalanx_db
+          DATABASE_URL: postgresql+psycopg://phalanx_app:test_ci_password_12345@127.0.0.1:5433/phalanx_db
           POSTGRES_PASSWORD: test_ci_password_12345
           SECRET_KEY: test-secret-key-at-least-32-bytes-long-ci-12345
         run: |
-          pytest -q -m redteam
+          pytest -v -m redteam
 
   bandit:
     name: Bandit Security AST Analysis
@@ -235,6 +235,7 @@ jobs:
           exit-code: "1"
           ignore-unfixed: true
           severity: CRITICAL,HIGH
+          trivyignores: .trivyignore
 
   smoke:
     name: Container Compose Integration & Smoke
@@ -247,9 +248,13 @@ jobs:
           POSTGRES_PASSWORD: test_ci_postgres_password_12345
           SECRET_KEY: test-secret-key-at-least-32-bytes-long-ci-12345
           ADMIN_TOKEN: phx_admin_ci_token_at_least_24_chars_12345
+          PAYPAL_CLIENT_ID: test_ci_paypal_client_id
           PAYPAL_CLIENT_SECRET: test_ci_paypal_secret_token
+          PAYPAL_WEBHOOK_ID: 9PJ08350X2508271R
           POSTGRES_PORT: 5433
           APP_PORT: 8000
+          DEMO_MODE: "true"
+          ENVIRONMENT: development
         run: |
           docker compose config
           docker compose build

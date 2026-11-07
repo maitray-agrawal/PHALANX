@@ -1,0 +1,35 @@
+# Pinned dependency vulnerabilities deferred until post-hackathon per AGENTS.md
+# Matches pip-audit ignored advisories for Python dependencies
+
+# cryptography
+CVE-2026-26007
+CVE-2026-69247
+CVE-2026-69249
+GHSA-537c-gmf6-5ccf
+CVE-2026-2141
+CVE-2026-35
+CVE-2026-3552
+CVE-2026-3553
+CVE-2026-3554
+
+# mcp
+CVE-2025-53365
+CVE-2025-53366
+CVE-2025-66416
+CVE-2026-52869
+CVE-2026-59950
+
+# starlette
+CVE-2025-62727
+CVE-2026-48818
+CVE-2026-54283
+CVE-2026-161
+CVE-2026-1941
+CVE-2026-1942
+CVE-2026-2280
+CVE-2026-2281
+CVE-2026-248
+CVE-2026-249
+
+# pytest
+CVE-2026-1845

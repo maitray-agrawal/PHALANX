@@ -408,8 +408,8 @@ def test_postgres_two_service_instances_sharing_budget(pg_session_factory):
             mandate_id=f"mandate-{agent_id}",
             principal_id="demo-principal",
             agent_id=agent_id,
-            single_limit_minor=100_000,
-            instant_threshold_minor=100_000,
+            single_limit_minor=10_000,
+            instant_threshold_minor=10_000,
             lifetime_budget_minor=10_000,
             allow_unregistered_payees=True,
         )
@@ -502,8 +502,8 @@ def test_postgres_50_parallel_requests_on_one_budget(pg_session_factory):
             mandate_id=f"mandate-{agent_id}",
             principal_id="demo-principal",
             agent_id=agent_id,
-            single_limit_minor=100_000,
-            instant_threshold_minor=100_000,
+            single_limit_minor=50_000,
+            instant_threshold_minor=50_000,
             lifetime_budget_minor=50_000,
             allow_unregistered_payees=True,
         )

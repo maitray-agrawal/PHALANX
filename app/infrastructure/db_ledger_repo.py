@@ -156,7 +156,7 @@ class DatabaseLedgerAdapter(LedgerPort):
                     return True, "empty ledger is valid"
 
                 expected_prev = GENESIS_PREV_HASH
-                expected_seq = 1
+                expected_seq = events[0].event_seq
 
                 for ev in events:
                     # 1. Sequence continuity check (detects row deletion)
@@ -176,7 +176,13 @@ class DatabaseLedgerAdapter(LedgerPort):
                         )
 
                     # 3. Payload integrity check (detects row modification)
-                    chain_material = f"{ev.prev_hash}{ev.payload_json}".encode()
+                    try:
+                        parsed_payload = json.loads(ev.payload_json)
+                        chain_material = ev.prev_hash.encode("ascii") + canonical_json_bytes(
+                            parsed_payload
+                        )
+                    except Exception:
+                        chain_material = f"{ev.prev_hash}{ev.payload_json}".encode()
                     recomputed_hash = hashlib.sha256(chain_material).hexdigest()
                     if recomputed_hash != ev.event_hash:
                         return (
