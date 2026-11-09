@@ -952,6 +952,7 @@ def admin_reset(
     """
     service.reset_state()
     ledger_service.restore_chain()
+    _demo_token_rate_limits.clear()
     return {"status": "reset_completed", "message": "Demo state reset successfully."}
 
 

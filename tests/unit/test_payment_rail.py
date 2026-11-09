@@ -253,3 +253,42 @@ def test_real_verify_webhook_rejects_forged_headers(monkeypatch) -> None:
 
     monkeypatch.setattr(httpx, "post", lambda *_args, **_kwargs: Fake400Response())
     assert adapter.verify_webhook(forged_sig_headers, valid_payload) is False
+
+
+def test_real_verify_webhook_accepts_valid_signature_with_provider_success(monkeypatch) -> None:
+    """Real PayPalPaymentRailAdapter.verify_webhook returns True on provider SUCCESS."""
+    adapter = PayPalPaymentRailAdapter(client_id="test_client_id", client_secret="test_secret")
+    monkeypatch.setenv("PAYPAL_WEBHOOK_ID", "WH-VALID-12345")
+    monkeypatch.setattr(adapter, "_get_access_token", lambda: "fake-access-token")
+
+    valid_payload = b'{"id": "WH-1", "event_type": "PAYMENT.CAPTURE.COMPLETED"}'
+    valid_headers = {
+        "PAYPAL-AUTH-ALGO": "SHA256withRSA",
+        "PAYPAL-CERT-URL": "https://api-m.sandbox.paypal.com/certs/CERT-1",
+        "PAYPAL-TRANSMISSION-ID": "trans-valid-123",
+        "PAYPAL-TRANSMISSION-SIG": "valid_signature_token_xyz",
+        "PAYPAL-TRANSMISSION-TIME": "2026-11-09T12:00:00Z",
+    }
+
+    class FakeSuccessResponse:
+        status_code = 200
+
+        def json(self):
+            return {"verification_status": "SUCCESS"}
+
+    import httpx
+
+    captured_requests = []
+
+    def mock_post(url: str, **kwargs: object) -> object:
+        captured_requests.append((url, kwargs))
+        return FakeSuccessResponse()
+
+    monkeypatch.setattr(httpx, "post", mock_post)
+
+    assert adapter.verify_webhook(valid_headers, valid_payload) is True
+    assert len(captured_requests) == 1
+    assert "/v1/notifications/verify-webhook-signature" in captured_requests[0][0]
+    payload_sent = captured_requests[0][1].get("json", {})
+    assert payload_sent["webhook_id"] == "WH-VALID-12345"
+    assert payload_sent["transmission_sig"] == "valid_signature_token_xyz"

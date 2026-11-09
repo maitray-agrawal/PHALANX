@@ -2,8 +2,8 @@
 | ID | Task | Level | Needs | Findings | Status |
 | T1 | Confirm F2 and F1b results (ask me for their reports; run only the checks they name) | MED | - | U1-U5, G1.. | DONE |
 | T2 | F1c-fix | HIGH | T1 | H1-H7 | DONE |
-| T3 | F1b fail closed, keys, schema, test DB, audits | HIGH | T2 | G1,G4-G8 | TODO |
-| T4 | Env alignment after the password change | MED | T3 | N1 | TODO |
+| T3 | F1b fail closed, keys, schema, test DB, audits | HIGH | T2 | G1,G4-G8 | DONE |
+| T4 | Env alignment after the password change | MED | T3 | N1 | DONE |
 | T5 | STOP: YOU run reviewer R1 with a different model on git diff origin/main..HEAD, paste findings | HIGH | T4 | - | TODO |
 | T6 | Fix R1 findings, then branches and Dependabot | MED | T5 | R2 | TODO |
 | T7 | CI green; open PR dev to main. STOP: YOU merge on green | HIGH | T6 | C1 | TODO |

@@ -1,8 +1,8 @@
 # STATE (update after every task)
 Date: 9 Nov 2026 | Branch: dev | Last pushed commit on main: 2332aef | CI: passing
-Working tree: clean | M0 complete (all 10 items implemented and verified)
-Completed: T1, T2 (F1c-fix: H1-H7 closed), M0 Hardening (Items 1-10) | Doing: Full Verification Suite | Next: T3 / T4 | Blocked on me: nothing
-Database password rotated 7 Nov (user report). Hosting: nothing deployed.
+Working tree: clean | M0 complete & hardened (Hostile Review Pass 2 completed, deterministic e2e verified)
+Completed: T1, T2 (F1c-fix: H1-H7 closed), M0 Hardening (Items 1-10), T3/T4 (N1, U1 closed) | Doing: Verification & Local Commit | Next: T5 (Hostile Reviewer R1 pass) | Blocked on me: nothing
+Database password rotated 7 Nov (user report); verified live 9 Nov (active connection ok, old passwords rejected). Hosting: nothing deployed.
 
 ---
 
@@ -18,31 +18,31 @@ Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
 - web screens:
   1. Home: Three numbers (remaining authority, pending approvals, last recorded activity), primary Pay action, recent activity stream.
   2. Pay: Request console with scenario presets, custom input, intent card, instant decision badge with plain reason.
-  3. Approvals: Step-up queue, exact request, RFC 8785 canonical digest, inspect diff, Approve/Decline bound to digest, Agent role locking, empty-queue clear state when unseeded. Stored XSS rendered inertly.
+  3. Approvals: Step-up queue, exact request, RFC 8785 canonical digest, inspect diff, Approve/Decline bound to digest, Agent role locking, deterministic empty-queue state when unseeded. Stored XSS rendered inertly.
   4. Activity: Ledger journal, windowed visual chain strip (latest 20 blocks with total count indicator), honest provider states, Verify chain trigger, receipt links. Stored XSS rendered inertly.
   5. Mandates: Read-only Ed25519 limits, lifetime budget meter with accessible ARIA progressbar, allowed payees, authorized purposes, signature status.
   6. Attack Lab: 6 canned threat vectors (prompt injection, payee swap, amount tamper after approval, replay, forged webhook, agent self-approval), Run suite trigger, 100% defense check.
   7. Receipt & Verify: Cryptographic receipt card, public SHA-256 hash chain proof verifier, search input. Stored XSS rendered inertly.
 
 Test status (All Verified Live):
-- Backend: 381 passed, 0 skipped, 0 failed in 196.69s (381 total backend tests across full test suite)
-- Red Team: 105 passed, 0 failed, 276 deselected in 13.85s
+- Backend: 382 passed, 0 skipped, 0 failed in 213.80s (382 total backend tests across full test suite)
+- Red Team: 105 passed, 0 failed, 277 deselected in 9.66s
 - Performance & Invariants: All accounting and ledger invariants tested across 13,345 events; budget invariants verified with payment in flight and under concurrent PostgreSQL transactions
 - Static Analysis: ruff check clean (0 errors), ruff format clean (99 files checked), mypy app clean (0 errors across 39 source files)
 - Frontend: Vitest passed (28/28 tests across 3 suites in 5.35s), ESLint clean (0 errors, 0 warnings), TypeScript clean (0 errors across web codebase)
-- E2E: Playwright smoke passed (30/30 tests across all 6 browsers/viewports: Chromium, WebKit, Firefox, iPhone SE, Pixel 7, iPad in 53.3s)
-- Documentation: docs/brain/STATE.md updated, redundant brain/STATUS.md removed.
+- E2E Smoke: Playwright smoke passed (30/30 tests across all 6 browsers/viewports: Chromium, WebKit, Firefox, iPhone SE, Pixel 7, iPad in 1.6m)
+- E2E Walkthrough: Playwright UX walkthrough passed (8/8 tests across Chromium desktop and Pixel 7 mobile)
+- Accessibility: Axe core clean on horizontally scrollable cryptographic hash chain strip (`tabIndex={0}`, `role="region"`, `aria-label`)
 
-M0 Completed Items:
-1. `make step up seeding demo only`: `_seed_default_step_up` demo-only (explicit `DEMO_SEED=true`), removed from `AuthorizationService.__init__`. (597083b)
-2. `lock reservation and budget rows on settle and release`: `SELECT ... FOR UPDATE` row locking on reservation row then budget row. Real PostgreSQL concurrency tests added. (4e4c7e2)
-3. `hold 408 429 and 5xx in reconcile never failed`: `pay()` routes 408, 429, and 5xx to `RECONCILE`. Only explicit 400/422 releases. Parameterized unit tests added. (9ce6fcc)
-4. `fail closed on pending step ups database error`: `get_pending_step_ups` raises 503, no in-memory fallback. Integration tests added. (ebe5e51)
-5. `allowlist explicit failures in reconcile reservation`: Replaced denylist with explicit provider failure allowlist; unknown statuses hold and set `NEEDS_REVIEW`. (f2b57ca)
-6. `verify provider proof on resolve needs review`: `MARK_FAILED` confirmed via provider; `PROVIDE_PROOF` verified against provider lookup. (31ab157)
-7. `claim reconcile rows with skip locked`: Claim rows with `FOR UPDATE SKIP LOCKED`; tested against PostgreSQL concurrency. (fc3c4a5)
-8. `run alter role as postgres superuser in rotation`: `scripts/rotate_db_credentials.ps1` executes `ALTER ROLE` as `postgres` superuser with error stop. (24144ab)
-9. `test real verify webhook rejects forged headers`: Real `PayPalPaymentRailAdapter.verify_webhook` tested against forged SSRF cert URLs, userinfo, and forged signatures. (c4b5022)
-10. `update smoke test for empty approvals queue`: `web/e2e/smoke.spec.ts` updated to empty-queue behavior, verified across all 6 browsers/viewports. (6f06c58)
+Credential Alignment & Verification (T3/T4):
+- Password alignment: Verified `POSTGRES_PASSWORD` and `PHALANX_APP_DB_PASSWORD` separated in `.env`, `.env.example`, `docker-compose.yml`, `scripts/init_db.sh`.
+- Live connection: Active credentials successfully connected to `phalanx_db` and `phalanx_test` (`Active credentials connection: SUCCESS`).
+- Negative controls: Rejected `maitray7979`, `admin123`, `postgres`, `fake_old_pwd` with `InvalidPassword` / `password authentication failed` (`All old/predictable passwords: REJECTED`).
+- Credential script: Deleted `scripts/rotate_db_credentials.ps1` to eliminate platform-specific Windows script that mutated `.env`.
 
-Next recommended action: Proceed with T3 / T4 (env alignment and password confirmation).
+Hostile Review Pass 2 Findings:
+- Finding A (P1): `app/infrastructure/paypal.py:680-689` checks `parsed_cert.hostname.endswith(".paypal.com")` rejecting `evilpaypal.com` and `paypal.com.evil.com`, but does not inspect userinfo (`username:password@`) or port (`:8443`). E.g. `https://attacker:pass@api.sandbox.paypal.com:8443/cert.pem` passes the check.
+- Finding B (P1): `app/application/services.py:2210-2227` (`resolve_needs_review`) treats `LOOKUP_FAILED` in the same tuple as confirmed failures (`FAILED`, `CANCELLED`, `DENIED`, `EXPIRED`, `NOT_FOUND`), allowing supervisor MARK_FAILED to release reservations during provider outages or credential errors.
+- Finding C (P1): `scripts/boot.py:289-325` unconditionally seeds `req_stepup_1001` if missing, ignoring `DEMO_SEED=true`. Neither `docker-compose.yml` nor `render.yaml` specifies `DEMO_SEED=true`.
+
+Next recommended action: Proceed with T5 (Reviewer R1 hostile pass with different model).

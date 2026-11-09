@@ -60,6 +60,22 @@ test.describe("PHALANX PayPal-Inspired Shell & Operational Screens", () => {
     }
   }
 
+  async function resetDemoViaApi(request: import("@playwright/test").APIRequestContext) {
+    try {
+      const tokenRes = await request.post("/v1/auth/demo-token", {
+        data: { role: "principal", principal_id: "principal_treasury" },
+      });
+      if (tokenRes.ok()) {
+        const data = await tokenRes.json();
+        await request.post("/v1/admin/reset", {
+          headers: { Authorization: `Bearer ${data.access_token}` },
+        });
+      }
+    } catch {
+      // Ignored if unreachable
+    }
+  }
+
   test("App Shell & Footer Invariant", async ({ page }) => {
     test.slow();
     await page.goto("/#home");
@@ -102,56 +118,84 @@ test.describe("PHALANX PayPal-Inspired Shell & Operational Screens", () => {
     await expect(page.getByText("APPLIED POLICY REASONS")).toBeVisible();
   });
 
-  test("Scene 2: Human Supervisor Step-Up Review Queue & Role Restriction", async ({ page }) => {
+  test("Scene 2: Human Supervisor Step-Up Review Queue & Role Restriction", async ({ page, request }) => {
+    // 1. Reset demo state to guarantee completely clean queue
+    await resetDemoViaApi(request);
     await page.goto("/#approvals");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     await expect(page.getByRole("heading", { name: "Human Supervisor Step-Up Review Queue" })).toBeVisible();
 
-    // Handle empty-queue or pending approvals state
-    const inspectBtn = page.getByRole("button", { name: /Inspect Diff/i }).first();
-    if (await inspectBtn.isVisible()) {
-      await inspectBtn.click();
-      await expect(page.getByText("Cryptographic Lock Canonical Integrity")).toBeVisible();
-    } else {
-      await expect(page.getByText("Queue is completely clear")).toBeVisible();
-      await expect(page.getByText("No transactions are currently awaiting supervisor authorization.")).toBeVisible();
-    }
+    // 2. Assert initial empty queue state deterministically
+    await expect(page.getByText("Queue is completely clear")).toBeVisible();
+    await expect(page.getByText("No transactions are currently awaiting supervisor authorization.")).toBeVisible();
 
-    // Switch persona to AGENT via profile menu / sheet
+    // 3. Create a sample request via UI
+    const createBtn = page.getByRole("button", { name: "Create sample request" }).first();
+    await expect(createBtn).toBeVisible();
+    await createBtn.click();
+
+    // 4. Assert created request appears in the queue deterministically
+    const approvalCard = page.locator(".approvals-cards-list article").first();
+    await expect(approvalCard).toBeVisible();
+    await expect(approvalCard.getByText("Equipment invoice review")).toBeVisible();
+    await expect(approvalCard.getByText("$1,200.00")).toBeVisible();
+
+    // 5. Inspect Diff modal and canonical RFC 8785 hash lock
+    const inspectBtn = page.getByRole("button", { name: /Inspect Diff/i }).first();
+    await expect(inspectBtn).toBeVisible();
+    await inspectBtn.click();
+    await expect(page.getByText("Cryptographic Lock Canonical Integrity")).toBeVisible();
+
+    // Close inspect diff modal if open
+    await page.keyboard.press("Escape");
+
+    // 6. Switch persona to AGENT via profile menu / sheet
     await setPersona(page, "AGENT");
 
-    // Verify warning banner and role restriction for AGENT persona
+    // 7. Verify warning banner and disabled controls for AGENT persona
     await expect(page.getByText(/Role Restriction:/i)).toBeVisible();
     const authorizeBtn = page.getByRole("button", { name: "Authorize Transaction" }).first();
-    if (await authorizeBtn.isVisible()) {
-      await expect(authorizeBtn).toBeDisabled();
-      const declineBtn = page.getByRole("button", { name: "Decline" }).first();
-      await expect(declineBtn).toBeDisabled();
-    }
+    await expect(authorizeBtn).toBeDisabled();
+    const declineBtn = page.getByRole("button", { name: "Decline" }).first();
+    await expect(declineBtn).toBeDisabled();
 
-    // Switch back to APPROVER and verify banner is cleared
+    // 8. Switch back to APPROVER and verify banner is cleared and actions enabled
     await setPersona(page, "APPROVER");
     await expect(page.getByText(/Role Restriction:/i)).not.toBeVisible();
+    await expect(authorizeBtn).toBeEnabled();
   });
 
-  test("Scene 3: Cryptographic Shield-Wall Ledger & Hash Chain Sequence", async ({ page }) => {
+  test("Scene 3: Cryptographic Shield-Wall Ledger & Hash Chain Sequence", async ({ page, request }) => {
+    // 1. Reset demo state
+    await resetDemoViaApi(request);
+
+    // 2. Create a sample request via UI to ensure it is recorded in the ledger
+    await page.goto("/#approvals");
+    await page.waitForLoadState("domcontentloaded");
+    const createBtn = page.getByRole("button", { name: "Create sample request" }).first();
+    await expect(createBtn).toBeVisible();
+    await createBtn.click();
+    await expect(page.locator(".approvals-cards-list article").first()).toBeVisible();
+
+    // 3. Navigate to activity ledger
     await page.goto("/#activity");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
     await setPersona(page, "APPROVER");
 
     await expect(page.getByRole("heading", { name: "Cryptographic Shield-Wall Ledger" })).toBeVisible();
     await expect(page.getByText("Transaction Activity Journal")).toBeVisible();
 
-    const chainStrip = page.getByTestId("chain-strip");
-    if (await chainStrip.isVisible()) {
-      const verifyBtn = page.getByRole("button", { name: /Verify Chain/i });
-      await expect(verifyBtn).toBeVisible();
-      await verifyBtn.click();
-      await expect(page.locator(".integrity-status-bar")).toBeVisible({ timeout: 20000 });
-    } else {
-      await expect(page.getByText("No blocks recorded")).toBeVisible();
-    }
+    // 4. Assert the created sample transaction is in the ledger and hash chain deterministically
+    await expect(page.getByTestId("chain-strip")).toBeVisible();
+    await expect(page.getByText("vendor-paypal-sandbox-1").first()).toBeVisible();
+    await expect(page.getByText("$1,200.00").first()).toBeVisible();
+
+    // 5. Verify Chain button
+    const verifyBtn = page.getByRole("button", { name: /Verify Chain/i });
+    await expect(verifyBtn).toBeVisible();
+    await verifyBtn.click();
+    await expect(page.locator(".integrity-status-bar")).toBeVisible({ timeout: 20000 });
   });
 
   test("Multi-Viewport Screenshots: 1280px Desktop, 768px Tablet, 375px Mobile", async ({ page }) => {

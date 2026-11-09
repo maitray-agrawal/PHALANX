@@ -9,3 +9,8 @@ Changed: db_budget_repo.py, services.py, paypal.py, reconciler.py, routes.py, sc
 Commands: pytest test_reconciliation.py (15 passed); full pytest -q (363 passed in 177s); pytest -q -m redteam (105 passed); npm test (28 passed); ruff check (clean); mypy app (39 files clean).
 Findings closed: H1, H2, H3, H4, H5, H6, H7, G2.
 Next: T3 (F1b fail closed, keys, schema, test DB, audits) & T4 (env alignment).
+2026-11-09 | M0/T3/T4: Hostile review pass 2, deterministic e2e scenes 2/3, positive webhook test, T3/T4 password alignment.
+Changed: test_payment_rail.py, smoke.spec.ts, ux-walkthrough.spec.ts, ApprovalsScreen.tsx, routes.py, services.py, ChainStrip.tsx, deleted rotate_db_credentials.ps1.
+Commands: pytest -q (382 pass); pytest -m redteam (105 pass); npm test (28 pass); playwright smoke (30 pass); playwright walkthrough (8 pass); ruff & mypy clean.
+Findings closed: N1, U1. New findings logged: H8, H9, H10.
+Next: T5 (STOP: user runs reviewer R1 with a different model on git diff origin/main..HEAD).

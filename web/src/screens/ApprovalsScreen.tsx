@@ -53,6 +53,16 @@ export const ApprovalsScreen: React.FC<ApprovalsScreenProps> = ({
   const handleCreateSampleRequest = async () => {
     setIsCreatingSample(true);
     try {
+      let authToken = token;
+      try {
+        const agentTokenResp = await api.getDemoToken("agent", "principal_treasury", "agent-auto-1");
+        if (agentTokenResp?.access_token) {
+          authToken = agentTokenResp.access_token;
+        }
+      } catch {
+        // Fallback to active token
+      }
+
       const resp = await api.createPaymentRequest(
         {
           agent_id: "agent-auto-1",
@@ -62,7 +72,7 @@ export const ApprovalsScreen: React.FC<ApprovalsScreenProps> = ({
           purpose: "Equipment invoice review",
           idempotency_key: `sample_stepup_${Date.now()}`,
         },
-        token
+        authToken
       );
       if (resp.decision === "STEP_UP") {
         if (onNotify) onNotify("Sample STEP_UP transaction created.", "success");

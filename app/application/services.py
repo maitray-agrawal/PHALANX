@@ -2257,14 +2257,12 @@ class AuthorizationService:
             self._pending_step_ups.clear()
             self._responses_by_id.clear()
             self._held_reservations.clear()
-            self._seed_default_step_up()
 
             if self._db_session_factory is not None:
                 from sqlalchemy import delete, update
 
                 from app.infrastructure.models import (
                     AgentBudgetModel,
-                    ApprovalStatus,
                     BudgetReservationModel,
                     IdempotencyModel,
                     StepUpApprovalModel,
@@ -2273,12 +2271,12 @@ class AuthorizationService:
                 with self._db_session_factory() as session, session.begin():
                     session.execute(delete(BudgetReservationModel))
                     session.execute(delete(IdempotencyModel))
+                    session.execute(delete(StepUpApprovalModel))
                     session.execute(
                         update(AgentBudgetModel).values(spent_minor=0, reserved_minor=0)
                     )
-                    session.execute(
-                        update(StepUpApprovalModel).values(status=ApprovalStatus.PENDING.value)
-                    )
+
+            self._seed_default_step_up()
 
 
 class LedgerService:

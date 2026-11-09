@@ -13,8 +13,11 @@
 | H5 | P1 | No scheduled reconcile trigger | scripts/, app startup | scripts/reconcile.py and a 60 s loop when RECONCILER_ENABLED=true; documented | CLOSED |
 | H6 | P2 | Error text names PayPal environment variables | services, routes | Generic 503; detail only in logs | CLOSED |
 | H7 | P2 | Reconciler may use in-memory state | app/application/reconciler.py | Database only; a second instance resolves a request created by the first | CLOSED |
-| N1 | P0 | Password rotation split admin and app passwords; consumers may still use the old variable names | .env.example, scripts/init_db.sh, docker-compose.yml, .github/workflows/ci.yml, render.yaml, README | Every consumer uses the new names; CI service and smoke job use throwaway values; a fresh clone starts from the README; YOU confirm the old password is rejected | OPEN |
-| U1 | P0 | UI invents approvals when the queue is empty; UI, API and seed budgets disagreed ($100,000 / $25,000 / $10,000) | web ApprovalsScreen, scripts/boot.py | One dataset; test UI figures equal API figures; empty state shown; demo-mode Create sample request calls the real API | OPEN (F2 reported running) |
+| H8 | P1 | Webhook cert-URL check accepts userinfo and non-standard ports | app/infrastructure/paypal.py:680-689 | Reject any cert URL containing userinfo or port != 443 | OPEN |
+| H9 | P1 | resolve_needs_review MARK_FAILED allows LOOKUP_FAILED as provider failure | app/application/services.py:2210-2227 | LOOKUP_FAILED held as NEEDS_REVIEW, only terminal provider failure allows MARK_FAILED | OPEN |
+| H10 | P1 | scripts/boot.py unconditionally seeds req_stepup_1001 without checking DEMO_SEED | scripts/boot.py:289-325 | Seeding occurs only when DEMO_SEED=true | OPEN |
+| N1 | P0 | Password rotation split admin and app passwords; consumers may still use the old variable names | .env.example, scripts/init_db.sh, docker-compose.yml, .github/workflows/ci.yml, render.yaml, README | Every consumer uses the new names; CI service and smoke job use throwaway values; a fresh clone starts from the README; confirmed old password rejected | CLOSED |
+| U1 | P0 | UI invents approvals when the queue is empty; UI, API and seed budgets disagreed ($100,000 / $25,000 / $10,000) | web ApprovalsScreen, scripts/boot.py | One dataset; test UI figures equal API figures; empty state shown; demo-mode Create sample request calls the real API | CLOSED |
 | U2 | P1 | Rate limit keys on the socket IP, so behind Render everyone shares one bucket; demo-token limit raised for tests | app/api/middleware.py, routes.py | Trusted proxy setting; default 10 to 20 per minute per client; higher value only via test environment variable | CLOSED |
 | U3 | P1 | CSP default-src self with Google Fonts and inline styles; Playwright never ran against the container | web/index.html, middleware | Fonts self-hosted; Playwright against the container URL passes with zero CSP violation events | CLOSED |
 | U4 | P2 | Demo tamper and restore act on shared state | routes, ledger | Per-session copy, or a visible notice and a safe reset | OPEN |
@@ -28,4 +31,4 @@
 | K1 | P2 | k6 numbers contradict Little's law | docs/evidence | Raw JSON saved; one consistent set | OPEN |
 | X1 | P1 | UX only tested by agents | - | Three people did the 5-second test and tasks; fixes made | OPEN (YOU) |
 | G2 | P0 | RECONCILE had no resolver | reconciler | Reconciler resolves to SETTLED, FAILED, or NEEDS_REVIEW; H1-H7 closed | CLOSED |
-| G3 | P0 | Database password | - | Rotated and verified per user report; old password rejection to confirm under N1 | CLOSED (reported) |
+| G3 | P0 | Database password | - | Rotated and verified per user report; old password rejection confirmed under N1 | CLOSED |

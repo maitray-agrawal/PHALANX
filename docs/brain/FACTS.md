@@ -9,3 +9,4 @@
 | F7 | The old password exists in an old commit (c322100) and gitleaks did not flag it | F1 report | REPORTED |
 | F8 | 24 Dependabot PRs open; main commits use the feat(scope) style; Trivy action tag fixed in d41cff0 | Screenshots, V3 report | REPORTED |
 | F9 | F1b and F2 results verified: test_fail_closed (2/2 pass), test_keys (3/3 pass), test_demo_dataset_alignment (1/1 pass), test_proxy_rate_limiting (4/4 pass), test_migration_upgrade (1/1 pass), test_reconciliation (11/11 pass), test_negative_controls (7/7 pass), Playwright against container URL (0 CSP violations) | Command output in LOG | VERIFIED |
+| F10 | T3/T4 password alignment verified; old passwords rejected live; positive webhook signature verified; deterministic smoke & walkthrough tests verified across all 6 browsers/viewports | Command output in LOG | VERIFIED |
