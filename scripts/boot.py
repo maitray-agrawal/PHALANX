@@ -9,6 +9,7 @@ Actions:
 
 import json
 import logging
+import os
 import sys
 from datetime import UTC, datetime, timedelta
 
@@ -286,46 +287,50 @@ def run_boot() -> bool:
             else:
                 logger.info("Ledger already initialized (idempotent skip).")
 
-            # Step 4: Seed pending step-up request for Scene 2 demo if missing
-            existing_stepup = session.scalar(
-                select(StepUpApprovalModel).where(
-                    StepUpApprovalModel.request_id == "req_stepup_1001"
+            # Step 4: Seed pending step-up request for Scene 2 demo if DEMO_SEED=true
+            demo_seed_enabled = os.getenv("DEMO_SEED", "").strip().lower() in ("true", "1")
+            if demo_seed_enabled:
+                existing_stepup = session.scalar(
+                    select(StepUpApprovalModel).where(
+                        StepUpApprovalModel.request_id == "req_stepup_1001"
+                    )
                 )
-            )
-            if not existing_stepup:
-                logger.info("Seeding human supervisor step-up approval for Scene 2 demo...")
-                intent_payload = {
-                    "agent_id": "agent-auto-1",
-                    "recipient_id": "vendor-paypal-sandbox-1",
-                    "amount_minor": 120000,
-                    "currency": "USD",
-                    "purpose": "Equipment invoice review",
-                    "idempotency_key": "stepup_seed_1001",
-                }
-                digest = compute_intent_digest(
-                    agent_id="agent-auto-1",
-                    recipient_id="vendor-paypal-sandbox-1",
-                    amount_minor=120000,
-                    currency="USD",
-                    purpose="Equipment invoice review",
-                    idempotency_key="stepup_seed_1001",
-                )
+                if not existing_stepup:
+                    logger.info("Seeding human supervisor step-up approval for Scene 2 demo...")
+                    intent_payload = {
+                        "agent_id": "agent-auto-1",
+                        "recipient_id": "vendor-paypal-sandbox-1",
+                        "amount_minor": 120000,
+                        "currency": "USD",
+                        "purpose": "Equipment invoice review",
+                        "idempotency_key": "stepup_seed_1001",
+                    }
+                    digest = compute_intent_digest(
+                        agent_id="agent-auto-1",
+                        recipient_id="vendor-paypal-sandbox-1",
+                        amount_minor=120000,
+                        currency="USD",
+                        purpose="Equipment invoice review",
+                        idempotency_key="stepup_seed_1001",
+                    )
 
-                stepup = StepUpApprovalModel(
-                    request_id="req_stepup_1001",
-                    idempotency_key="stepup_seed_1001",
-                    expected_digest=digest,
-                    intent_payload=json.dumps(intent_payload),
-                    status=ApprovalStatus.PENDING.value,
-                    expires_at_utc=valid_until_mar_2027,
-                    created_at_utc=now_utc,
-                    updated_at_utc=now_utc,
-                )
-                session.add(stepup)
-                session.commit()
-                logger.info("Demo step-up request seeded.")
+                    stepup = StepUpApprovalModel(
+                        request_id="req_stepup_1001",
+                        idempotency_key="stepup_seed_1001",
+                        expected_digest=digest,
+                        intent_payload=json.dumps(intent_payload),
+                        status=ApprovalStatus.PENDING.value,
+                        expires_at_utc=valid_until_mar_2027,
+                        created_at_utc=now_utc,
+                        updated_at_utc=now_utc,
+                    )
+                    session.add(stepup)
+                    session.commit()
+                    logger.info("Demo step-up request seeded.")
+                else:
+                    logger.info("Demo step-up request already present (idempotent skip).")
             else:
-                logger.info("Demo step-up request already present (idempotent skip).")
+                logger.info("DEMO_SEED not enabled; skipping demo step-up request seeding.")
 
     except Exception as exc:
         sys.stderr.write(f"Boot seeding error: {exc}\n")

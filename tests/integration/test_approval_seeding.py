@@ -79,3 +79,58 @@ def test_seed_default_step_up_requires_explicit_demo_seed_flag(clean_db, monkeyp
     pending = service.get_pending_step_ups()
     assert len(pending) == 1
     assert pending[0].request_id == "req_stepup_1001"
+
+
+def test_boot_database_with_demo_seed_unset_leaves_approvals_empty(monkeypatch):
+    """H10: scripts/boot.py seeds req_stepup_1001 only when DEMO_SEED=true.
+
+    When booted with DEMO_SEED unset, GET /v1/approvals returns [].
+    """
+    from fastapi.testclient import TestClient
+
+    import app.infrastructure.database as db_mod
+    from app.api.dependencies import get_authorization_service, get_mandate_service
+    from app.infrastructure.tokens import Role, create_role_token
+    from app.main import app
+    from scripts.boot import run_boot
+
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    db_url = f"sqlite:///{path}"
+    monkeypatch.delenv("DEMO_SEED", raising=False)
+    monkeypatch.setenv("SECRET_KEY", "test_secret_key_at_least_32_bytes_long_12345")
+
+    engine = create_engine(db_url)
+    db_mod._engine = engine
+    db_mod._session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+
+    try:
+        success = run_boot()
+        assert success is True
+
+        factory = db_mod._session_factory
+        clock = SystemUtcClock()
+        mandate_service = MandateService(clock=clock, db_session_factory=factory)
+        auth_service = AuthorizationService(
+            clock=clock,
+            ledger=InMemoryLedgerAdapter(),
+            mandate_service=mandate_service,
+            payment_rail=FakePaymentRail(),
+            db_session_factory=factory,
+        )
+
+        app.dependency_overrides[get_authorization_service] = lambda: auth_service
+        app.dependency_overrides[get_mandate_service] = lambda: mandate_service
+
+        client = TestClient(app)
+        token = create_role_token(Role.APPROVER, principal_id="supervisor-test")
+        resp = client.get("/v1/approvals", headers={"Authorization": f"Bearer {token}"})
+        assert resp.status_code == 200
+        assert resp.json() == []
+    finally:
+        app.dependency_overrides.clear()
+        db_mod._engine = None
+        db_mod._session_factory = None
+        engine.dispose()
+        if os.path.exists(path):
+            os.remove(path)
