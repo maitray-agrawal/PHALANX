@@ -37,7 +37,7 @@ Test status (All Verified Live):
 Credential Alignment & Verification (T3/T4):
 - Password alignment: Verified `POSTGRES_PASSWORD` and `PHALANX_APP_DB_PASSWORD` separated in `.env`, `.env.example`, `docker-compose.yml`, `scripts/init_db.sh`.
 - Live connection: Active credentials successfully connected to `phalanx_db` and `phalanx_test` (`Active credentials connection: SUCCESS`).
-- Negative controls: Rejected `maitray7979`, `admin123`, `postgres`, `fake_old_pwd` with `InvalidPassword` / `password authentication failed` (`All old/predictable passwords: REJECTED`).
+- Negative controls: Rejected predictable, default, and historical credentials with `InvalidPassword` / `password authentication failed` (`All old/predictable passwords: REJECTED`).
 - Credential script: Deleted `scripts/rotate_db_credentials.ps1` to eliminate platform-specific Windows script that mutated `.env`.
 
 Hostile Review Pass 2 Findings:

@@ -77,7 +77,7 @@ PHALANX implements a multi-tiered defense-in-depth architecture adhering to stri
 ## 4. Potential Credential Exposures & Historical Findings
 
 1. **Historic Git Commits in `docker-compose.yml`**:
-   - Commit `870d0723` and earlier historical commits in the repository contained hardcoded database credentials (`Maitray@7979`, `phalanx_app_password`) and default fallbacks (`${POSTGRES_PASSWORD:-postgres}`).
+   - Historical commits in the repository prior to rotation contained legacy database credentials and default fallbacks (`${POSTGRES_PASSWORD:-postgres}`).
    - *Risk*: Anyone with repository clone access could observe predictable historical passwords.
    - *Remediation*: Full rotation of database credentials to high-entropy randomly generated values; complete removal of fallback defaults in `docker-compose.yml`; documentation of git history cleanup options for repo owner.
 2. **Missing Credential Separation**:
