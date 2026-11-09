@@ -1443,6 +1443,3 @@ def test_concurrent_reconciler_instances_skip_locked_no_double_processing(db_eng
         b = session.scalar(select(AgentBudgetModel).where(AgentBudgetModel.agent_id == agent_id))
         assert b.reserved_minor == 0
         assert b.spent_minor == 40_000
-
-
-

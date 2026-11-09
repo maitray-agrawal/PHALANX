@@ -801,4 +801,3 @@ def test_postgres_concurrent_confirm_and_release_exact_budget(
         assert b is not None
         assert b.spent_minor == 45_000, f"Expected spent 45000, got {b.spent_minor}"
         assert b.reserved_minor == 0, f"Expected reserved 0, got {b.reserved_minor}"
-

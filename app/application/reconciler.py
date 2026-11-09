@@ -199,9 +199,7 @@ class ReconcilerService:
 
             return True, new_state, res_id
 
-    def reconcile_all(
-        self, force: bool = False, agent_id: str | None = None
-    ) -> dict[str, Any]:
+    def reconcile_all(self, force: bool = False, agent_id: str | None = None) -> dict[str, Any]:
         """Iterate all held ambiguous requests and reconcile against payment rail.
 
         When database is configured on PostgreSQL, uses FOR UPDATE SKIP LOCKED

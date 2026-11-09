@@ -1702,8 +1702,11 @@ class AuthorizationService:
             is_ambiguous_error = status_norm in AMBIGUOUS_ERRORS
 
             if (
-                self._db_session_factory is not None or session is not None
-            ) and held and held.get("reservation_id"):
+                (self._db_session_factory is not None or session is not None)
+                and held
+                and held.get("reservation_id")
+            ):
+
                 def _do_db_reconcile(s: Any) -> RequestState:
                     repo = BudgetRepository(s)
                     if status_norm in CONFIRMED_SUCCESS:
