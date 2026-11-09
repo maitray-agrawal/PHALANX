@@ -9,6 +9,7 @@ Strict entry path:
 
 import hashlib
 import hmac
+import logging
 import os
 import time
 from datetime import UTC, datetime
@@ -88,6 +89,7 @@ from app.infrastructure.tokens import (
 )
 
 router = APIRouter()
+logger = logging.getLogger("phalanx.api.routes")
 
 
 # Health and Diagnostics Endpoints (Public)
@@ -426,7 +428,14 @@ def list_pending_approvals(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden: Autonomous agents cannot access the supervisor approval queue.",
         )
-    return service.get_pending_step_ups()
+    try:
+        return service.get_pending_step_ups()
+    except Exception as exc:
+        logger.error("Failed to fetch pending approvals from database: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database unavailable for pending approvals query",
+        ) from exc
 
 
 @router.post(

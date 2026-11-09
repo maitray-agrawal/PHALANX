@@ -572,6 +572,11 @@ class AuthorizationService:
         self._mandate_service = mandate_service or MandateService(clock=clock)
         self._payment_rail = payment_rail or FakePaymentRail()
         self._db_session_factory = db_session_factory
+        from app.infrastructure.config import settings
+
+        self._is_test = (
+            os.getenv("ENVIRONMENT") == "test" or getattr(settings, "environment", "") == "test"
+        )
         self._lock = RLock()
         self._lifetime_spent: dict[str, int] = {}
         self._rolling_spent: dict[str, int] = {}
@@ -653,64 +658,50 @@ class AuthorizationService:
     def get_pending_step_ups(self) -> list[PendingStepUpDTO]:
         with self._lock:
             if self._db_session_factory is not None:
-                try:
-                    import json
+                import json
 
-                    from app.infrastructure.models import ApprovalStatus, StepUpApprovalModel
+                from app.infrastructure.models import ApprovalStatus, StepUpApprovalModel
 
-                    with self._db_session_factory() as session:
-                        stmt = (
-                            select(StepUpApprovalModel)
-                            .where(StepUpApprovalModel.status == ApprovalStatus.PENDING.value)
-                            .order_by(StepUpApprovalModel.created_at_utc.desc())
+                with self._db_session_factory() as session:
+                    stmt = (
+                        select(StepUpApprovalModel)
+                        .where(StepUpApprovalModel.status == ApprovalStatus.PENDING.value)
+                        .order_by(StepUpApprovalModel.created_at_utc.desc())
+                    )
+                    rows = session.scalars(stmt).all()
+                    db_items: list[PendingStepUpDTO] = []
+                    for r in rows:
+                        payload_dict = json.loads(r.intent_payload)
+                        amount = (
+                            payload_dict.get("money", {}).get("amount_minor")
+                            if "money" in payload_dict
+                            else payload_dict.get("amount_minor", 0)
                         )
-                        rows = session.scalars(stmt).all()
-                        db_items: list[PendingStepUpDTO] = []
-                        for r in rows:
-                            payload_dict = json.loads(r.intent_payload)
-                            amount = (
-                                payload_dict.get("money", {}).get("amount_minor")
-                                if "money" in payload_dict
-                                else payload_dict.get("amount_minor", 0)
+                        curr = (
+                            payload_dict.get("money", {}).get("currency")
+                            if "money" in payload_dict
+                            else payload_dict.get("currency", "USD")
+                        )
+                        db_items.append(
+                            PendingStepUpDTO(
+                                request_id=r.request_id,
+                                agent_id=payload_dict.get("agent_id", "agent-auto-1"),
+                                recipient_id=payload_dict.get("recipient_id", ""),
+                                amount_minor=amount,
+                                currency=curr,
+                                purpose=payload_dict.get("purpose", ""),
+                                intent_digest=r.expected_digest,
+                                created_at_utc=r.created_at_utc,
+                                status=r.status,
                             )
-                            curr = (
-                                payload_dict.get("money", {}).get("currency")
-                                if "money" in payload_dict
-                                else payload_dict.get("currency", "USD")
-                            )
-                            db_items.append(
-                                PendingStepUpDTO(
-                                    request_id=r.request_id,
-                                    agent_id=payload_dict.get("agent_id", "agent-auto-1"),
-                                    recipient_id=payload_dict.get("recipient_id", ""),
-                                    amount_minor=amount,
-                                    currency=curr,
-                                    purpose=payload_dict.get("purpose", ""),
-                                    intent_digest=r.expected_digest,
-                                    created_at_utc=r.created_at_utc,
-                                    status=r.status,
-                                )
-                            )
-                        seen_ids = {item.request_id for item in db_items}
-                        for req_id, data in self._pending_step_ups.items():
-                            if req_id not in seen_ids:
-                                it = data["intent"]
-                                db_items.append(
-                                    PendingStepUpDTO(
-                                        request_id=req_id,
-                                        agent_id=it.agent_id,
-                                        recipient_id=it.recipient_id,
-                                        amount_minor=it.money.amount_minor,
-                                        currency=it.money.currency,
-                                        purpose=it.purpose,
-                                        intent_digest=data["intent_digest"],
-                                        created_at_utc=data["created_at_utc"],
-                                        status="PENDING",
-                                    )
-                                )
-                        return db_items
-                except Exception as exc:
-                    logger.warning("Failed to load pending step-ups from DB: %s", exc)
+                        )
+                    return db_items
+
+            if not self._is_test:
+                raise RuntimeError(
+                    "Database session factory is mandatory for AuthorizationService "
+                    "outside test environment"
+                )
 
             items = []
             for req_id, data in self._pending_step_ups.items():
