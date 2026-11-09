@@ -27,7 +27,13 @@ def stub_server():
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    time.sleep(1.5)
+    for _ in range(50):
+        try:
+            res = httpx.get("http://127.0.0.1:8089/mock/mode", timeout=0.5)
+            if res.status_code == 200:
+                break
+        except Exception:
+            time.sleep(0.2)
     yield "http://127.0.0.1:8089"
     proc.terminate()
     proc.wait()

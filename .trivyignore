@@ -33,3 +33,7 @@ CVE-2026-249
 
 # pytest
 CVE-2026-1845
+
+# debian base OS
+CVE-2026-76844
+CVE-2026-85091
