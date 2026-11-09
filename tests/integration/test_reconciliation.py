@@ -1080,6 +1080,15 @@ def test_needs_review_requires_provider_proof_and_cannot_be_manually_approved(se
     assert "requires verified provider proof" in str(exc_info2.value)
 
     # 4. Invariant: resolve_needs_review with MARK_FAILED releases reservation and logs actor
+    test_rail.set_lookup_result(
+        auth_resp.payout_id,
+        PaymentResult(
+            success=False,
+            transaction_id=auth_resp.payout_id,
+            status="FAILED",
+            details={"error": "Explicit provider rejection confirmed"},
+        ),
+    )
     auth_service.resolve_needs_review(
         req_id,
         action="MARK_FAILED",
@@ -1225,4 +1234,123 @@ def test_reconcile_reservation_unknown_status_holds_reservation(db_engine):
         b2 = session.scalar(select(AgentBudgetModel).where(AgentBudgetModel.agent_id == agent_id))
         assert b2.reserved_minor == 0
         assert b2.spent_minor == 0
+
+
+def test_resolve_needs_review_mark_failed_requires_provider_confirmation(db_engine):
+    """MARK_FAILED must be confirmed by provider lookup (failure or not-found), else refused."""
+    session_factory = sessionmaker(bind=db_engine, expire_on_commit=False)
+    clock = SystemUtcClock()
+    test_rail = FakePaymentRail(should_succeed=True, status="RECONCILE")
+    ledger = InMemoryLedgerAdapter()
+    mandate_service = MandateService(clock=clock, db_session_factory=session_factory)
+    auth_service = AuthorizationService(
+        clock=clock,
+        ledger=ledger,
+        mandate_service=mandate_service,
+        payment_rail=test_rail,
+        db_session_factory=session_factory,
+    )
+
+    agent_id = f"agent_mf_{uuid.uuid4().hex[:8]}"
+    mandate_id = f"mandate_{uuid.uuid4().hex[:8]}"
+    _seed_agent_mandate_and_budget(session_factory, agent_id, mandate_id, 100_000, clock)
+
+    cmd = AuthorizeTransactionCommand(
+        agent_id=agent_id,
+        recipient_id="vendor-paypal-sandbox-1",
+        amount_minor=10_000,
+        currency="USD",
+        purpose="Payment subject to manual resolution",
+        idempotency_key=f"idem_{uuid.uuid4().hex}",
+    )
+    auth_resp = auth_service.authorize(cmd)
+    req_id = auth_resp.request_id
+
+    # 1. Provider reports still PENDING/RECONCILE -> MARK_FAILED must be refused
+    test_rail.set_lookup_result(
+        auth_resp.payout_id,
+        PaymentResult(
+            success=False,
+            transaction_id=auth_resp.payout_id,
+            status="PENDING",
+            details={"state": "PENDING"},
+        ),
+    )
+    with pytest.raises(ValueError, match="not a confirmed failure or not-found"):
+        auth_service.resolve_needs_review(req_id, action="MARK_FAILED")
+
+    # 2. Provider reports confirmed FAILED -> MARK_FAILED is permitted and releases reservation
+    test_rail.set_lookup_result(
+        auth_resp.payout_id,
+        PaymentResult(
+            success=False,
+            transaction_id=auth_resp.payout_id,
+            status="FAILED",
+            details={"error": "Explicit rejection"},
+        ),
+    )
+    res_state = auth_service.resolve_needs_review(req_id, action="MARK_FAILED")
+    assert res_state == RequestState.FAILED
+
+
+def test_resolve_needs_review_provide_proof_verified_against_provider(db_engine):
+    """PROVIDE_PROOF must be verified against provider lookup, not trusted from input."""
+    session_factory = sessionmaker(bind=db_engine, expire_on_commit=False)
+    clock = SystemUtcClock()
+    test_rail = FakePaymentRail(should_succeed=True, status="RECONCILE")
+    ledger = InMemoryLedgerAdapter()
+    mandate_service = MandateService(clock=clock, db_session_factory=session_factory)
+    auth_service = AuthorizationService(
+        clock=clock,
+        ledger=ledger,
+        mandate_service=mandate_service,
+        payment_rail=test_rail,
+        db_session_factory=session_factory,
+    )
+
+    agent_id = f"agent_pp_{uuid.uuid4().hex[:8]}"
+    mandate_id = f"mandate_{uuid.uuid4().hex[:8]}"
+    _seed_agent_mandate_and_budget(session_factory, agent_id, mandate_id, 100_000, clock)
+
+    cmd = AuthorizeTransactionCommand(
+        agent_id=agent_id,
+        recipient_id="vendor-paypal-sandbox-1",
+        amount_minor=12_000,
+        currency="USD",
+        purpose="Payment requiring proof verification",
+        idempotency_key=f"idem_{uuid.uuid4().hex}",
+    )
+    auth_resp = auth_service.authorize(cmd)
+    req_id = auth_resp.request_id
+
+    # 1. Unverified or pending capture ID must be refused
+    test_rail.set_lookup_result(
+        "unverified_capture_123",
+        PaymentResult(
+            success=False,
+            transaction_id="unverified_capture_123",
+            status="PENDING",
+            details={},
+        ),
+    )
+    with pytest.raises(ValueError, match="could not be verified with provider"):
+        auth_service.resolve_needs_review(
+            req_id, action="PROVIDE_PROOF", capture_id="unverified_capture_123"
+        )
+
+    # 2. Confirmed COMPLETED capture ID verified against provider settles reservation
+    test_rail.set_lookup_result(
+        "verified_capture_456",
+        PaymentResult(
+            success=True,
+            transaction_id="verified_capture_456",
+            status="COMPLETED",
+            details={},
+        ),
+    )
+    res_state = auth_service.resolve_needs_review(
+        req_id, action="PROVIDE_PROOF", capture_id="verified_capture_456"
+    )
+    assert res_state == RequestState.SETTLED
+
 

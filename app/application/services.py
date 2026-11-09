@@ -2088,24 +2088,58 @@ class AuthorizationService:
                 )
 
             now_utc = self._clock.now_utc()
-            payout_id = capture_id or held.get("payout_id")
+            payout_id = held.get("payout_id")
+            CONFIRMED_SUCCESS = {"SUCCESS", "COMPLETED", "CONFIRMED", "SETTLED"}
+            CONFIRMED_FAILURE = {
+                "FAILED",
+                "DENIED",
+                "REJECTED",
+                "EXPIRED",
+                "VOIDED",
+                "CANCELED",
+            }
 
-            if action_upper in ("RETRY_LOOKUP", "PROVIDE_PROOF"):
-                if not payout_id:
+            if action_upper == "PROVIDE_PROOF":
+                if not capture_id or not capture_id.strip():
+                    raise ValueError(
+                        f"Proof verification requires a non-empty capture ID for '{request_id}'"
+                    )
+                lookup_res = self._payment_rail.lookup(capture_id.strip())
+                provider_status = (lookup_res.status or "UNKNOWN").upper()
+                if provider_status not in CONFIRMED_SUCCESS:
+                    raise ValueError(
+                        f"Provided capture ID '{capture_id}' could not be verified with provider: "
+                        f"status is {provider_status}"
+                    )
+                new_state = self.reconcile(request_id, rail_status="COMPLETED")
+                intent = held.get("intent")
+                if intent:
+                    dom_res = PolicyEvaluationResult(
+                        outcome=DecisionOutcome.ALLOW,
+                        reasons=(
+                            f"Provider capture proof confirmed ({capture_id}): "
+                            f"{provider_status} by {actor}",
+                        ),
+                        evaluated_at_utc=now_utc,
+                    )
+                    with contextlib.suppress(Exception):
+                        self._ledger.append_event(
+                            event_type="RECONCILIATION_CONFIRMED",
+                            intent=intent,
+                            result=dom_res,
+                            recorded_at_utc=now_utc,
+                            provider_state=provider_status,
+                        )
+                return new_state
+
+            elif action_upper == "RETRY_LOOKUP":
+                lookup_target = capture_id or payout_id
+                if not lookup_target:
                     raise ValueError(
                         f"No provider ID available for proof verification on '{request_id}'"
                     )
-                lookup_res = self._payment_rail.lookup(payout_id)
+                lookup_res = self._payment_rail.lookup(lookup_target)
                 provider_status = (lookup_res.status or "UNKNOWN").upper()
-                CONFIRMED_SUCCESS = {"SUCCESS", "COMPLETED", "CONFIRMED", "SETTLED"}
-                CONFIRMED_FAILURE = {
-                    "FAILED",
-                    "DENIED",
-                    "REJECTED",
-                    "EXPIRED",
-                    "VOIDED",
-                    "CANCELED",
-                }
 
                 if provider_status in CONFIRMED_SUCCESS:
                     new_state = self.reconcile(request_id, rail_status="COMPLETED")
@@ -2114,7 +2148,7 @@ class AuthorizationService:
                         dom_res = PolicyEvaluationResult(
                             outcome=DecisionOutcome.ALLOW,
                             reasons=(
-                                f"Provider settlement confirmed ({payout_id}): "
+                                f"Provider settlement confirmed ({lookup_target}): "
                                 f"{provider_status} by {actor}",
                             ),
                             evaluated_at_utc=now_utc,
@@ -2135,7 +2169,7 @@ class AuthorizationService:
                         dom_res = PolicyEvaluationResult(
                             outcome=DecisionOutcome.DENY,
                             reasons=(
-                                f"Provider confirmed failure ({payout_id}): "
+                                f"Provider confirmed failure ({lookup_target}): "
                                 f"{provider_status} by {actor}",
                             ),
                             evaluated_at_utc=now_utc,
@@ -2154,6 +2188,23 @@ class AuthorizationService:
                     return RequestState.NEEDS_REVIEW
 
             elif action_upper in ("MARK_FAILED", "REJECT", "CANCEL"):
+                if payout_id:
+                    lookup_res = self._payment_rail.lookup(payout_id)
+                    provider_status = (lookup_res.status or "UNKNOWN").upper()
+                    details_str = str(lookup_res.details).lower()
+                    is_not_found = (
+                        lookup_res.details.get("http_status") == 404
+                        or "not found" in details_str
+                        or "invalid_resource_id" in details_str
+                        or "resource_not_found" in details_str
+                    )
+                    is_confirmed_fail = provider_status in CONFIRMED_FAILURE or is_not_found
+                    if not is_confirmed_fail:
+                        raise ValueError(
+                            f"Cannot mark transaction '{request_id}' as failed: "
+                            f"provider status is '{provider_status}', "
+                            "which is not a confirmed failure or not-found."
+                        )
                 new_state = self.reconcile(request_id, rail_status="FAILED")
                 intent = held.get("intent")
                 if intent:
@@ -2173,6 +2224,7 @@ class AuthorizationService:
                             recorded_at_utc=now_utc,
                             provider_state="FAILED",
                         )
+                return new_state
                 return new_state
             else:
                 raise ValueError(f"Unknown action '{action}' for resolving NEEDS_REVIEW")
