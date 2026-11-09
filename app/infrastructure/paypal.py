@@ -27,6 +27,39 @@ def load_env_if_present() -> None:
                 os.environ.setdefault(key.strip(), val.strip())
 
 
+def validate_paypal_cert_url(cert_url: str) -> bool:
+    """Validate PayPal webhook cert URL according to strict security invariants:
+
+    - Scheme must be https (case-insensitive).
+    - Hostname must be exactly in the documented PayPal API hosts:
+      {api.paypal.com, api.sandbox.paypal.com, api-m.paypal.com, api-m.sandbox.paypal.com}.
+    - No username or password (no userinfo allowed).
+    - No explicit port (not even 443; must use standard default HTTPS port).
+    """
+    if not cert_url or not isinstance(cert_url, str):
+        return False
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(cert_url)
+        if parsed.scheme.lower() != "https":
+            return False
+        if parsed.username or parsed.password:
+            return False
+        if parsed.port is not None:
+            return False
+        hostname = (parsed.hostname or "").lower()
+        allowed_hosts = {
+            "api.paypal.com",
+            "api.sandbox.paypal.com",
+            "api-m.paypal.com",
+            "api-m.sandbox.paypal.com",
+        }
+        return hostname in allowed_hosts
+    except Exception:
+        return False
+
+
 class FakePaymentRail(PaymentRail):
     """Recording test double for deterministic test execution."""
 
@@ -113,20 +146,8 @@ class FakePaymentRail(PaymentRail):
             or headers.get("paypal-cert-url")
             or headers.get("Paypal-Cert-Url")
         )
-        if cert_url:
-            from urllib.parse import urlparse
-
-            try:
-                parsed = urlparse(cert_url)
-                if parsed.scheme != "https" or not (
-                    parsed.netloc == "api.paypal.com"
-                    or parsed.netloc == "api-m.paypal.com"
-                    or parsed.netloc == "api-m.sandbox.paypal.com"
-                    or parsed.netloc.endswith(".paypal.com")
-                ):
-                    return False
-            except Exception:
-                return False
+        if cert_url and not validate_paypal_cert_url(cert_url):
+            return False
         # Only signatures matching stubbed/fixture set are accepted
         return sig in self.valid_signatures
 
@@ -673,21 +694,8 @@ class PayPalPaymentRailAdapter(PaymentRail):
         ):
             return False
 
-        # SSRF defense: Validate cert_url must be HTTPS and hosted on a legitimate paypal.com domain
-        from urllib.parse import urlparse
-
-        try:
-            parsed_cert = urlparse(cert_url)
-            hostname = (parsed_cert.hostname or "").lower()
-            if parsed_cert.scheme != "https" or not (
-                hostname == "api.paypal.com"
-                or hostname == "api-m.paypal.com"
-                or hostname == "api-m.sandbox.paypal.com"
-                or hostname == "api.sandbox.paypal.com"
-                or hostname.endswith(".paypal.com")
-            ):
-                return False
-        except Exception:
+        # SSRF defense: Validate cert_url must be HTTPS and hosted on a legitimate PayPal API domain
+        if not validate_paypal_cert_url(cert_url):
             return False
 
         webhook_id = os.getenv("PAYPAL_WEBHOOK_ID") or ""

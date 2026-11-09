@@ -292,3 +292,71 @@ def test_real_verify_webhook_accepts_valid_signature_with_provider_success(monke
     payload_sent = captured_requests[0][1].get("json", {})
     assert payload_sent["webhook_id"] == "WH-VALID-12345"
     assert payload_sent["transmission_sig"] == "valid_signature_token_xyz"
+
+
+def test_webhook_cert_url_strict_validation_rejections_and_accept(monkeypatch) -> None:
+    """H8: webhook cert URL must be HTTPS, exactly in allowed PayPal hosts, no userinfo, no port."""
+    adapter = PayPalPaymentRailAdapter(client_id="test_client_id", client_secret="test_secret")
+    monkeypatch.setenv("PAYPAL_WEBHOOK_ID", "WH-VALID-12345")
+    monkeypatch.setattr(adapter, "_get_access_token", lambda: "fake-access-token")
+
+    class FakeSuccessResponse:
+        status_code = 200
+
+        def json(self):
+            return {"verification_status": "SUCCESS"}
+
+    import httpx
+
+    monkeypatch.setattr(httpx, "post", lambda *_args, **_kwargs: FakeSuccessResponse())
+
+    payload = b'{"id": "WH-1"}'
+    base_headers = {
+        "PAYPAL-AUTH-ALGO": "SHA256withRSA",
+        "PAYPAL-TRANSMISSION-ID": "trans-test",
+        "PAYPAL-TRANSMISSION-SIG": "sig-test",
+        "PAYPAL-TRANSMISSION-TIME": "2026-11-09T12:00:00Z",
+    }
+
+    # Rejection 1: HTTP instead of HTTPS
+    h1 = dict(base_headers, **{"PAYPAL-CERT-URL": "http://api.paypal.com/certs/CERT-1"})
+    assert adapter.verify_webhook(h1, payload) is False
+
+    # Rejection 2: Suffix domain (evilpaypal.com)
+    h2 = dict(base_headers, **{"PAYPAL-CERT-URL": "https://evilpaypal.com/certs/CERT-1"})
+    assert adapter.verify_webhook(h2, payload) is False
+
+    # Rejection 3: Subdomain suffix evasion (api.paypal.com.evil.com)
+    h3 = dict(base_headers, **{"PAYPAL-CERT-URL": "https://api.paypal.com.evil.com/certs/CERT-1"})
+    assert adapter.verify_webhook(h3, payload) is False
+
+    # Rejection 4: Arbitrary unlisted PayPal subdomain (attacker.paypal.com)
+    h4 = dict(base_headers, **{"PAYPAL-CERT-URL": "https://attacker.paypal.com/certs/CERT-1"})
+    assert adapter.verify_webhook(h4, payload) is False
+
+    # Rejection 5: Username in URL
+    h5 = dict(base_headers, **{"PAYPAL-CERT-URL": "https://attacker@api.paypal.com/certs/CERT-1"})
+    assert adapter.verify_webhook(h5, payload) is False
+
+    # Rejection 6: Username + password in URL
+    h6 = dict(
+        base_headers,
+        **{"PAYPAL-CERT-URL": "https://user:pass@api.sandbox.paypal.com/certs/CERT-1"},
+    )
+    assert adapter.verify_webhook(h6, payload) is False
+
+    # Rejection 7: Explicit port (standard 443 or custom 8443)
+    h7a = dict(base_headers, **{"PAYPAL-CERT-URL": "https://api.paypal.com:443/certs/CERT-1"})
+    assert adapter.verify_webhook(h7a, payload) is False
+    h7b = dict(
+        base_headers,
+        **{"PAYPAL-CERT-URL": "https://api.sandbox.paypal.com:8443/certs/CERT-1"},
+    )
+    assert adapter.verify_webhook(h7b, payload) is False
+
+    # Accept: Legitimate HTTPS PayPal cert with no userinfo or port
+    h_accept = dict(
+        base_headers,
+        **{"PAYPAL-CERT-URL": "https://api-m.sandbox.paypal.com/certs/CERT-1"},
+    )
+    assert adapter.verify_webhook(h_accept, payload) is True
