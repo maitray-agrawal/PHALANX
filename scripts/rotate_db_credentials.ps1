@@ -24,7 +24,7 @@ Write-Host "      Container '$containerName' is healthy."
 
 # Step 2: Confirm existing database and roles
 Write-Host "[2/9] Confirming database 'phalanx_db' and application role..."
-$roleCheck = docker exec -i $containerName psql -U phalanx_app -d phalanx_db -tAc "SELECT 1 FROM pg_roles WHERE rolname='phalanx_app'" 2>$null
+$roleCheck = docker exec -i $containerName psql -U postgres -d phalanx_db -tAc "SELECT 1 FROM pg_roles WHERE rolname='phalanx_app'"
 if ($roleCheck -ne "1") {
     Write-Error "Application role 'phalanx_app' not found in database. Aborting."
     exit 1
@@ -52,10 +52,10 @@ if ([string]::IsNullOrWhiteSpace($newAppPassword) -or $newAppPassword.Length -lt
 }
 Write-Host "      High-entropy secrets generated (entropy >= 256 bits, length: $($newAppPassword.Length) chars)."
 
-# Step 4: Alter role passwords in PostgreSQL via standard input (no command line leakage)
-Write-Host "[4/9] Applying password rotation inside PostgreSQL..."
+# Step 4: Alter role passwords in PostgreSQL via standard input as superuser (postgres)
+Write-Host "[4/9] Applying password rotation inside PostgreSQL as superuser..."
 $alterSql = "ALTER ROLE phalanx_app WITH PASSWORD '$newAppPassword'; ALTER ROLE postgres WITH PASSWORD '$newPostgresPassword';"
-$alterSql | docker exec -i $containerName psql -U phalanx_app -d phalanx_db >$null 2>&1
+$alterSql | docker exec -i $containerName psql -v ON_ERROR_STOP=1 -U postgres -d phalanx_db
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Failed to alter PostgreSQL role passwords. Exit code: $LASTEXITCODE"
     exit 1
