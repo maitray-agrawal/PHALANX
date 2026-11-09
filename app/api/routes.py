@@ -38,7 +38,9 @@ from app.api.dependencies import (
     get_ledger_service,
     get_mandate_service,
     get_payment_rail,
+    get_reconciler_service,
 )
+from app.api.middleware import extract_client_ip
 from app.application.dtos import (
     ActivityItemDTO,
     ApprovalCommand,
@@ -132,12 +134,13 @@ def _check_demo_token_rate_limit(client_ip: str) -> None:
     history = _demo_token_rate_limits.setdefault(client_ip, [])
     # Retain timestamps within the last 60 seconds
     _demo_token_rate_limits[client_ip] = [t for t in history if now - t < 60.0]
-    max_tokens = int(os.getenv("DEMO_TOKEN_RATE_LIMIT", "120"))
+    max_tokens = int(os.getenv("DEMO_TOKEN_RATE_LIMIT", str(settings.demo_token_rate_limit)))
     if len(_demo_token_rate_limits[client_ip]) >= max_tokens:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=(
-                "Rate limit exceeded: demo token dispensing is limited to 10 requests per minute."
+                "Rate limit exceeded: demo token dispensing is limited to "
+                f"{max_tokens} requests per minute."
             ),
         )
     _demo_token_rate_limits[client_ip].append(now)
@@ -160,7 +163,7 @@ def create_demo_token(request: DemoTokenRequestDTO, raw_request: Request) -> Dem
             detail="Endpoint not found: Demo mode is disabled",
         )
 
-    client_ip = raw_request.client.host if raw_request.client else "unknown"
+    client_ip = extract_client_ip(raw_request)
     _check_demo_token_rate_limit(client_ip)
 
     try:
@@ -238,7 +241,13 @@ def create_payment_request(
     # Object-level authorization: agent identity must match requested agent_id
     check_agent_object_authorization(identity, command.agent_id)
 
-    return service.authorize(command)
+    try:
+        return service.authorize(command)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get(
@@ -366,6 +375,8 @@ def get_mandate(
         status=mandate.status,
         key_id=mandate.key_id,
         signature=mandate.signature,
+        allow_unregistered_payees=mandate.allow_unregistered_payees,
+        require_invoice_reference=mandate.require_invoice_reference,
         spent_budget_minor=spent,
         remaining_budget_minor=remaining,
     )
@@ -487,10 +498,16 @@ def approve_request_api(
     service: Annotated[AuthorizationService, Depends(get_authorization_service)],
 ) -> AuthorizationResponseDTO:
     """Direct approve endpoint binding human approval to exact intent."""
+    expected_digest = payload.get("expected_digest", "")
+    if len(expected_digest) != 64:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Field 'expected_digest' must be a 64-char SHA-256 hexadecimal string.",
+        )
     approval_dto = SubmitApprovalRequestDTO(
         decision=DecisionOutcome.ALLOW,
         reason=payload.get("reason", "Approved via legacy API"),
-        expected_digest=payload.get("expected_digest", ""),
+        expected_digest=expected_digest,
     )
     return submit_approval(request_id, approval_dto, identity, service)
 
@@ -507,10 +524,16 @@ def reject_request_api(
     service: Annotated[AuthorizationService, Depends(get_authorization_service)],
 ) -> AuthorizationResponseDTO:
     """Direct reject endpoint for human rejection."""
+    expected_digest = payload.get("expected_digest", "")
+    if len(expected_digest) != 64:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Field 'expected_digest' must be a 64-char SHA-256 hexadecimal string.",
+        )
     approval_dto = SubmitApprovalRequestDTO(
         decision=DecisionOutcome.DENY,
         reason=payload.get("reason", "Rejected via legacy API"),
-        expected_digest=payload.get("expected_digest", ""),
+        expected_digest=expected_digest,
     )
     return submit_approval(request_id, approval_dto, identity, service)
 
@@ -675,6 +698,53 @@ def list_reconcile_items(
     return service.get_held_reservations()
 
 
+@router.get("/v1/needs-review", response_model=list[dict[str, Any]], status_code=status.HTTP_200_OK)
+def list_needs_review_items(
+    identity: Annotated[Identity, Depends(get_current_identity)],
+    service: Annotated[AuthorizationService, Depends(get_authorization_service)],
+) -> list[dict[str, Any]]:
+    """List ambiguous transactions currently in NEEDS_REVIEW awaiting provider proof."""
+    if identity.role == Role.AGENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Agents cannot inspect review queues.",
+        )
+    return service.get_needs_review_items()
+
+
+@router.post("/v1/needs-review/{request_id}/resolve", status_code=status.HTTP_200_OK)
+def resolve_needs_review_endpoint(
+    request_id: str,
+    payload: dict[str, Any],
+    identity: Annotated[Identity, Depends(get_current_identity)],
+    service: Annotated[AuthorizationService, Depends(get_authorization_service)],
+) -> dict[str, Any]:
+    """Resolve a NEEDS_REVIEW item via RETRY_LOOKUP, PROVIDE_PROOF, or MARK_FAILED."""
+    if identity.role not in (Role.APPROVER, Role.PRINCIPAL):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Forbidden: Role '{identity.role.value}' cannot resolve transactions in review."
+            ),
+        )
+    action = payload.get("action", "")
+    capture_id = payload.get("capture_id")
+    reason = payload.get("reason", "")
+    try:
+        new_state = service.resolve_needs_review(
+            request_id=request_id,
+            action=action,
+            capture_id=capture_id,
+            reason=reason,
+            actor=f"{identity.role.value}:{identity.principal_id}",
+        )
+        return {"request_id": request_id, "resolved_state": new_state.value}
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
 @router.post("/v1/reconcile/{request_id}", status_code=status.HTTP_200_OK)
 def reconcile_request(
     request_id: str,
@@ -689,7 +759,13 @@ def reconcile_request(
             detail=f"Forbidden: Role '{identity.role.value}' cannot reconcile payments.",
         )
     rail_status = payload.get("status")
-    new_state = service.reconcile(request_id, rail_status=rail_status)
+    try:
+        new_state = service.reconcile(request_id, rail_status=rail_status)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
     return {"request_id": request_id, "state": new_state.value}
 
 
@@ -703,8 +779,9 @@ processed_webhook_events: set[str] = set()
 async def paypal_webhook(
     request: Request,
     rail: Annotated[PaymentRail, Depends(get_payment_rail)],
+    reconciler: Annotated[Any, Depends(get_reconciler_service)],
 ) -> dict[str, str]:
-    """Ingest PayPal webhook events with signature verification and idempotency."""
+    """Ingest PayPal webhook events with signature verification, idempotency, and reconciliation."""
     webhook_id = settings.paypal_webhook_id or os.getenv("PAYPAL_WEBHOOK_ID")
     if not webhook_id:
         raise HTTPException(
@@ -739,6 +816,30 @@ async def paypal_webhook(
         if event_id in processed_webhook_events:
             return {"status": "duplicate_ignored", "event_id": event_id}
         processed_webhook_events.add(event_id)
+
+    # Trigger reconciliation if the webhook maps to an in-flight transaction
+    resource = data.get("resource", {}) if isinstance(data, dict) else {}
+    resource_id = resource.get("id") or resource.get("payout_batch_id")
+    event_type = str(data.get("event_type", "")).upper() if isinstance(data, dict) else ""
+
+    inferred_rail_status: str | None = None
+    if any(k in event_type for k in ("COMPLETED", "SUCCESS", "CAPTURED")):
+        inferred_rail_status = "COMPLETED"
+    elif any(
+        k in event_type for k in ("DENIED", "FAILED", "REJECTED", "CANCEL", "VOID", "EXPIRED")
+    ):
+        inferred_rail_status = "FAILED"
+
+    if resource_id:
+        reconciled = reconciler.reconcile_by_transaction_id(
+            str(resource_id), rail_status=inferred_rail_status, force=True
+        )
+        if reconciled:
+            return {
+                "status": "processed",
+                "event_id": event_id or "unknown",
+                "reconciled_state": reconciled.value,
+            }
 
     return {"status": "processed", "event_id": event_id or "unknown"}
 
@@ -817,7 +918,7 @@ def verify_admin_reset_access(
             scheme="Bearer", credentials=authorization.split(" ", 1)[1]
         )
         identity = get_current_identity(credentials=creds)
-        if identity.role == Role.PRINCIPAL:
+        if identity.role == Role.PRINCIPAL or settings.demo_mode:
             return True
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -843,6 +944,16 @@ def admin_reset(
     service.reset_state()
     ledger_service.restore_chain()
     return {"status": "reset_completed", "message": "Demo state reset successfully."}
+
+
+@router.post("/v1/admin/reconcile", status_code=status.HTTP_200_OK)
+def admin_reconcile(
+    _authorized: Annotated[bool, Depends(verify_admin_reset_access)],
+    reconciler: Annotated[Any, Depends(get_reconciler_service)],
+) -> dict[str, Any]:
+    """Manually trigger immediate reconciliation of all ambiguous transactions."""
+    metrics = reconciler.reconcile_all(force=True)
+    return {"status": "reconciliation_completed", "metrics": metrics}
 
 
 # Cockpit Overview & Activity Feed Endpoints (GET /v1/overview, GET /v1/activity)
