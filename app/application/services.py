@@ -1629,6 +1629,7 @@ class AuthorizationService:
         request_id: str,
         rail_status: str | None = None,
         max_age_seconds: int = 86400,
+        session: Any | None = None,
     ) -> RequestState:
         """Reconcile a transaction currently in RECONCILE state against external rail outcome.
 
@@ -1640,7 +1641,16 @@ class AuthorizationService:
         - Idempotent: re-calling on already SETTLED or FAILED request returns current state safely.
         """
         with self._lock:
+            held = self._held_reservations.get(request_id)
+            if not held and (self._db_session_factory is not None or session is not None):
+                self.get_held_reservations()
+                held = self._held_reservations.get(request_id)
+
             current_state = self._request_states.get(request_id)
+            if not current_state and held:
+                current_state = RequestState(held.get("state", RequestState.RECONCILE.value))
+                self._request_states[request_id] = current_state
+
             if current_state == RequestState.SETTLED:
                 return RequestState.SETTLED
             if current_state == RequestState.FAILED:
@@ -1653,7 +1663,6 @@ class AuthorizationService:
                 raise ValueError(msg)
 
             resp = self._responses_by_id.get(request_id)
-            held = self._held_reservations.get(request_id)
             payout_id = (resp.payout_id if resp else None) or (
                 held.get("payout_id") if held else None
             )
@@ -1692,20 +1701,22 @@ class AuthorizationService:
             age_seconds = (now_utc - created_at).total_seconds() if created_at else 0
             is_ambiguous_error = status_norm in AMBIGUOUS_ERRORS
 
-            if self._db_session_factory is not None and held and held.get("reservation_id"):
-                with self._db_session_factory() as session, session.begin():
-                    repo = BudgetRepository(session)
+            if (
+                self._db_session_factory is not None or session is not None
+            ) and held and held.get("reservation_id"):
+                def _do_db_reconcile(s: Any) -> RequestState:
+                    repo = BudgetRepository(s)
                     if status_norm in CONFIRMED_SUCCESS:
                         repo.confirm_reservation(held["reservation_id"])
-                        new_state = transition_request_state(current_state, RequestState.SETTLED)
+                        new_st = transition_request_state(current_state, RequestState.SETTLED)
                         self._held_reservations.pop(request_id, None)
                     elif status_norm in CONFIRMED_FAILURE and not is_ambiguous_error:
                         repo.release_reservation(held["reservation_id"], confirmed_failure=True)
-                        new_state = transition_request_state(current_state, RequestState.FAILED)
+                        new_st = transition_request_state(current_state, RequestState.FAILED)
                         self._held_reservations.pop(request_id, None)
                     elif is_ambiguous_error or age_seconds >= max_age_seconds:
                         repo.release_reservation(held["reservation_id"], confirmed_failure=False)
-                        new_state = (
+                        new_st = (
                             RequestState.NEEDS_REVIEW
                             if current_state == RequestState.NEEDS_REVIEW
                             else transition_request_state(current_state, RequestState.NEEDS_REVIEW)
@@ -1714,23 +1725,23 @@ class AuthorizationService:
                         held["provider_status"] = status_norm
                     else:
                         repo.release_reservation(held["reservation_id"], confirmed_failure=False)
-                        new_state = RequestState.RECONCILE
+                        new_st = RequestState.RECONCILE
                         held["provider_status"] = status_norm
 
-                    self._request_states[request_id] = new_state
+                    self._request_states[request_id] = new_st
                     if resp:
-                        resp.request_state = new_state
+                        resp.request_state = new_st
 
                     intent = held.get("intent")
-                    if intent and new_state in (RequestState.SETTLED, RequestState.FAILED):
+                    if intent and new_st in (RequestState.SETTLED, RequestState.FAILED):
                         evt_name = (
                             "RECONCILIATION_CONFIRMED"
-                            if new_state == RequestState.SETTLED
+                            if new_st == RequestState.SETTLED
                             else "RECONCILIATION_RELEASED"
                         )
                         dec_out = (
                             DecisionOutcome.ALLOW
-                            if new_state == RequestState.SETTLED
+                            if new_st == RequestState.SETTLED
                             else DecisionOutcome.DENY
                         )
                         dom_res = PolicyEvaluationResult(
@@ -1754,7 +1765,13 @@ class AuthorizationService:
                                 recorded_at_utc=now_utc,
                             )
 
-                    return new_state
+                    return new_st
+
+                if session is not None:
+                    return _do_db_reconcile(session)
+                elif self._db_session_factory is not None:
+                    with self._db_session_factory() as db_s, db_s.begin():
+                        return _do_db_reconcile(db_s)
 
             # In-memory execution
             if status_norm in CONFIRMED_SUCCESS:

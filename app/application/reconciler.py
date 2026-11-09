@@ -12,16 +12,23 @@ Invariants:
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.application.services import AuthorizationService
 from app.domain.ports import ClockPort, PaymentRail
 from app.domain.state_machine import RequestState
+from app.infrastructure.models import (
+    BudgetReservationModel,
+    IdempotencyModel,
+    ReservationStatus,
+)
 
 logger = logging.getLogger("phalanx.reconciler")
 
@@ -106,16 +113,132 @@ class ReconcilerService:
 
         return new_state
 
-    def reconcile_all(self, force: bool = False) -> dict[str, Any]:
-        """Iterate all held ambiguous requests and reconcile against payment rail."""
-        held_items = self._auth_service.get_held_reservations()
+    def claim_and_reconcile_next(
+        self,
+        force: bool = False,
+        exclude_reservation_ids: set[str] | None = None,
+        agent_id: str | None = None,
+    ) -> tuple[bool, RequestState | None, str | None]:
+        """Claim a single held reservation with FOR UPDATE SKIP LOCKED and reconcile it.
+
+        Guarantees that concurrent reconciler workers do not process the same row.
+        Returns (claimed, resulting_state, reservation_id).
+        If no claimable rows exist, returns (False, None, None).
+        """
+        if self._db_session_factory is None:
+            return False, None, None
+
+        with self._db_session_factory() as session, session.begin():
+            dialect = session.bind.dialect.name if session.bind else ""
+            stmt = (
+                select(BudgetReservationModel)
+                .where(
+                    BudgetReservationModel.status.in_(
+                        [
+                            ReservationStatus.PENDING.value,
+                            ReservationStatus.RECONCILE.value,
+                        ]
+                    )
+                )
+                .order_by(BudgetReservationModel.created_at_utc.asc())
+            )
+            if agent_id:
+                stmt = stmt.where(BudgetReservationModel.agent_id == agent_id)
+            if exclude_reservation_ids:
+                stmt = stmt.where(
+                    BudgetReservationModel.reservation_id.not_in(exclude_reservation_ids)
+                )
+            if dialect in ("postgresql", "postgres"):
+                stmt = stmt.with_for_update(skip_locked=True)
+            stmt = stmt.limit(1)
+
+            res = session.scalar(stmt)
+            if not res:
+                return False, None, None
+
+            res_id = res.reservation_id
+            idem = session.scalar(
+                select(IdempotencyModel).where(
+                    IdempotencyModel.idempotency_key == res.idempotency_key
+                )
+            )
+            meta: dict[str, Any] = {}
+            if idem and idem.response_payload:
+                try:
+                    meta = json.loads(idem.response_payload)
+                except Exception:
+                    meta = {}
+
+            req_id = meta.get("request_id") or f"req_{res.idempotency_key}"
+            payout_id = meta.get("payout_id")
+
+            now = self._clock.now_utc()
+            if not force and not self.should_retry(req_id, now):
+                return True, RequestState.RECONCILE, res_id
+
+            self.record_attempt(req_id, now)
+
+            rail_status: str | None = None
+            if payout_id:
+                try:
+                    rail_res = self._payment_rail.lookup(payout_id)
+                    rail_status = rail_res.status
+                except Exception as exc:
+                    logger.warning("Reconciliation lookup failed for %s: %s", payout_id, exc)
+                    rail_status = "LOOKUP_FAILED"
+
+            new_state = self._auth_service.reconcile(
+                request_id=req_id,
+                rail_status=rail_status,
+                max_age_seconds=self._max_age_seconds,
+                session=session,
+            )
+
+            if new_state in (RequestState.SETTLED, RequestState.FAILED, RequestState.CLOSED):
+                self.clear_tracker(req_id)
+
+            return True, new_state, res_id
+
+    def reconcile_all(
+        self, force: bool = False, agent_id: str | None = None
+    ) -> dict[str, Any]:
+        """Iterate all held ambiguous requests and reconcile against payment rail.
+
+        When database is configured on PostgreSQL, uses FOR UPDATE SKIP LOCKED
+        to claim rows safely across concurrent workers without double-processing.
+        """
         metrics = {
-            "total_checked": len(held_items),
+            "total_checked": 0,
             "settled": 0,
             "released": 0,
             "pending": 0,
             "needs_review": 0,
         }
+
+        if self._db_session_factory is not None:
+            seen_ids: set[str] = set()
+            while True:
+                claimed, state, res_id = self.claim_and_reconcile_next(
+                    force=force, exclude_reservation_ids=seen_ids, agent_id=agent_id
+                )
+                if not claimed or not res_id:
+                    break
+                seen_ids.add(res_id)
+                metrics["total_checked"] += 1
+                if state == RequestState.SETTLED:
+                    metrics["settled"] += 1
+                elif state == RequestState.FAILED:
+                    metrics["released"] += 1
+                elif state == RequestState.NEEDS_REVIEW:
+                    metrics["needs_review"] += 1
+                else:
+                    metrics["pending"] += 1
+            return metrics
+
+        held_items = self._auth_service.get_held_reservations()
+        if agent_id:
+            held_items = [it for it in held_items if it.get("agent_id") == agent_id]
+        metrics["total_checked"] = len(held_items)
 
         for item in held_items:
             req_id = item["request_id"]

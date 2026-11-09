@@ -1354,3 +1354,95 @@ def test_resolve_needs_review_provide_proof_verified_against_provider(db_engine)
     assert res_state == RequestState.SETTLED
 
 
+def test_concurrent_reconciler_instances_skip_locked_no_double_processing(db_engine):
+    """Two concurrent reconciler instances use FOR UPDATE SKIP LOCKED and do not double-process."""
+    session_factory = sessionmaker(bind=db_engine, expire_on_commit=False)
+    clock = SystemUtcClock()
+    shared_rail = FakePaymentRail(should_succeed=True, status="COMPLETED")
+    ledger = InMemoryLedgerAdapter()
+    mandate_service = MandateService(clock=clock, db_session_factory=session_factory)
+
+    agent_id = f"agent_conc_rec_{uuid.uuid4().hex[:8]}"
+    mandate_id = f"mandate_{uuid.uuid4().hex[:8]}"
+    _seed_agent_mandate_and_budget(session_factory, agent_id, mandate_id, 500_000, clock)
+
+    auth_init = AuthorizationService(
+        clock=clock,
+        ledger=ledger,
+        mandate_service=mandate_service,
+        payment_rail=FakePaymentRail(should_succeed=True, status="RECONCILE"),
+        db_session_factory=session_factory,
+    )
+
+    # Seed 4 separate ambiguous transactions in RECONCILE
+    req_ids = []
+    payout_ids = []
+    for i in range(4):
+        cmd = AuthorizeTransactionCommand(
+            agent_id=agent_id,
+            recipient_id=f"vendor-conc-{i}",
+            amount_minor=10_000,
+            currency="USD",
+            purpose=f"Payment {i} for concurrent reconciliation",
+            idempotency_key=f"idem_conc_{i}_{uuid.uuid4().hex}",
+        )
+        resp = auth_init.authorize(cmd)
+        req_ids.append(resp.request_id)
+        payout_ids.append(resp.payout_id)
+        shared_rail.set_lookup_result(
+            resp.payout_id,
+            PaymentResult(
+                success=True,
+                transaction_id=resp.payout_id,
+                status="COMPLETED",
+                details={},
+            ),
+        )
+
+    # Instance 1 and Instance 2
+    svc1 = AuthorizationService(
+        clock=clock,
+        ledger=ledger,
+        mandate_service=mandate_service,
+        payment_rail=shared_rail,
+        db_session_factory=session_factory,
+    )
+    reconciler_1 = ReconcilerService(
+        auth_service=svc1,
+        payment_rail=shared_rail,
+        clock=clock,
+        db_session_factory=session_factory,
+    )
+
+    svc2 = AuthorizationService(
+        clock=clock,
+        ledger=ledger,
+        mandate_service=mandate_service,
+        payment_rail=shared_rail,
+        db_session_factory=session_factory,
+    )
+    reconciler_2 = ReconcilerService(
+        auth_service=svc2,
+        payment_rail=shared_rail,
+        clock=clock,
+        db_session_factory=session_factory,
+    )
+
+    # Run both simultaneously
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        f1 = executor.submit(reconciler_1.reconcile_all, force=True, agent_id=agent_id)
+        f2 = executor.submit(reconciler_2.reconcile_all, force=True, agent_id=agent_id)
+        m1 = f1.result(timeout=15)
+        m2 = f2.result(timeout=15)
+
+    # Exactly 4 total processed across both instances without duplicate processing
+    total_settled = m1["settled"] + m2["settled"]
+    assert total_settled == 4, f"Expected 4 settled, got m1={m1}, m2={m2}"
+
+    with session_factory() as session:
+        b = session.scalar(select(AgentBudgetModel).where(AgentBudgetModel.agent_id == agent_id))
+        assert b.reserved_minor == 0
+        assert b.spent_minor == 40_000
+
+
+
