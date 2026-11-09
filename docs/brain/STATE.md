@@ -1,7 +1,7 @@
 # STATE (update after every task)
-Date: 9 Nov 2026 | Branch: dev | Last pushed commit on main: 2332aef | CI: unknown
-Working tree: uncommitted F1, F1b, F1c, F2 changes across app/, web/, tests/, scripts/
-Completed: T1 | Doing: T2 | Next: T3 | Blocked on me: nothing
+Date: 9 Nov 2026 | Branch: dev | Last commit on dev: 1643f37 | Last pushed commit on main: 2332aef | CI: passing
+Working tree: clean
+Completed: T1, T2 (F1c-fix: H1-H7 closed) | Doing: T3 | Next: T4 | Blocked on me: nothing
 Database password rotated 7 Nov (user report). Hosting: nothing deployed.
 
 ---
@@ -18,21 +18,15 @@ Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
 - web screens:
   1. Home: Three numbers (remaining authority, pending approvals, last recorded activity), primary Pay action, recent activity stream.
   2. Pay: Request console with scenario presets, custom input, intent card, instant decision badge with plain reason.
-  3. Approvals: Step-up queue, exact request, RFC 8785 canonical digest, inspect diff, Approve/Decline bound to digest, Agent role locking. Stored XSS rendered inertly. Persistent demo step-up fallback.
+  3. Approvals: Step-up queue, exact request, RFC 8785 canonical digest, inspect diff, Approve/Decline bound to digest, Agent role locking. Stored XSS rendered inertly.
   4. Activity: Ledger journal, windowed visual chain strip (latest 20 blocks with total count indicator), honest provider states, Verify chain trigger, receipt links. Stored XSS rendered inertly.
   5. Mandates: Read-only Ed25519 limits, lifetime budget meter with accessible ARIA progressbar, allowed payees, authorized purposes, signature status.
   6. Attack Lab: 6 canned threat vectors (prompt injection, payee swap, amount tamper after approval, replay, forged webhook, agent self-approval), Run suite trigger, 100% defense check.
   7. Receipt & Verify: Cryptographic receipt card, public SHA-256 hash chain proof verifier, search input. Stored XSS rendered inertly.
-- ux, accessibility & multi-browser quality:
-  - Playwright E2E: 38/38 passing tests (30 cross-device tests across Chromium with slow 4G throttling, WebKit, Firefox, iPhone SE, Pixel 7, iPad; 8 cognitive walkthrough tests across APPROVER, AGENT, AUDITOR, PRINCIPAL personas).
-  - Axe Core automated accessibility audit: 0 critical / 0 serious violations across all 7 views.
-  - Lighthouse mobile audit: Accessibility: 100/100, Performance: 89/100, Best Practices: 96/100, SEO: 91/100.
-  - Mobile responsiveness: 0 horizontal scroll at 375px; 44px minimum touch targets across all interactive controls.
-  - Reduced motion: Clamped transitions (`<= 0.01ms`) under `prefers-reduced-motion: reduce`.
-- tests: 357 automated backend tests (357 passed, 0 skipped, 0 failed), 105 red-team tests; 28 Vitest frontend tests; 38 Playwright end-to-end tests.
+- tests: 363 automated backend tests (363 passed, 0 skipped, 0 failed), 105 red-team tests; 28 Vitest frontend tests; 38 Playwright end-to-end tests.
 
 Test status:
-- Backend: 357 passed, 0 skipped (357 total backend tests across 24 test files including tests/integration/test_reconciliation.py)
+- Backend: 363 passed, 0 skipped (363 total backend tests across 25 test files including tests/integration/test_reconciliation.py)
 - Red Team: 105/105 red-team tests passed
 - Performance & Invariants: All accounting and ledger invariants tested across 13,345 events; budget invariants verified with payment in flight and under concurrent load
 - Static Analysis: ruff check clean (0 errors), ruff format clean, mypy app clean (0 errors across 39 source files)
@@ -40,4 +34,4 @@ Test status:
 - E2E: Playwright passed (38/38 tests across 6 browsers/viewports)
 - Documentation: docs/decisions.md and docs/context.md updated.
 
-Next recommended action: Commit all changes directly to main and push.
+Next recommended action: Proceed with T3 / T4 (env alignment and password confirmation).
