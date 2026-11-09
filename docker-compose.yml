@@ -6,6 +6,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PHALANX_APP_DB_PASSWORD: ${PHALANX_APP_DB_PASSWORD}
       POSTGRES_DB: phalanx_db
     ports:
       - "${POSTGRES_PORT:-5433}:5432"
@@ -32,15 +33,18 @@ services:
     environment:
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
-      - DATABASE_URL=${CONTAINER_DATABASE_URL:-postgresql+psycopg://phalanx_app:${POSTGRES_PASSWORD:-postgres}@db:5432/phalanx_db}
+      - DATABASE_URL=${CONTAINER_DATABASE_URL:-postgresql+psycopg://phalanx_app:${PHALANX_APP_DB_PASSWORD}@db:5432/phalanx_db}
+      - PHALANX_APP_DB_PASSWORD=${PHALANX_APP_DB_PASSWORD}
       - SECRET_KEY=${SECRET_KEY}
       - ADMIN_TOKEN=${ADMIN_TOKEN}
+      - MANDATE_SIGNING_KEY_HEX=${MANDATE_SIGNING_KEY_HEX:-}
       - DEMO_MODE=${DEMO_MODE:-true}
       - PAYMENT_RAIL=${PAYMENT_RAIL:-paypal}
       - RATE_LIMIT_MAX_REQUESTS=${RATE_LIMIT_MAX_REQUESTS:-100000}
+      - DEMO_TOKEN_RATE_LIMIT=${DEMO_TOKEN_RATE_LIMIT:-15}
       - PAYPAL_CLIENT_ID=${PAYPAL_CLIENT_ID:-}
-      - PAYPAL_CLIENT_SECRET=${PAYPAL_CLIENT_SECRET}
-      - PAYPAL_WEBHOOK_ID=${PAYPAL_WEBHOOK_ID:-9PJ08350X2508271R}
+      - PAYPAL_CLIENT_SECRET=${PAYPAL_CLIENT_SECRET:-}
+      - PAYPAL_WEBHOOK_ID=${PAYPAL_WEBHOOK_ID:-}
       - PAYPAL_ENVIRONMENT=${PAYPAL_ENVIRONMENT:-sandbox}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]

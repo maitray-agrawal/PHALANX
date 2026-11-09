@@ -57,9 +57,19 @@ class DatabaseLedgerAdapter(LedgerPort):
     ) -> str:
         """Append an event to the ledger, computing prev_hash and event_hash."""
         with self._lock, self._get_session() as session:
-            # 1. Fetch latest event sequence and hash
+            # 0. PostgreSQL transaction-level advisory lock across instances
+            bind = session.get_bind()
+            if bind and bind.dialect.name in ("postgresql", "postgres"):
+                from sqlalchemy import text
+
+                session.execute(text("SELECT pg_advisory_xact_lock(742631589);"))
+
+            # 1. Fetch latest event sequence and hash with row lock
             latest_stmt = (
-                select(LedgerEventModel).order_by(LedgerEventModel.event_seq.desc()).limit(1)
+                select(LedgerEventModel)
+                .order_by(LedgerEventModel.event_seq.desc())
+                .limit(1)
+                .with_for_update()
             )
             latest = session.scalar(latest_stmt)
 
