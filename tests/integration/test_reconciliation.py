@@ -1354,6 +1354,97 @@ def test_resolve_needs_review_provide_proof_verified_against_provider(db_engine)
     assert res_state == RequestState.SETTLED
 
 
+def test_resolve_needs_review_h9_lookup_errors_refuse_and_failures_release(db_engine, monkeypatch):
+    """H9: resolve_needs_review must treat LOOKUP_FAILED and timeout as 'cannot confirm'.
+
+    - MARK_FAILED and PROVIDE_PROOF are refused on LOOKUP_FAILED, timeout, or network error.
+    - Only an explicit provider failure status (e.g. FAILED) or confirmed NOT_FOUND releases.
+    """
+    session_factory = sessionmaker(bind=db_engine, expire_on_commit=False)
+    clock = SystemUtcClock()
+    test_rail = FakePaymentRail(should_succeed=True, status="RECONCILE")
+    ledger = InMemoryLedgerAdapter()
+    mandate_service = MandateService(clock=clock, db_session_factory=session_factory)
+    auth_service = AuthorizationService(
+        clock=clock,
+        ledger=ledger,
+        mandate_service=mandate_service,
+        payment_rail=test_rail,
+        db_session_factory=session_factory,
+    )
+
+    agent_id = f"agent_h9_{uuid.uuid4().hex[:8]}"
+    mandate_id = f"mandate_{uuid.uuid4().hex[:8]}"
+    _seed_agent_mandate_and_budget(session_factory, agent_id, mandate_id, 100_000, clock)
+
+    cmd = AuthorizeTransactionCommand(
+        agent_id=agent_id,
+        recipient_id="vendor-paypal-sandbox-1",
+        amount_minor=10_000,
+        currency="USD",
+        purpose="Payment for H9 resolution testing",
+        idempotency_key=f"idem_{uuid.uuid4().hex}",
+    )
+    auth_resp = auth_service.authorize(cmd)
+    req_id = auth_resp.request_id
+
+    # 1. MARK_FAILED refused when provider returns LOOKUP_FAILED
+    test_rail.set_lookup_result(
+        auth_resp.payout_id,
+        PaymentResult(
+            success=False,
+            transaction_id=auth_resp.payout_id,
+            status="LOOKUP_FAILED",
+            details={"error": "Transient provider error"},
+        ),
+    )
+    with pytest.raises(ValueError, match="cannot confirm failure|LOOKUP_FAILED"):
+        auth_service.resolve_needs_review(req_id, action="MARK_FAILED")
+
+    # 2. MARK_FAILED refused when provider lookup raises a TimeoutError
+    def raise_timeout(*_args, **_kwargs):
+        raise TimeoutError("Provider gateway timeout")
+
+    monkeypatch.setattr(test_rail, "lookup", raise_timeout)
+    with pytest.raises(ValueError, match="lookup error or timeout|cannot confirm failure"):
+        auth_service.resolve_needs_review(req_id, action="MARK_FAILED")
+
+    # 3. PROVIDE_PROOF refused when provider returns LOOKUP_FAILED
+    monkeypatch.undo()
+    test_rail.set_lookup_result(
+        "cap_lookup_failed",
+        PaymentResult(
+            success=False,
+            transaction_id="cap_lookup_failed",
+            status="LOOKUP_FAILED",
+            details={},
+        ),
+    )
+    with pytest.raises(ValueError, match="could not be verified with provider|LOOKUP_FAILED"):
+        auth_service.resolve_needs_review(
+            req_id, action="PROVIDE_PROOF", capture_id="cap_lookup_failed"
+        )
+
+    # 4. PROVIDE_PROOF refused when lookup raises a TimeoutError
+    monkeypatch.setattr(test_rail, "lookup", raise_timeout)
+    with pytest.raises(ValueError, match="lookup error or timeout|could not be verified"):
+        auth_service.resolve_needs_review(req_id, action="PROVIDE_PROOF", capture_id="cap_timeout")
+
+    # 5. MARK_FAILED succeeds and releases when provider explicitly reports NOT_FOUND (HTTP 404)
+    monkeypatch.undo()
+    test_rail.set_lookup_result(
+        auth_resp.payout_id,
+        PaymentResult(
+            success=False,
+            transaction_id=auth_resp.payout_id,
+            status="NOT_FOUND",
+            details={"http_status": 404, "name": "RESOURCE_NOT_FOUND"},
+        ),
+    )
+    res_state = auth_service.resolve_needs_review(req_id, action="MARK_FAILED")
+    assert res_state == RequestState.FAILED
+
+
 def test_concurrent_reconciler_instances_skip_locked_no_double_processing(db_engine):
     """Two concurrent reconciler instances use FOR UPDATE SKIP LOCKED and do not double-process."""
     session_factory = sessionmaker(bind=db_engine, expire_on_commit=False)

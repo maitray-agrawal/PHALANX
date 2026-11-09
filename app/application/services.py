@@ -2124,9 +2124,16 @@ class AuthorizationService:
                     raise ValueError(
                         f"Proof verification requires a non-empty capture ID for '{request_id}'"
                     )
-                lookup_res = self._payment_rail.lookup(capture_id.strip())
-                provider_status = (lookup_res.status or "UNKNOWN").upper()
-                if provider_status not in CONFIRMED_SUCCESS:
+                try:
+                    lookup_res = self._payment_rail.lookup(capture_id.strip())
+                    provider_status = (lookup_res.status or "UNKNOWN").upper()
+                except Exception as exc:
+                    raise ValueError(
+                        f"Cannot confirm capture proof '{capture_id}': "
+                        f"lookup error or timeout ({exc})"
+                    ) from exc
+
+                if provider_status == "LOOKUP_FAILED" or provider_status not in CONFIRMED_SUCCESS:
                     raise ValueError(
                         f"Provided capture ID '{capture_id}' could not be verified with provider: "
                         f"status is {provider_status}"
@@ -2158,8 +2165,11 @@ class AuthorizationService:
                     raise ValueError(
                         f"No provider ID available for proof verification on '{request_id}'"
                     )
-                lookup_res = self._payment_rail.lookup(lookup_target)
-                provider_status = (lookup_res.status or "UNKNOWN").upper()
+                try:
+                    lookup_res = self._payment_rail.lookup(lookup_target)
+                    provider_status = (lookup_res.status or "UNKNOWN").upper()
+                except Exception:
+                    provider_status = "LOOKUP_FAILED"
 
                 if provider_status in CONFIRMED_SUCCESS:
                     new_state = self.reconcile(request_id, rail_status="COMPLETED")
@@ -2208,23 +2218,42 @@ class AuthorizationService:
                     return RequestState.NEEDS_REVIEW
 
             elif action_upper in ("MARK_FAILED", "REJECT", "CANCEL"):
-                if payout_id:
-                    lookup_res = self._payment_rail.lookup(payout_id)
-                    provider_status = (lookup_res.status or "UNKNOWN").upper()
-                    details_str = str(lookup_res.details).lower()
-                    is_not_found = (
-                        lookup_res.details.get("http_status") == 404
-                        or "not found" in details_str
-                        or "invalid_resource_id" in details_str
-                        or "resource_not_found" in details_str
+                lookup_target = payout_id or capture_id or held.get("order_id")
+                if not lookup_target:
+                    raise ValueError(
+                        f"Cannot mark transaction '{request_id}' as failed: "
+                        "no provider transaction or order ID exists to verify failure status."
                     )
-                    is_confirmed_fail = provider_status in CONFIRMED_FAILURE or is_not_found
-                    if not is_confirmed_fail:
-                        raise ValueError(
-                            f"Cannot mark transaction '{request_id}' as failed: "
-                            f"provider status is '{provider_status}', "
-                            "which is not a confirmed failure or not-found."
-                        )
+                try:
+                    lookup_res = self._payment_rail.lookup(lookup_target)
+                    provider_status = (lookup_res.status or "UNKNOWN").upper()
+                except Exception as exc:
+                    raise ValueError(
+                        f"Cannot mark transaction '{request_id}' as failed: "
+                        f"provider lookup error or timeout ({exc}); cannot confirm failure."
+                    ) from exc
+
+                if provider_status == "LOOKUP_FAILED":
+                    raise ValueError(
+                        f"Cannot mark transaction '{request_id}' as failed: "
+                        "provider lookup returned LOOKUP_FAILED; cannot confirm failure."
+                    )
+
+                details = lookup_res.details or {}
+                details_str = str(details).lower()
+                is_not_found = (
+                    provider_status in ("NOT_FOUND", "RESOURCE_NOT_FOUND")
+                    or details.get("http_status") == 404
+                    or details.get("name") in ("RESOURCE_NOT_FOUND", "INVALID_RESOURCE_ID")
+                    or "not found" in details_str
+                )
+                is_confirmed_fail = (provider_status in CONFIRMED_FAILURE) or is_not_found
+                if not is_confirmed_fail:
+                    raise ValueError(
+                        f"Cannot mark transaction '{request_id}' as failed: "
+                        f"provider status is '{provider_status}', "
+                        "which is not a confirmed failure or not-found."
+                    )
                 new_state = self.reconcile(request_id, rail_status="FAILED")
                 intent = held.get("intent")
                 if intent:
@@ -2244,7 +2273,6 @@ class AuthorizationService:
                             recorded_at_utc=now_utc,
                             provider_state="FAILED",
                         )
-                return new_state
                 return new_state
             else:
                 raise ValueError(f"Unknown action '{action}' for resolving NEEDS_REVIEW")
