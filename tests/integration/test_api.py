@@ -2,6 +2,7 @@
 
 from unittest.mock import patch
 
+import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
@@ -136,6 +137,39 @@ def test_admin_reset_with_principal_role(client: TestClient, principal_token: st
     )
     assert resp.status_code == status.HTTP_200_OK
     assert resp.json()["status"] == "reset_completed"
+
+
+def test_admin_reset_requires_auth(client: TestClient) -> None:
+    """Verify /v1/admin/reset requires authentication (returns 401 without credentials)."""
+    resp = client.post("/v1/admin/reset")
+    assert resp.status_code == status.HTTP_401_UNAUTHORIZED
+    assert "Authentication required" in resp.json().get("detail", "")
+
+
+def test_admin_reset_disabled_in_production(
+    client: TestClient, principal_token: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verify /v1/admin/reset is strictly disabled when ENVIRONMENT=production."""
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    from app.infrastructure.config import settings
+
+    monkeypatch.setattr(settings, "environment", "production")
+
+    # Rejected even with valid admin token
+    resp_token = client.post(
+        "/v1/admin/reset",
+        headers={"X-Admin-Token": settings.admin_token},
+    )
+    assert resp_token.status_code == status.HTTP_403_FORBIDDEN
+    assert "disabled in production" in resp_token.json().get("detail", "").lower()
+
+    # Rejected even with valid principal role Bearer token
+    resp_bearer = client.post(
+        "/v1/admin/reset",
+        headers={"Authorization": f"Bearer {principal_token}"},
+    )
+    assert resp_bearer.status_code == status.HTTP_403_FORBIDDEN
+    assert "disabled in production" in resp_bearer.json().get("detail", "").lower()
 
 
 def test_request_id_header_propagated(client: TestClient) -> None:

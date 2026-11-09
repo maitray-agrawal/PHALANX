@@ -949,7 +949,14 @@ def admin_reset(
     """Reset sandbox demo state (clears spent budgets, idempotency cache, restores ledger).
 
     Only principal role or holder of X-Admin-Token can reset administrative state.
+    Disabled in production environment.
     """
+    env = os.getenv("ENVIRONMENT", settings.environment).strip().lower()
+    if env in ("production", "prod"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Admin reset is disabled in production environment",
+        )
     service.reset_state()
     ledger_service.restore_chain()
     _demo_token_rate_limits.clear()
