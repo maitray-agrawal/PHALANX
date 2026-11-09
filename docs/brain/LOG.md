@@ -14,3 +14,8 @@ Changed: test_payment_rail.py, smoke.spec.ts, ux-walkthrough.spec.ts, ApprovalsS
 Commands: pytest -q (382 pass); pytest -m redteam (105 pass); npm test (28 pass); playwright smoke (30 pass); playwright walkthrough (8 pass); ruff & mypy clean.
 Findings closed: N1, U1. New findings logged: H8, H9, H10.
 Next: T5 (STOP: user runs reviewer R1 with a different model on git diff origin/main..HEAD).
+2026-11-09 | M0 final: Fix H8, H9, H10, admin reset prod check, font weights, docs note.
+Changed: services.py, boot.py, paypal.py, routes.py, test_reconciliation.py, test_approval_seeding.py, test_payment_rail.py, test_api.py, fonts, docs/process/README.md.
+Commands: pytest -q (387 pass in 182.91s); pytest -m redteam (105 pass); npm test (28 pass); tsc & lint clean; playwright smoke (30 pass in 1.9m); vite build (pass).
+Findings closed: H8, H9, H10.
+Next: Push dev to origin and check GitHub Actions CI.

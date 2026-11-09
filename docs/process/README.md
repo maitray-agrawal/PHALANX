@@ -8,3 +8,4 @@ This directory notes the development process, architectural state, and pair-prog
 - **`.agents/`**: Agent rules and operational design specs.
 
 These files are internal development, security audit, and evaluation artifacts, maintained for complete transparency and verifiable security provenance. Public consumer documentation is located in `README.md` and `docs/`.
+
