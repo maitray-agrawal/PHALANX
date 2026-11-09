@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     postgres_password: str = Field(
         default="", description="PostgreSQL password required for application database access"
     )
+    phalanx_app_db_password: str = Field(
+        default="", description="PostgreSQL application password for phalanx_app"
+    )
     postgres_port: int = Field(default=5433, description="PostgreSQL port (default host 5433)")
     app_port: int = Field(default=8000, description="Application HTTP server port")
     payment_rail: str = Field(
@@ -32,6 +35,30 @@ class Settings(BaseSettings):
     demo_mode: bool = Field(
         default=False,
         description="Demo mode: allows visitor role switching and simulated tampering",
+    )
+    forwarded_allow_ips: str = Field(
+        default="127.0.0.1,::1",
+        description="Comma-separated IPs or subnets trusted for X-Forwarded-For headers",
+    )
+    trusted_proxy_count: int = Field(
+        default=0,
+        description="Number of reverse proxies; 0 disables X-Forwarded-For chaining",
+    )
+    demo_token_rate_limit: int = Field(
+        default=15,
+        description="Default rate limit per client IP for demo token dispensing (req/min)",
+    )
+    reconciler_enabled: bool = Field(
+        default=False,
+        description="Enable periodic background reconciliation loop (off in tests)",
+    )
+    reconcile_max_age_seconds: int = Field(
+        default=86400,
+        description="Max age in seconds before ambiguous requests mark NEEDS_REVIEW",
+    )
+    reconcile_interval_seconds: int = Field(
+        default=60,
+        description="Interval in seconds for periodic background reconciliation loop",
     )
 
     @field_validator("database_url", mode="before")

@@ -94,6 +94,9 @@ class MockPaymentRail(PaymentRail):
         _ = (headers, body_bytes)
         return True
 
+    def validate_configuration(self) -> tuple[bool, str]:
+        return True, ""
+
 
 class ConfigurableRail(PaymentRail):
     def __init__(
@@ -119,6 +122,9 @@ class ConfigurableRail(PaymentRail):
     def verify_webhook(self, headers: dict[str, str], body_bytes: bytes) -> bool:
         _ = (headers, body_bytes)
         return True
+
+    def validate_configuration(self) -> tuple[bool, str]:
+        return True, ""
 
 
 @pytest.fixture

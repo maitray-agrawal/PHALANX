@@ -3,9 +3,9 @@
 import os
 import sys
 from functools import lru_cache
-from typing import Annotated
+from typing import Annotated, Any
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException, status
 
 from app.application.services import (
     AuthorizationService,
@@ -65,17 +65,24 @@ def get_payment_rail() -> PaymentRail:
     if is_fake_rail():
         return FakePaymentRail()
     adapter = PayPalPaymentRailAdapter()
-    if not adapter._client_id or not adapter._client_secret:
-        raise RuntimeError(
-            "PayPal credentials missing: PAYPAL_CLIENT_ID and "
-            "PAYPAL_CLIENT_SECRET are required when PAYMENT_RAIL=paypal"
-        )
     return adapter
 
 
-@lru_cache(maxsize=1)
 def get_mandate_service() -> MandateService:
-    return MandateService(clock=get_clock())
+    from app.infrastructure.database import check_database_readiness, get_session_factory
+
+    if is_test_environment():
+        db_factory = None
+    else:
+        is_ready, err = check_database_readiness()
+        if not is_ready:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Database unavailable for mandate authority verification: {err}",
+            )
+        db_factory = get_session_factory()
+
+    return MandateService(clock=get_clock(), db_session_factory=db_factory)
 
 
 @lru_cache(maxsize=1)
@@ -109,3 +116,24 @@ def get_ledger_service(
 
 def get_health_service() -> HealthService:
     return HealthService(clock=get_clock())
+
+
+def get_reconciler_service(
+    auth_service: Annotated[AuthorizationService, Depends(get_authorization_service)] = None,  # type: ignore[assignment]
+    rail: Annotated[PaymentRail, Depends(get_payment_rail)] = None,  # type: ignore[assignment]
+) -> Any:
+    from app.application.reconciler import ReconcilerService
+    from app.infrastructure.config import settings
+    from app.infrastructure.database import get_session_factory
+
+    actual_auth = auth_service if auth_service is not None else get_authorization_service()
+    actual_rail = rail if rail is not None else get_payment_rail()
+    clock = get_clock()
+    db_factory = None if is_test_environment() else get_session_factory()
+    return ReconcilerService(
+        auth_service=actual_auth,
+        payment_rail=actual_rail,
+        clock=clock,
+        db_session_factory=db_factory,
+        max_age_seconds=settings.reconcile_max_age_seconds,
+    )
