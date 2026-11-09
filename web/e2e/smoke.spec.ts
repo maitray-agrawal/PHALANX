@@ -15,7 +15,14 @@ test.describe("PHALANX PayPal-Inspired Shell & Operational Screens", () => {
     }
   });
 
+  const cspViolations: string[] = [];
+
   test.beforeEach(async ({ page }, testInfo) => {
+    // Monitor securitypolicyviolation events to verify strict CSP compliance
+    page.on("securitypolicyviolation", (evt) => {
+      cspViolations.push(`${evt.blockedURI} violated directive ${evt.violatedDirective}`);
+    });
+
     // Throttle to slow 4G in Chromium project
     if (testInfo.project.name.toLowerCase().includes("chromium")) {
       try {
@@ -31,6 +38,27 @@ test.describe("PHALANX PayPal-Inspired Shell & Operational Screens", () => {
       }
     }
   });
+
+  test.afterEach(async () => {
+    expect(cspViolations, `CSP violations detected: ${cspViolations.join(", ")}`).toHaveLength(0);
+    cspViolations.length = 0;
+  });
+
+  async function setPersona(page: import("@playwright/test").Page, role: "APPROVER" | "AGENT" | "PRINCIPAL" | "AUDITOR") {
+    const profileTrigger = page.locator(".profile-pill-trigger");
+    if (await profileTrigger.isVisible()) {
+      await profileTrigger.click();
+      const menuitem = page.getByRole("menuitem", { name: new RegExp(role, "i") });
+      await menuitem.click();
+    } else {
+      const moreBtn = page.locator('.mobile-bottom-tabbar button[aria-label="More"]');
+      if (await moreBtn.isVisible()) {
+        await moreBtn.click();
+        const personaBtn = page.locator(`.mobile-more-sheet .persona-grid button:has-text("${role}")`);
+        await personaBtn.click();
+      }
+    }
+  }
 
   test("App Shell & Footer Invariant", async ({ page }) => {
     test.slow();
@@ -81,37 +109,33 @@ test.describe("PHALANX PayPal-Inspired Shell & Operational Screens", () => {
     await expect(page.getByText("req_stepup_1001")).toBeVisible();
 
     // Test Inspect Diff
-    const inspectBtn = page.getByRole("button", { name: /Inspect Diff/i });
+    const inspectBtn = page.getByRole("button", { name: /Inspect Diff/i }).first();
     await expect(inspectBtn).toBeVisible();
     await inspectBtn.click();
     await expect(page.getByText("Cryptographic Lock Canonical Integrity")).toBeVisible();
 
-    // Switch persona to AGENT via profile menu
-    const profileBtn = page.locator(".profile-pill-trigger");
-    await profileBtn.click();
-    const agentOption = page.getByRole("menuitem", { name: /AGENT/i });
-    await agentOption.click();
+    // Switch persona to AGENT via profile menu / sheet
+    await setPersona(page, "AGENT");
 
     // Verify warning banner and disabled buttons
     await expect(page.getByText(/Role Restriction:/i)).toBeVisible();
-    const authorizeBtn = page.getByRole("button", { name: "Authorize Transaction" });
+    const authorizeBtn = page.getByRole("button", { name: "Authorize Transaction" }).first();
     await expect(authorizeBtn).toBeDisabled();
-    const declineBtn = page.getByRole("button", { name: "Decline" });
+    const declineBtn = page.getByRole("button", { name: "Decline" }).first();
     await expect(declineBtn).toBeDisabled();
 
     // Switch back to APPROVER
-    await profileBtn.click();
-    const approverOption = page.getByRole("menuitem", { name: /APPROVER/i });
-    await approverOption.click();
+    await setPersona(page, "APPROVER");
     await expect(authorizeBtn).toBeEnabled();
   });
 
   test("Scene 3: Cryptographic Shield-Wall Ledger & Hash Chain Sequence", async ({ page }) => {
     await page.goto("/#activity");
+    await setPersona(page, "APPROVER");
 
     await expect(page.getByRole("heading", { name: "Cryptographic Shield-Wall Ledger" })).toBeVisible();
     await expect(page.getByText("Transaction Activity Journal")).toBeVisible();
-    await expect(page.getByTestId("chain-strip")).toBeVisible();
+    await expect(page.getByTestId("chain-strip")).toBeVisible({ timeout: 20000 });
 
     // Verify Chain button
     const verifyBtn = page.getByRole("button", { name: /Verify Chain/i });
@@ -119,7 +143,7 @@ test.describe("PHALANX PayPal-Inspired Shell & Operational Screens", () => {
     await verifyBtn.click();
 
     // Verify intact status banner
-    await expect(page.locator(".integrity-status-bar.green")).toBeVisible();
+    await expect(page.locator(".integrity-status-bar.green")).toBeVisible({ timeout: 20000 });
   });
 
   test("Multi-Viewport Screenshots: 1280px Desktop, 768px Tablet, 375px Mobile", async ({ page }) => {

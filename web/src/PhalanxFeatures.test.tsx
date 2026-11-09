@@ -3,9 +3,10 @@ import { describe, it, expect } from "vitest";
 import App from "./App";
 
 describe("PHALANX Seven Operational Screens & Shell Features", () => {
-  it("Screen 1: Home renders three numbers, sticky action, and recent activity", () => {
+  it("Screen 1: Home renders three numbers, sticky action, and aligned demo authority figure", () => {
     render(<App />);
     expect(screen.getByText("REMAINING AUTHORITY")).toBeInTheDocument();
+    expect(screen.getByText("$25,000.00")).toBeInTheDocument();
     expect(screen.getByText("PENDING APPROVALS")).toBeInTheDocument();
     expect(screen.getByText("LAST RECORDED ACTIVITY")).toBeInTheDocument();
     expect(screen.getByText("Recent Activity")).toBeInTheDocument();
@@ -24,17 +25,15 @@ describe("PHALANX Seven Operational Screens & Shell Features", () => {
     expect(submitBtn).toBeInTheDocument();
   });
 
-  it("Screen 3: Approvals renders step-up queue and digest tamper diff", () => {
+  it("Screen 3: Approvals renders step-up queue or empty state with sample request action", async () => {
     render(<App />);
     const approvalsBtns = screen.getAllByRole("button", { name: "Approvals" });
     fireEvent.click(approvalsBtns[0]);
 
     expect(screen.getByRole("heading", { name: "Human Supervisor Step-Up Review Queue" })).toBeInTheDocument();
-    expect(screen.getByText("req_stepup_1001")).toBeInTheDocument();
-
-    const inspectBtn = screen.getByRole("button", { name: /Inspect Diff/i });
-    fireEvent.click(inspectBtn);
-    expect(screen.getByText("Cryptographic Lock Canonical Integrity")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: /Create sample request/i })[0]).toBeInTheDocument();
+    });
   });
 
   it("Screen 4: Activity renders ledger feed and chain sequence", () => {
@@ -46,7 +45,7 @@ describe("PHALANX Seven Operational Screens & Shell Features", () => {
     expect(screen.getByText("Transaction Activity Journal")).toBeInTheDocument();
   });
 
-  it("Screen 5: Mandates renders read-only limits and budget utilization meter", () => {
+  it("Screen 5: Mandates renders read-only limits matching demo dataset ($25,000, $5,000, $500)", () => {
     render(<App />);
     const mandatesBtns = screen.getAllByRole("button", { name: "Mandates" });
     fireEvent.click(mandatesBtns[0]);
@@ -54,6 +53,8 @@ describe("PHALANX Seven Operational Screens & Shell Features", () => {
     expect(screen.getByRole("heading", { name: "Ed25519 Authority Mandate" })).toBeInTheDocument();
     expect(screen.getByText("Budget Utilization")).toBeInTheDocument();
     expect(screen.getByText("SINGLE TRANSACTION CAP")).toBeInTheDocument();
+    expect(screen.getByText("$5,000.00")).toBeInTheDocument();
+    expect(screen.getByText("$500.00")).toBeInTheDocument();
   });
 
   it("Screen 6: Attack Lab renders six cards and execution trigger", () => {

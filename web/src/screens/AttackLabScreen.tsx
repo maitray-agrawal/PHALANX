@@ -109,6 +109,26 @@ export const AttackLabScreen: React.FC<AttackLabScreenProps> = ({
     }
   };
 
+  const handleRestoreLedger = async () => {
+    try {
+      await api.restoreLedger(token);
+      if (onNotify) onNotify("Ledger hash chain restored to valid state.", "success");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to restore ledger";
+      if (onNotify) onNotify(msg, "error");
+    }
+  };
+
+  const handleResetDemo = async () => {
+    try {
+      await api.resetDemo(token);
+      if (onNotify) onNotify("Demo environment reset to initial seed state.", "success");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to reset demo";
+      if (onNotify) onNotify(msg, "error");
+    }
+  };
+
   const results = labResponse ? labResponse.results : DEFAULT_ATTACKS;
   const isDefended = labResponse ? labResponse.all_defended : true;
 
@@ -152,6 +172,30 @@ export const AttackLabScreen: React.FC<AttackLabScreenProps> = ({
           <span className="sandbox-guarantee">
             <Lock size={12} className="inline-icon" /> ZERO ATTACKS REACH PAYPAL SANDBOX
           </span>
+        </div>
+      </div>
+
+      <div className="shared-sandbox-notice card mt-3" style={{ borderLeft: "4px solid var(--action-gold)", padding: "12px 16px", background: "var(--bg-subtle)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+          <div style={{ fontSize: "13px", color: "var(--text-secondary)", maxWidth: "720px" }}>
+            <strong style={{ color: "var(--text-primary)" }}>Shared Demo Environment:</strong> Simulating tamper or attacks tests live backend enforcement in place. Use <strong>Restore Ledger</strong> or <strong>Reset Demo</strong> anytime to revert to a clean state.
+          </div>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <PillButton
+              variant="secondary"
+              size="sm"
+              onClick={handleRestoreLedger}
+            >
+              Restore Ledger
+            </PillButton>
+            <PillButton
+              variant="secondary"
+              size="sm"
+              onClick={handleResetDemo}
+            >
+              Reset Demo
+            </PillButton>
+          </div>
         </div>
       </div>
 

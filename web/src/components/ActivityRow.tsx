@@ -52,8 +52,11 @@ export const ActivityRow: React.FC<ActivityRowProps> = ({
     providerDisplay = "Capture requested";
     providerClass = "provider-reconcile";
   } else if (providerState === "RECONCILE") {
-    providerDisplay = "Reconciliation";
+    providerDisplay = "Reconciling";
     providerClass = "provider-reconcile";
+  } else if (providerState === "NEEDS_REVIEW") {
+    providerDisplay = "Needs review";
+    providerClass = "provider-pending";
   } else if (providerState === "FAILED") {
     providerDisplay = "Payment failed";
     providerClass = "provider-failed";

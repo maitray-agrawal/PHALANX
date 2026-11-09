@@ -136,7 +136,7 @@ export interface PendingStepUpItem {
   purpose: string;
   intent_digest: string;
   created_at_utc: string;
-  status: "PENDING" | "APPROVED" | "REJECTED";
+  status: "PENDING" | "APPROVED" | "REJECTED" | "NEEDS_REVIEW";
 }
 
 export interface LedgerEventItem {
@@ -312,6 +312,9 @@ export const api = {
 
   restoreLedger: (token?: string) =>
     request<{ status: string; message: string }>("/v1/ledger/restore", { method: "POST" }, token),
+
+  resetDemo: (token?: string) =>
+    request<{ status: string; message: string }>("/v1/admin/reset", { method: "POST" }, token),
 
   getMandate: (mandateId = "mandate_default_sandbox", token?: string) =>
     request<MandateResponse>(`/v1/mandates/${mandateId}`, { method: "GET" }, token),

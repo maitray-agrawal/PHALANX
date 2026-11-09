@@ -13,7 +13,7 @@ export interface HomeScreenProps {
 }
 
 const DEFAULT_OVERVIEW: OverviewResponse = {
-  remaining_authority: 2475000,
+  remaining_authority: 2500000,
   pending_approval_count: 0,
   last_activity: "2026-10-22T12:05:00Z",
 };
@@ -34,7 +34,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     try {
       const [ovData, actData] = await Promise.all([
         api.getOverview(token).catch(() => ({
-          remaining_authority: 2475000,
+          remaining_authority: 2500000,
           pending_approval_count: 0,
           last_activity: null,
         })),
@@ -97,7 +97,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     );
   }
 
-  const remaining = overview ? overview.remaining_authority : 2475000;
+  const remaining = overview ? overview.remaining_authority : 2500000;
   const pendingCount = overview ? overview.pending_approval_count : 0;
   const lastActivity = overview && overview.last_activity ? overview.last_activity : "No activity recorded";
 

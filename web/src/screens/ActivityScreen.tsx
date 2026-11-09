@@ -183,6 +183,17 @@ export const ActivityScreen: React.FC<ActivityScreenProps> = ({
     }
   };
 
+  const handleResetDemo = async () => {
+    try {
+      const res = await api.resetDemo(token);
+      if (onNotify) onNotify(`Demo state reset: ${res.message}`, "success");
+      await fetchData();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Reset failed";
+      if (onNotify) onNotify(msg, "error");
+    }
+  };
+
   if (loading && activity.length === 0 && events.length === 0) {
     return (
       <div className="screen-container activity-screen" data-testid="screen-activity">
@@ -228,6 +239,30 @@ export const ActivityScreen: React.FC<ActivityScreenProps> = ({
           >
             Refresh
           </PillButton>
+        </div>
+      </div>
+
+      <div className="shared-sandbox-notice card mt-3" style={{ borderLeft: "4px solid var(--action-gold)", padding: "12px 16px", background: "var(--bg-subtle)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+          <div style={{ fontSize: "13px", color: "var(--text-secondary)", maxWidth: "720px" }}>
+            <strong style={{ color: "var(--text-primary)" }}>Shared Demo Environment:</strong> Simulating tamper modifies the database in place to demonstrate cryptographic defense failure detection. Use <strong>Restore Ledger</strong> or <strong>Reset Demo</strong> anytime to revert to a clean state.
+          </div>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <PillButton
+              variant="secondary"
+              size="sm"
+              onClick={handleRestoreLedger}
+            >
+              Restore Ledger
+            </PillButton>
+            <PillButton
+              variant="secondary"
+              size="sm"
+              onClick={handleResetDemo}
+            >
+              Reset Demo
+            </PillButton>
+          </div>
         </div>
       </div>
 
