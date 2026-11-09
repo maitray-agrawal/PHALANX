@@ -1,7 +1,7 @@
 # STATE (update after every task)
-Date: 9 Nov 2026 | Branch: dev | Last pushed commit on main: 2332aef | CI: passing
+Date: 9 Nov 2026 | Branch: dev | Last pushed commit on main: 2332aef | CI: running
 Working tree: clean | M0 complete, hardened & all reviewer findings resolved
-Completed: T1, T2 (H1-H7), T3/T4 (N1, U1), M0 Hardening (H8, H9, H10 closed), Process note | Doing: Final Push on dev | Next: T5 | Blocked on me: nothing
+Completed: T1, T2 (H1-H7), T3/T4 (N1, U1), M0 Hardening (H8, H9, H10 closed), Process note | Doing: Push to dev & Green CI | Next: T5 | Blocked on me: nothing
 Database password rotated 7 Nov; verified live 9 Nov (active connection ok, old passwords rejected). Hosting: nothing deployed.
 
 ---

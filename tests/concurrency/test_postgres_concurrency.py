@@ -78,7 +78,11 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture(scope="session", autouse=True)
-def dispose_postgres_engine():
+def setup_postgres_schema():
+    if pg_engine is not None:
+        from app.infrastructure.db_schema import create_schema
+
+        create_schema(pg_engine)
     yield
     if pg_engine is not None:
         pg_engine.dispose()
@@ -98,6 +102,9 @@ def ensure_not_skipped_in_ci():
 def pg_session_factory():
     """Session factory for PostgreSQL testing."""
     assert pg_engine is not None
+    from app.infrastructure.db_schema import create_schema
+
+    create_schema(pg_engine)
     return sessionmaker(bind=pg_engine, autoflush=False, expire_on_commit=False)
 
 
