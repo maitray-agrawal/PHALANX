@@ -65,3 +65,7 @@ class PaymentRail(Protocol):
     def capture_order(self, order_id: str, request_id: str | None = None) -> PaymentResult:
         """Capture an approved order on external rail."""
         ...
+
+    def validate_configuration(self) -> tuple[bool, str]:
+        """Validate rail credentials and configuration before any reservation."""
+        ...

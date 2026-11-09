@@ -7,6 +7,7 @@ using PayPal-Request-Id for idempotency.
 
 import json
 import os
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -34,9 +35,13 @@ class FakePaymentRail(PaymentRail):
         should_succeed: bool = True,
         status: str = "COMPLETED",
         valid_signatures: set[str] | None = None,
+        is_configured: bool = True,
+        config_error: str = "",
     ) -> None:
         self.should_succeed = should_succeed
         self.status = status
+        self.is_configured = is_configured
+        self.config_error = config_error
         self.dispatched_payments: list[TransactionIntent] = []
         self._tx_counter = 0
         self.valid_signatures = (
@@ -44,6 +49,18 @@ class FakePaymentRail(PaymentRail):
             if valid_signatures is not None
             else {"fixture-valid-test-sig", "valid_mock_signature_test_123"}
         )
+        self.lookup_results: dict[str, PaymentResult] = {}
+
+    def set_lookup_result(self, transaction_id: str, result: PaymentResult) -> None:
+        self.lookup_results[transaction_id] = result
+
+    def validate_configuration(self) -> tuple[bool, str]:
+        if not self.is_configured:
+            return (
+                False,
+                self.config_error or "Payment provider credentials missing or not configured",
+            )
+        return True, ""
 
     def pay(self, intent: TransactionIntent) -> PaymentResult:
         self.dispatched_payments.append(intent)
@@ -51,7 +68,7 @@ class FakePaymentRail(PaymentRail):
         if self.should_succeed:
             return PaymentResult(
                 success=True,
-                transaction_id=f"sandbox_tx_{self._tx_counter:08d}",
+                transaction_id=f"sandbox_tx_{uuid.uuid4().hex[:12]}",
                 status=self.status,
                 details={"rail": "fake_sandbox", "amount_minor": intent.money.amount_minor},
             )
@@ -63,6 +80,8 @@ class FakePaymentRail(PaymentRail):
         )
 
     def lookup(self, transaction_id: str) -> PaymentResult:
+        if transaction_id in self.lookup_results:
+            return self.lookup_results[transaction_id]
         return PaymentResult(
             success=self.should_succeed,
             transaction_id=transaction_id,
@@ -137,10 +156,18 @@ class PayPalPaymentRailAdapter(PaymentRail):
         self._client_secret = os.getenv("PAYPAL_CLIENT_SECRET")
         self._base_url = os.getenv("PAYPAL_API_BASE_URL", "https://api-m.sandbox.paypal.com")
         self._counter = 0
+        self._cached_token: str | None = None
+        self._token_expires_at: float = 0.0
 
-    def _get_access_token(self) -> str | None:
+    def validate_configuration(self) -> tuple[bool, str]:
+        """Validate PayPal credentials via live OAuth token probe.
+
+        Fails closed on 401, missing keys, or outage.
+        Error text never leaks environment variable names.
+        """
         if not self._client_id or not self._client_secret:
-            return None
+            return False, "Payment provider credentials missing or not configured"
+
         url = f"{self._base_url}/v1/oauth2/token"
         try:
             resp = httpx.post(
@@ -151,8 +178,50 @@ class PayPalPaymentRailAdapter(PaymentRail):
                 timeout=10.0,
             )
             if resp.status_code == 200:
-                token = resp.json().get("access_token")
-                return str(token) if token else None
+                data = resp.json()
+                token = data.get("access_token")
+                if token:
+                    import time
+
+                    self._cached_token = str(token)
+                    self._token_expires_at = time.time() + max(
+                        60, data.get("expires_in", 3600) - 120
+                    )
+                    return True, ""
+                return False, "Payment provider authentication response missing token"
+            elif resp.status_code == 401:
+                return False, "Payment provider authentication failed: invalid credentials"
+            else:
+                return False, f"Payment provider returned status {resp.status_code}"
+        except httpx.TimeoutException:
+            return False, "Payment provider service timed out during authentication check"
+        except Exception:
+            return False, "Payment provider service is unreachable"
+
+    def _get_access_token(self) -> str | None:
+        if not self._client_id or not self._client_secret:
+            return None
+        import time
+
+        now = time.time()
+        if self._cached_token and now < self._token_expires_at:
+            return self._cached_token
+        url = f"{self._base_url}/v1/oauth2/token"
+        try:
+            resp = httpx.post(
+                url,
+                auth=(self._client_id, self._client_secret),
+                data={"grant_type": "client_credentials"},
+                headers={"Accept": "application/json"},
+                timeout=10.0,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                token = data.get("access_token")
+                if token:
+                    self._cached_token = str(token)
+                    self._token_expires_at = now + max(60, data.get("expires_in", 3600) - 120)
+                    return self._cached_token
         except Exception:
             return None
         return None
@@ -164,12 +233,7 @@ class PayPalPaymentRailAdapter(PaymentRail):
                 success=False,
                 transaction_id="",
                 status="FAILED",
-                details={
-                    "error": (
-                        "PayPal credentials missing: PAYPAL_CLIENT_ID and "
-                        "PAYPAL_CLIENT_SECRET are required when PAYMENT_RAIL=paypal"
-                    )
-                },
+                details={"error": "Payment provider credentials missing or not configured"},
             )
 
         # Derive idempotent PayPal-Request-Id deterministically from intent digest
@@ -224,13 +288,18 @@ class PayPalPaymentRailAdapter(PaymentRail):
                 raw_batch_status = str(batch_header.get("batch_status", "")).upper()
                 if raw_batch_status == "SUCCESS":
                     provider_state = "COMPLETED"
+                    is_rejection = False
                 elif raw_batch_status in ("PENDING", "PROCESSING"):
                     provider_state = "RECONCILE"
+                    is_rejection = False
                 elif raw_batch_status in ("DENIED", "CANCELED"):
                     provider_state = "FAILED"
+                    is_rejection = True
                 else:
                     provider_state = "RECONCILE"
+                    is_rejection = False
                 data["provider_status"] = provider_state
+                data["business_rejection"] = is_rejection
                 return PaymentResult(
                     success=(provider_state == "COMPLETED"),
                     transaction_id=payout_batch_id,
@@ -241,13 +310,40 @@ class PayPalPaymentRailAdapter(PaymentRail):
             if resp.status_code == 403:
                 return self._orders_v2_fallback(intent, token, request_id)
 
+            if resp.status_code in (408, 429):
+                # Rate limit (429) or request timeout (408) is not a final business rejection
+                return PaymentResult(
+                    success=False,
+                    transaction_id="",
+                    status="RECONCILE",
+                    details={
+                        "error": self.normalize_error(resp.text),
+                        "http_status": resp.status_code,
+                        "business_rejection": False,
+                    },
+                )
+            if 400 <= resp.status_code < 500:
+                # 4xx is a definite provider business rejection
+                return PaymentResult(
+                    success=False,
+                    transaction_id="",
+                    status="FAILED",
+                    details={
+                        "error": self.normalize_error(resp.text),
+                        "http_status": resp.status_code,
+                        "business_rejection": True,
+                    },
+                )
+
+            # 5xx, timeouts or server errors must route to RECONCILE
             return PaymentResult(
                 success=False,
                 transaction_id="",
-                status="FAILED",
+                status="RECONCILE",
                 details={
                     "error": self.normalize_error(resp.text),
                     "http_status": resp.status_code,
+                    "business_rejection": False,
                 },
             )
         except Exception as exc:
@@ -255,7 +351,7 @@ class PayPalPaymentRailAdapter(PaymentRail):
                 success=False,
                 transaction_id="",
                 status="RECONCILE",
-                details={"error": self.normalize_error(exc)},
+                details={"error": self.normalize_error(exc), "business_rejection": False},
             )
 
     def _orders_v2_fallback(
@@ -289,6 +385,7 @@ class PayPalPaymentRailAdapter(PaymentRail):
                 )
                 provider_state = "BUYER_APPROVAL_REQUIRED" if has_buyer_action else "ORDER_CREATED"
                 data["provider_status"] = provider_state
+                data["business_rejection"] = False
                 # Never label SETTLED before real sandbox capture
                 return PaymentResult(
                     success=True,
@@ -296,13 +393,39 @@ class PayPalPaymentRailAdapter(PaymentRail):
                     status=provider_state,
                     details=data,
                 )
+            if resp.status_code in (408, 429):
+                # Rate limit (429) or request timeout (408) is not a final business rejection
+                return PaymentResult(
+                    success=False,
+                    transaction_id="",
+                    status="RECONCILE",
+                    details={
+                        "error": self.normalize_error(resp.text),
+                        "http_status": resp.status_code,
+                        "business_rejection": False,
+                    },
+                )
+            if 400 <= resp.status_code < 500:
+                # 4xx is a definite provider business rejection
+                return PaymentResult(
+                    success=False,
+                    transaction_id="",
+                    status="FAILED",
+                    details={
+                        "error": self.normalize_error(resp.text),
+                        "http_status": resp.status_code,
+                        "business_rejection": True,
+                    },
+                )
+            # 5xx, timeouts or server errors must route to RECONCILE
             return PaymentResult(
                 success=False,
                 transaction_id="",
-                status="FAILED",
+                status="RECONCILE",
                 details={
                     "error": self.normalize_error(resp.text),
                     "http_status": resp.status_code,
+                    "business_rejection": False,
                 },
             )
         except Exception as exc:
@@ -310,7 +433,7 @@ class PayPalPaymentRailAdapter(PaymentRail):
                 success=False,
                 transaction_id="",
                 status="RECONCILE",
-                details={"error": self.normalize_error(exc)},
+                details={"error": self.normalize_error(exc), "business_rejection": False},
             )
 
     def lookup(self, transaction_id: str) -> PaymentResult:
@@ -320,12 +443,7 @@ class PayPalPaymentRailAdapter(PaymentRail):
                 success=False,
                 transaction_id=transaction_id,
                 status="FAILED",
-                details={
-                    "error": (
-                        "PayPal credentials missing: PAYPAL_CLIENT_ID and "
-                        "PAYPAL_CLIENT_SECRET are required when PAYMENT_RAIL=paypal"
-                    )
-                },
+                details={"error": "Payment provider credentials missing or not configured"},
             )
         url = f"{self._base_url}/v1/payments/payouts/{transaction_id}"
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
@@ -383,19 +501,28 @@ class PayPalPaymentRailAdapter(PaymentRail):
                         details=order_data,
                     )
 
-            if resp.status_code >= 500:
+            if resp.status_code >= 500 or resp.status_code in (404, 408, 429):
+                # 5xx, replication lag 404, request timeout 408, rate limit 429: stay in RECONCILE
                 return PaymentResult(
                     success=False,
                     transaction_id=transaction_id,
                     status="RECONCILE",
-                    details={"error": self.normalize_error(resp.text)},
+                    details={
+                        "error": self.normalize_error(resp.text),
+                        "http_status": resp.status_code,
+                        "business_rejection": False,
+                    },
                 )
 
             return PaymentResult(
                 success=False,
                 transaction_id=transaction_id,
                 status="FAILED",
-                details={"error": self.normalize_error(resp.text)},
+                details={
+                    "error": self.normalize_error(resp.text),
+                    "http_status": resp.status_code,
+                    "business_rejection": True,
+                },
             )
         except Exception as exc:
             return PaymentResult(
@@ -422,12 +549,7 @@ class PayPalPaymentRailAdapter(PaymentRail):
                 success=False,
                 transaction_id=order_id,
                 status="FAILED",
-                details={
-                    "error": (
-                        "PayPal credentials missing: PAYPAL_CLIENT_ID and "
-                        "PAYPAL_CLIENT_SECRET are required when PAYMENT_RAIL=paypal"
-                    )
-                },
+                details={"error": "Payment provider credentials missing or not configured"},
             )
 
         url = f"{self._base_url}/v2/checkout/orders/{order_id}/capture"
@@ -449,20 +571,49 @@ class PayPalPaymentRailAdapter(PaymentRail):
                 else:
                     provider_state = "RECONCILE"
                 data["provider_status"] = provider_state
+                data["business_rejection"] = False
                 return PaymentResult(
                     success=(provider_state == "COMPLETED"),
                     transaction_id=order_id,
                     status=provider_state,
                     details=data,
                 )
+            if resp.status_code in (408, 429):
+                # Rate limit (429) or request timeout (408) is not a final business rejection
+                return PaymentResult(
+                    success=False,
+                    transaction_id=order_id,
+                    status="RECONCILE",
+                    details={
+                        "error": self.normalize_error(resp.text),
+                        "http_status": resp.status_code,
+                        "raw": resp.text,
+                        "business_rejection": False,
+                    },
+                )
+            if 400 <= resp.status_code < 500:
+                # 4xx is a definite business rejection
+                return PaymentResult(
+                    success=False,
+                    transaction_id=order_id,
+                    status="FAILED",
+                    details={
+                        "error": self.normalize_error(resp.text),
+                        "http_status": resp.status_code,
+                        "raw": resp.text,
+                        "business_rejection": True,
+                    },
+                )
+            # 5xx, timeouts or server errors route to RECONCILE
             return PaymentResult(
                 success=False,
                 transaction_id=order_id,
-                status="FAILED",
+                status="RECONCILE",
                 details={
                     "error": self.normalize_error(resp.text),
                     "http_status": resp.status_code,
                     "raw": resp.text,
+                    "business_rejection": False,
                 },
             )
         except Exception as exc:
@@ -470,7 +621,7 @@ class PayPalPaymentRailAdapter(PaymentRail):
                 success=False,
                 transaction_id=order_id,
                 status="RECONCILE",
-                details={"error": self.normalize_error(exc)},
+                details={"error": self.normalize_error(exc), "business_rejection": False},
             )
 
     def verify_webhook(self, headers: dict[str, str], body_bytes: bytes) -> bool:
