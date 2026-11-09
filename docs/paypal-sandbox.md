@@ -325,6 +325,23 @@ Empirical evidence gathered directly from live API requests against `https://api
 - **Response**: HTTP 200 OK with `{"verification_status": "FAILURE"}`
 - **Security Boundary**: Fails closed and rejects unauthorized/forged webhooks with HTTP 401.
 
+---
+
+## 13. PayPal Outcome Isolation & Reservation Guarantees
+
+PHALANX strictly differentiates between deterministic business rejections and transient/ambiguous infrastructure failures at the payment rail boundary:
+
+1. **Definite Provider Rejection (HTTP 4xx Business Errors)**:
+   - When PayPal returns a deterministic 4xx error (e.g., 400 Bad Request, 422 Unprocessable Entity with `ORDER_NOT_APPROVED` or business rule failure), the outcome is confirmed as permanently rejected (`status="FAILED"`, `business_rejection=True`).
+   - The authorization service confirms failure and safely releases the reserved budget back to the agent's available limit via `repo.release_reservation(reservation_id, confirmed_failure=True)`.
+
+2. **Ambiguous Infrastructure Failures (HTTP 5xx, Network Timeouts, Malformed Responses)**:
+   - When PayPal encounters transient infrastructure errors (HTTP 500/502/503/504), network timeouts, connection resets, or unparseable responses, the financial state is indeterminate (the payment may or may not have reached PayPal's internal processing pipeline).
+   - In accordance with fail-safe principles, PHALANX maps these outcomes to `status="RECONCILE"` with `business_rejection=False`.
+   - The reservation is **strictly held** (never released): `repo.release_reservation(reservation_id, confirmed_failure=False)` leaves the budget locked against double-spending until manual human reconciliation or authoritative webhook settlement.
+   - The transaction state transitions to `RequestState.RECONCILE` with an immutable ledger event documenting the ambiguity.
+
+
 
 
 

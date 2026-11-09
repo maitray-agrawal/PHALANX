@@ -323,11 +323,11 @@ def test_step_up_approval_and_replay(db_session_factory) -> None:
             approved_record = repo.approve_step_up(
                 request_id=request_id,
                 provided_digest=intent_digest,
-                approver_id="human_supervisor@astrax.io",
+                approver_id="human_supervisor@phalanx.io",
                 now_utc=now + timedelta(minutes=1),
             )
         assert approved_record.status == ApprovalStatus.APPROVED.value
-        assert approved_record.approver_id == "human_supervisor@astrax.io"
+        assert approved_record.approver_id == "human_supervisor@phalanx.io"
 
     # Replay approval -> must raise InvalidApprovalStateError
     with Session() as session:
@@ -337,7 +337,7 @@ def test_step_up_approval_and_replay(db_session_factory) -> None:
                 repo.approve_step_up(
                     request_id=request_id,
                     provided_digest=intent_digest,
-                    approver_id="human_supervisor@astrax.io",
+                    approver_id="human_supervisor@phalanx.io",
                     now_utc=now + timedelta(minutes=2),
                 )
             assert "already in state 'APPROVED'" in str(exc_info.value)
@@ -373,7 +373,7 @@ def test_step_up_edited_intent_after_approval(db_session_factory) -> None:
                 repo.approve_step_up(
                     request_id=request_id,
                     provided_digest=edited_digest,
-                    approver_id="human_supervisor@astrax.io",
+                    approver_id="human_supervisor@phalanx.io",
                     now_utc=now + timedelta(minutes=1),
                 )
             assert "Provided digest" in str(exc_info.value)

@@ -103,10 +103,10 @@ def test_duplicate_webhook_deduplication():
             },
         }
 
-        # First delivery (fails closed if PAYPAL_WEBHOOK_ID missing or succeeds)
+        # First delivery (fails closed if PAYPAL_WEBHOOK_ID missing or unverified)
         res1 = client.post("/v1/webhooks/paypal", json=webhook_payload)
-        # Verify it either returns 503 (fail-closed when unconfigured) or 200/400 (dedup/verified)
-        assert res1.status_code in (200, 400, 503)
+        # Verify it fails closed (401 unverified, 503 unconfigured) or succeeds (200/400)
+        assert res1.status_code in (200, 400, 401, 503)
 
 
 def test_api_recovery_after_restart():

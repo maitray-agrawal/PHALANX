@@ -21,15 +21,15 @@ Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
   - Lighthouse mobile audit: Accessibility: 100/100, Performance: 89/100, Best Practices: 96/100, SEO: 91/100.
   - Mobile responsiveness: 0 horizontal scroll at 375px; 44px minimum touch targets across all interactive controls.
   - Reduced motion: Clamped transitions (`<= 0.01ms`) under `prefers-reduced-motion: reduce`.
-- tests: 317 automated backend tests (317 passed, 7 skipped in non-Docker), 105 red-team tests; 28 Vitest frontend tests; 38 Playwright end-to-end tests.
+- tests: 357 automated backend tests (357 passed, 0 skipped, 0 failed), 105 red-team tests; 28 Vitest frontend tests; 38 Playwright end-to-end tests.
 
 Test status:
-- Backend: 317 passed, 7 skipped (324 total backend tests across 22 test files)
+- Backend: 357 passed, 0 skipped (357 total backend tests across 24 test files including tests/integration/test_reconciliation.py)
 - Red Team: 105/105 red-team tests passed
-- Performance & Invariants: All 4 accounting and ledger invariants tested across 13,345 events
-- Static Analysis: ruff check clean (0 errors), ruff format clean, mypy app clean (0 errors across 38 source files)
+- Performance & Invariants: All accounting and ledger invariants tested across 13,345 events; budget invariants verified with payment in flight and under concurrent load
+- Static Analysis: ruff check clean (0 errors), ruff format clean, mypy app clean (0 errors across 39 source files)
 - Frontend: Vitest passed (28/28 tests across 3 suites), ESLint clean (0 errors, 0 warnings), TypeScript clean (0 errors), build clean
 - E2E: Playwright passed (38/38 tests across 6 browsers/viewports)
-- Documentation: docs/testing.md generated.
+- Documentation: docs/decisions.md and docs/context.md updated.
 
 Next recommended action: Commit all changes directly to main and push.

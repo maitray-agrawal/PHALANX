@@ -31,3 +31,4 @@ Every architectural decision and dependency addition must be recorded here befor
 D-021 Branch model: main and dev; agents push dev only; PR dev to main merged by the owner on green CI.
 D-022 Brain folder docs/brain holds facts, findings, state, plan and log; prompts live in docs/brain/prompts.
 D-023 Fail closed for money, mandate, auth and database code; no silent fallback.
+
