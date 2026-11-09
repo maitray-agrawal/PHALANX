@@ -372,7 +372,7 @@ class BudgetRepository:
             return res
         status_norm = (rail_status or "UNKNOWN").upper()
         CONFIRMED_SUCCESS = {"SUCCESS", "COMPLETED", "CONFIRMED", "SETTLED"}
-        CONFIRMED_FAILURE = {
+        EXPLICIT_PROVIDER_FAILURES = {
             "FAILED",
             "DENIED",
             "REJECTED",
@@ -383,23 +383,13 @@ class BudgetRepository:
             "EXPIRED",
             "VOIDED",
         }
-        AMBIGUOUS_ERRORS = {
-            "LOOKUP_FAILED",
-            "TIMEOUT",
-            "NETWORK_ERROR",
-            "CONNECTION_ERROR",
-            "ERROR",
-            "UNKNOWN",
-            "RECONCILE",
-            "PENDING",
-            "NEEDS_REVIEW",
-        }
 
         if status_norm in CONFIRMED_SUCCESS:
             return self.confirm_reservation(reservation_id)
-        elif status_norm in CONFIRMED_FAILURE and status_norm not in AMBIGUOUS_ERRORS:
+        elif status_norm in EXPLICIT_PROVIDER_FAILURES:
             return self.release_reservation(reservation_id, confirmed_failure=True)
         else:
+            # Any unconfirmed or unknown outcome preserves budget lock in RECONCILE
             return self.release_reservation(reservation_id, confirmed_failure=False)
 
     def get_held_reservations(self) -> list[BudgetReservationModel]:

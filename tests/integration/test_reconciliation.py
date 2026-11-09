@@ -1182,3 +1182,47 @@ def test_reconciler_second_instance_resolves_db_persisted_request(session_factor
             select(BudgetReservationModel).where(BudgetReservationModel.agent_id == agent_id)
         )
         assert res_final.status == ReservationStatus.CONFIRMED.value
+
+
+def test_reconcile_reservation_unknown_status_holds_reservation(db_engine):
+    """reconcile_reservation must treat unknown status strings as ambiguous and hold funds."""
+    session_factory = sessionmaker(bind=db_engine, expire_on_commit=False)
+    clock = SystemUtcClock()
+    agent_id = f"agent_unk_{uuid.uuid4().hex[:8]}"
+    mandate_id = f"mandate_{uuid.uuid4().hex[:8]}"
+    _seed_agent_mandate_and_budget(session_factory, agent_id, mandate_id, 100_000, clock)
+
+    with session_factory() as session, session.begin():
+        repo = BudgetRepository(session)
+        res = repo.reserve_budget(
+            agent_id=agent_id,
+            amount_minor=25_000,
+            currency="USD",
+            idempotency_key=f"idem_{uuid.uuid4().hex}",
+            intent_digest=f"dig_{uuid.uuid4().hex}",
+        )
+        res_id = res.reservation_id
+
+    with session_factory() as session, session.begin():
+        repo = BudgetRepository(session)
+        # Reconcile with an unknown status string
+        r = repo.reconcile_reservation(res_id, rail_status="SOME_UNKNOWN_PROVIDER_CODE_XYZ")
+        assert r.status == ReservationStatus.RECONCILE.value
+
+    # Verify funds are still held, NOT released
+    with session_factory() as session:
+        b = session.scalar(select(AgentBudgetModel).where(AgentBudgetModel.agent_id == agent_id))
+        assert b.reserved_minor == 25_000
+        assert b.spent_minor == 0
+
+    # Explicit provider failure in allowlist (e.g. DENIED) releases
+    with session_factory() as session, session.begin():
+        repo = BudgetRepository(session)
+        r2 = repo.reconcile_reservation(res_id, rail_status="DENIED")
+        assert r2.status == ReservationStatus.RELEASED.value
+
+    with session_factory() as session:
+        b2 = session.scalar(select(AgentBudgetModel).where(AgentBudgetModel.agent_id == agent_id))
+        assert b2.reserved_minor == 0
+        assert b2.spent_minor == 0
+
