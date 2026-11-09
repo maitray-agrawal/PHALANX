@@ -1,13 +1,13 @@
 # STATE (update after every task)
-Date: 9 Nov 2026 | Branch: dev | Last pushed commit on main: 2332aef | CI: running
+Date: 9 Nov 2026 | Branch: dev | Last pushed commit on main: 2332aef | CI: passing (run 42638236207)
 Working tree: clean | M0 complete, hardened & all reviewer findings resolved
-Completed: T1, T2 (H1-H7), T3/T4 (N1, U1), M0 Hardening (H8, H9, H10 closed), Process note | Doing: Push to dev & Green CI | Next: T5 | Blocked on me: nothing
+Completed: T1, T2 (H1-H7), T3/T4 (N1, U1), M0 Hardening (H8, H9, H10 closed), Process note, CI Green | Doing: T5 | Next: T5 | Blocked on me: nothing
 Database password rotated 7 Nov; verified live 9 Nov (active connection ok, old passwords rejected). Hosting: nothing deployed.
 
 ---
 
 # context.md
-Phase: R13 Live PayPal Sandbox (Orders v2 Two-Phase Flow, Payouts 403 Restricted Proof, Webhook Verification)   Branches: main, dev   Last green CI: https://github.com/maitray-agrawal/PHALANX/actions/runs/42326907597
+Phase: R13 Live PayPal Sandbox (Orders v2 Two-Phase Flow, Payouts 403 Restricted Proof, Webhook Verification)   Branches: main, dev   Last green CI: https://github.com/maitray-agrawal/PHALANX/actions/runs/42638236207
 Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
 - app/domain: Pure deterministic policy engine, Ed25519 mandate invariants, canonical RFC 8785 JSON, cryptographic hash-chained ledger. AST purity test enforced.
 - app/application: AuthorizationService, MandateService, LedgerService, ProviderAgnosticLLMClient (quotas, timeouts, retries), IntentExtractor (delimiter isolation, strict Pydantic draft), GroundedExplanationValidator, PrincipalSessionMemory, DeterministicKnowledgeBase, CompositeAdvisoryPipeline. SubmitApprovalRequestDTO enforces strict mass-assignment prevention (`extra="forbid"`). Row-level locking on reservations and budgets. Allowlist of explicit provider failures in reconciler. Verification of external settlement proofs via provider before resolving NEEDS_REVIEW. In H9: `resolve_needs_review` treats `LOOKUP_FAILED`, timeouts, and transport errors as "cannot confirm", refusing `MARK_FAILED` and `PROVIDE_PROOF`.
