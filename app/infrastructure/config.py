@@ -36,6 +36,10 @@ class Settings(BaseSettings):
         default=False,
         description="Demo mode: allows visitor role switching and simulated tampering",
     )
+    demo_seed: bool = Field(
+        default=False,
+        description="Explicitly enable demo seed data injection",
+    )
     forwarded_allow_ips: str = Field(
         default="127.0.0.1,::1",
         description="Comma-separated IPs or subnets trusted for X-Forwarded-For headers",

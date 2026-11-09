@@ -580,10 +580,15 @@ class AuthorizationService:
         self._responses_by_id: dict[str, AuthorizationResponseDTO] = {}
         self._request_states: dict[str, RequestState] = {}
         self._held_reservations: dict[str, dict[str, Any]] = {}
-        self._seed_default_step_up()
 
     def _seed_default_step_up(self) -> None:
-        """Seed a pending step-up request for the human supervisor demo queue."""
+        """Seed a pending step-up request for the human supervisor demo queue.
+
+        Demo-only: requires explicit DEMO_SEED=true; prohibited from running in __init__.
+        """
+        demo_seed = os.getenv("DEMO_SEED", "").lower() in ("true", "1")
+        if not demo_seed:
+            return
         now_utc = self._clock.now_utc()
         intent = TransactionIntent(
             agent_id="agent-auto-1",
