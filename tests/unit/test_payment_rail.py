@@ -147,9 +147,7 @@ def test_paypal_pay_ambiguous_and_transient_statuses_route_to_reconcile(
 
 
 @pytest.mark.parametrize("status_code", [400, 422])
-def test_paypal_pay_explicit_provider_rejection_releases(
-    monkeypatch, status_code: int
-) -> None:
+def test_paypal_pay_explicit_provider_rejection_releases(monkeypatch, status_code: int) -> None:
     """Explicit 4xx business rejections (400, 422) return FAILED with business_rejection=True."""
     import httpx
 
@@ -178,3 +176,80 @@ def test_paypal_pay_explicit_provider_rejection_releases(
     assert res.status == "FAILED"
     assert res.details.get("business_rejection") is True
 
+
+def test_real_verify_webhook_rejects_forged_headers(monkeypatch) -> None:
+    """Real PayPalPaymentRailAdapter.verify_webhook must reject forged headers and signatures."""
+    adapter = PayPalPaymentRailAdapter(client_id="test_client_id", client_secret="test_secret")
+    monkeypatch.setenv("PAYPAL_WEBHOOK_ID", "WH-VALID-12345")
+    monkeypatch.setattr(adapter, "_get_access_token", lambda: "fake-access-token")
+
+    valid_payload = b'{"id": "WH-1", "event_type": "PAYMENT.CAPTURE.COMPLETED"}'
+
+    # 1. Forged cert URL with attacker domain (SSRF attempt)
+    forged_cert_headers = {
+        "PAYPAL-AUTH-ALGO": "SHA256withRSA",
+        "PAYPAL-CERT-URL": "https://attacker.evil.com/certs/CERT-1",
+        "PAYPAL-TRANSMISSION-ID": "trans-1",
+        "PAYPAL-TRANSMISSION-SIG": "forged_sig",
+        "PAYPAL-TRANSMISSION-TIME": "2026-11-09T12:00:00Z",
+    }
+    assert adapter.verify_webhook(forged_cert_headers, valid_payload) is False
+
+    # 2. Insecure non-HTTPS cert URL
+    insecure_cert_headers = {
+        "PAYPAL-AUTH-ALGO": "SHA256withRSA",
+        "PAYPAL-CERT-URL": "http://api-m.sandbox.paypal.com/certs/CERT-1",
+        "PAYPAL-TRANSMISSION-ID": "trans-2",
+        "PAYPAL-TRANSMISSION-SIG": "forged_sig",
+        "PAYPAL-TRANSMISSION-TIME": "2026-11-09T12:00:00Z",
+    }
+    assert adapter.verify_webhook(insecure_cert_headers, valid_payload) is False
+
+    # 3. Userinfo spoofing cert URL (e.g. evil.com@api.paypal.com)
+    userinfo_cert_headers = {
+        "PAYPAL-AUTH-ALGO": "SHA256withRSA",
+        "PAYPAL-CERT-URL": "https://api.paypal.com@attacker.com/cert.pem",
+        "PAYPAL-TRANSMISSION-ID": "trans-3",
+        "PAYPAL-TRANSMISSION-SIG": "forged_sig",
+        "PAYPAL-TRANSMISSION-TIME": "2026-11-09T12:00:00Z",
+    }
+    assert adapter.verify_webhook(userinfo_cert_headers, valid_payload) is False
+
+    # 4. Missing required headers
+    missing_sig_headers = {
+        "PAYPAL-AUTH-ALGO": "SHA256withRSA",
+        "PAYPAL-CERT-URL": "https://api-m.sandbox.paypal.com/certs/CERT-1",
+        "PAYPAL-TRANSMISSION-ID": "trans-4",
+        "PAYPAL-TRANSMISSION-TIME": "2026-11-09T12:00:00Z",
+    }
+    assert adapter.verify_webhook(missing_sig_headers, valid_payload) is False
+
+    # 5. Legitimate PayPal cert host, but forged signature returned as FAILURE by PayPal API
+    forged_sig_headers = {
+        "PAYPAL-AUTH-ALGO": "SHA256withRSA",
+        "PAYPAL-CERT-URL": "https://api-m.sandbox.paypal.com/certs/CERT-1",
+        "PAYPAL-TRANSMISSION-ID": "trans-5",
+        "PAYPAL-TRANSMISSION-SIG": "forged_signature_token_abc123",
+        "PAYPAL-TRANSMISSION-TIME": "2026-11-09T12:00:00Z",
+    }
+
+    class FakeVerificationResponse:
+        status_code = 200
+
+        def json(self):
+            return {"verification_status": "FAILURE"}
+
+    import httpx
+
+    monkeypatch.setattr(httpx, "post", lambda *_args, **_kwargs: FakeVerificationResponse())
+    assert adapter.verify_webhook(forged_sig_headers, valid_payload) is False
+
+    # 6. PayPal API returns 400 Bad Request on forged parameters
+    class Fake400Response:
+        status_code = 400
+
+        def json(self):
+            return {"error": "INVALID_SIGNATURE"}
+
+    monkeypatch.setattr(httpx, "post", lambda *_args, **_kwargs: Fake400Response())
+    assert adapter.verify_webhook(forged_sig_headers, valid_payload) is False

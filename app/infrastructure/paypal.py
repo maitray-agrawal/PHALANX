@@ -150,11 +150,22 @@ class FakePaymentRail(PaymentRail):
 class PayPalPaymentRailAdapter(PaymentRail):
     """Production PayPal Sandbox adapter implementing Route A (Payouts) with Orders fallback."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        client_id: str | None = None,
+        client_secret: str | None = None,
+        base_url: str | None = None,
+    ) -> None:
         load_env_if_present()
-        self._client_id = os.getenv("PAYPAL_CLIENT_ID")
-        self._client_secret = os.getenv("PAYPAL_CLIENT_SECRET")
-        self._base_url = os.getenv("PAYPAL_API_BASE_URL", "https://api-m.sandbox.paypal.com")
+        self._client_id = client_id if client_id is not None else os.getenv("PAYPAL_CLIENT_ID")
+        self._client_secret = (
+            client_secret if client_secret is not None else os.getenv("PAYPAL_CLIENT_SECRET")
+        )
+        self._base_url = (
+            base_url
+            if base_url is not None
+            else os.getenv("PAYPAL_API_BASE_URL", "https://api-m.sandbox.paypal.com")
+        )
         self._counter = 0
         self._cached_token: str | None = None
         self._token_expires_at: float = 0.0
@@ -667,11 +678,13 @@ class PayPalPaymentRailAdapter(PaymentRail):
 
         try:
             parsed_cert = urlparse(cert_url)
+            hostname = (parsed_cert.hostname or "").lower()
             if parsed_cert.scheme != "https" or not (
-                parsed_cert.netloc == "api.paypal.com"
-                or parsed_cert.netloc == "api-m.paypal.com"
-                or parsed_cert.netloc == "api-m.sandbox.paypal.com"
-                or parsed_cert.netloc.endswith(".paypal.com")
+                hostname == "api.paypal.com"
+                or hostname == "api-m.paypal.com"
+                or hostname == "api-m.sandbox.paypal.com"
+                or hostname == "api.sandbox.paypal.com"
+                or hostname.endswith(".paypal.com")
             ):
                 return False
         except Exception:
