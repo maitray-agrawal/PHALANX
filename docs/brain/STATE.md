@@ -1,7 +1,7 @@
 # STATE (update after every task)
-Date: 7 Nov 2026 | Branch: dev (local only until the first push) | Last pushed commit on main: d41cff0 | CI: unknown
-Working tree: uncommitted F1 and F1c changes (reported passing locally: 357 tests, 105 red-team, ruff, mypy)
-Doing: T1 | Next: T2 | Blocked on me: nothing
+Date: 9 Nov 2026 | Branch: dev | Last pushed commit on main: 2332aef | CI: unknown
+Working tree: uncommitted F1, F1b, F1c, F2 changes across app/, web/, tests/, scripts/
+Completed: T1 | Doing: T2 | Next: T3 | Blocked on me: nothing
 Database password rotated 7 Nov (user report). Hosting: nothing deployed.
 
 ---

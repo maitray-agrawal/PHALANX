@@ -1,6 +1,6 @@
 # PLAN (status: TODO, DOING, DONE, STOP)
 | ID | Task | Level | Needs | Findings | Status |
-| T1 | Confirm F2 and F1b results (ask me for their reports; run only the checks they name) | MED | - | U1-U5, G1.. | TODO |
+| T1 | Confirm F2 and F1b results (ask me for their reports; run only the checks they name) | MED | - | U1-U5, G1.. | DONE |
 | T2 | F1c-fix | HIGH | T1 | H1-H7 | TODO |
 | T3 | F1b fail closed, keys, schema, test DB, audits | HIGH | T2 | G1,G4-G8 | TODO |
 | T4 | Env alignment after the password change | MED | T3 | N1 | TODO |
