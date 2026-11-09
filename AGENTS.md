@@ -42,3 +42,18 @@ adding dependencies without docs/decisions.md, adding out-of-scope features.
 ## Definition of done
 Tests pass; lint and types clean; docs and docs/context.md updated;
 report lists changed, tested, not tested, remaining risks.
+
+## Pointers & Brain Protocol
+Architectural state and technical decisions are maintained in:
+- State & Context: docs/brain/STATE.md (migrated from context.md)
+- Decisions: docs/brain/DECISIONS.md (migrated from decisions.md)
+
+PHALANX: authorization layer for autonomous financial agents. Agents can request. Policies decide. Humans authorize exceptions. Every transaction leaves evidence. PayPal sandbox only.
+Session start: read AGENTS.md, docs/brain/STATE.md, PLAN.md, the OPEN rows of FINDINGS.md and FACTS.md. Nothing else until a task names it.
+Truth: label facts VERIFIED (command output in LOG), REPORTED (earlier report, not rerun) or UNKNOWN. README, docs and Devpost text may state only VERIFIED facts. Never invent endpoints, headers, flags, versions, ids or numbers; check the docs or run the command. No placeholders. If a command fails, report it.
+Architecture: app/domain is pure and imports nothing outward (a test enforces it). The LLM never authorizes. Advisory signals only tighten a decision. Every entry point goes through app/application. Money is integer minor units. Time is injected. Money, mandate, auth and database code fail closed: no silent fallback, no swallowed errors.
+Security: no secrets in code, logs, tests, docs or commits; environment variables only; strict schemas; object-level authorization; parameterized queries.
+Git: work on dev, never main. Commits are lowercase, at most 60 characters, plain verb first, no type(scope) prefix, no marketing words ('fix budget race in reserve'). Push dev only after targeted tests pass and the brain files are updated; run the full suite once per cluster. Never force-push or rewrite history. A human merges the pull request dev to main when CI is green.
+Brain: after every task update FINDINGS, FACTS, STATE, PLAN and LOG. Close a finding only with evidence.
+Stop and ask: destructive commands, any secret needed, two failed fixes, a test you would weaken.
+Tooling note: this project is built with Google Antigravity and Gemini models; the README says so once.
