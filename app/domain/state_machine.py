@@ -19,6 +19,7 @@ class RequestState(str, Enum):
     DENIED = "DENIED"
     EXECUTING = "EXECUTING"
     RECONCILE = "RECONCILE"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
     SETTLED = "SETTLED"
     FAILED = "FAILED"
     VOIDED = "VOIDED"
@@ -92,6 +93,14 @@ _ALLOWABLE_TRANSITIONS: dict[RequestState, frozenset[RequestState]] = {
         {
             RequestState.SETTLED,  # Reconciled to success
             RequestState.FAILED,  # Reconciled to confirmed failure
+            RequestState.NEEDS_REVIEW,  # Reconcile window exceeded; requires manual review
+            RequestState.CLOSED,  # Manually resolved/closed
+        }
+    ),
+    RequestState.NEEDS_REVIEW: frozenset(
+        {
+            RequestState.SETTLED,  # Human supervisor / subsequent reconcile confirmed success
+            RequestState.FAILED,  # Human supervisor / subsequent reconcile confirmed failure
             RequestState.CLOSED,  # Manually resolved/closed
         }
     ),

@@ -348,7 +348,18 @@ class BudgetRepository:
         - Confirmed success: confirms reservation -> CONFIRMED
         - Confirmed failure: releases reservation -> RELEASED
         - Still unknown: holds reservation in RECONCILE
+        - Idempotent: if already CONFIRMED or RELEASED, returns current reservation safely.
         """
+        res_stmt = select(BudgetReservationModel).where(
+            BudgetReservationModel.reservation_id == reservation_id
+        )
+        res = self.session.scalar(res_stmt)
+        if not res:
+            raise ReservationNotFoundError(f"Reservation '{reservation_id}' not found")
+
+        # Idempotency guard for reconciler
+        if res.status in (ReservationStatus.CONFIRMED.value, ReservationStatus.RELEASED.value):
+            return res
         status_norm = (rail_status or "UNKNOWN").upper()
         CONFIRMED_SUCCESS = {"SUCCESS", "COMPLETED", "CONFIRMED", "SETTLED"}
         CONFIRMED_FAILURE = {
@@ -359,15 +370,40 @@ class BudgetRepository:
             "FALLBACK_FAILED",
             "CANCELED",
             "RETURNED",
+            "EXPIRED",
+            "VOIDED",
+        }
+        AMBIGUOUS_ERRORS = {
             "LOOKUP_FAILED",
+            "TIMEOUT",
+            "NETWORK_ERROR",
+            "CONNECTION_ERROR",
+            "ERROR",
+            "UNKNOWN",
+            "RECONCILE",
+            "PENDING",
+            "NEEDS_REVIEW",
         }
 
         if status_norm in CONFIRMED_SUCCESS:
             return self.confirm_reservation(reservation_id)
-        elif status_norm in CONFIRMED_FAILURE:
+        elif status_norm in CONFIRMED_FAILURE and status_norm not in AMBIGUOUS_ERRORS:
             return self.release_reservation(reservation_id, confirmed_failure=True)
         else:
             return self.release_reservation(reservation_id, confirmed_failure=False)
+
+    def get_held_reservations(self) -> list[BudgetReservationModel]:
+        """Fetch all reservations currently held in PENDING or RECONCILE state."""
+        stmt = (
+            select(BudgetReservationModel)
+            .where(
+                BudgetReservationModel.status.in_(
+                    [ReservationStatus.PENDING.value, ReservationStatus.RECONCILE.value]
+                )
+            )
+            .order_by(BudgetReservationModel.created_at_utc.asc())
+        )
+        return list(self.session.scalars(stmt).all())
 
     def record_decision(
         self,
