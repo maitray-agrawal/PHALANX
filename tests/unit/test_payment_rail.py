@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime
 
+import pytest
+
 from app.domain.models import Money, TransactionIntent
 from app.domain.ports import PaymentRail
 from app.infrastructure.paypal import FakePaymentRail, PayPalPaymentRailAdapter
@@ -109,3 +111,70 @@ def test_paypal_adapter_lookup_order_fallback_mocked(monkeypatch) -> None:
     assert res.success is True
     assert res.transaction_id == "ORDER-999"
     assert res.status == "APPROVED"
+
+
+@pytest.mark.parametrize("status_code", [408, 429, 500, 502, 503, 504])
+def test_paypal_pay_ambiguous_and_transient_statuses_route_to_reconcile(
+    monkeypatch, status_code: int
+) -> None:
+    """408, 429 and 5xx must hold funds and route to RECONCILE, never FAILED."""
+    import httpx
+
+    adapter = PayPalPaymentRailAdapter()
+    monkeypatch.setattr(adapter, "_get_access_token", lambda: "fake-jwt-token")
+
+    class FakeResponse:
+        def __init__(self, sc: int):
+            self.status_code = sc
+            self.text = f'{{"error": "Simulated {sc}"}}'
+
+        def json(self):
+            return {"error": f"Simulated {self.status_code}"}
+
+    monkeypatch.setattr(httpx, "post", lambda *_args, **_kwargs: FakeResponse(status_code))
+
+    intent = TransactionIntent(
+        agent_id="agent-01",
+        recipient_id="vendor-01",
+        money=Money(amount_minor=5000, currency="USD"),
+        purpose="Subscription",
+        idempotency_key=f"idemp-status-{status_code}",
+        occurred_at_utc=datetime.now(UTC),
+    )
+    res = adapter.pay(intent)
+    assert res.status == "RECONCILE"
+    assert res.details.get("business_rejection") is False
+
+
+@pytest.mark.parametrize("status_code", [400, 422])
+def test_paypal_pay_explicit_provider_rejection_releases(
+    monkeypatch, status_code: int
+) -> None:
+    """Explicit 4xx business rejections (400, 422) return FAILED with business_rejection=True."""
+    import httpx
+
+    adapter = PayPalPaymentRailAdapter()
+    monkeypatch.setattr(adapter, "_get_access_token", lambda: "fake-jwt-token")
+
+    class FakeResponse:
+        def __init__(self, sc: int):
+            self.status_code = sc
+            self.text = f'{{"error": "Simulated {sc}"}}'
+
+        def json(self):
+            return {"error": f"Simulated {self.status_code}"}
+
+    monkeypatch.setattr(httpx, "post", lambda *_args, **_kwargs: FakeResponse(status_code))
+
+    intent = TransactionIntent(
+        agent_id="agent-01",
+        recipient_id="vendor-01",
+        money=Money(amount_minor=5000, currency="USD"),
+        purpose="Subscription",
+        idempotency_key=f"idemp-fail-{status_code}",
+        occurred_at_utc=datetime.now(UTC),
+    )
+    res = adapter.pay(intent)
+    assert res.status == "FAILED"
+    assert res.details.get("business_rejection") is True
+

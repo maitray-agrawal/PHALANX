@@ -1082,6 +1082,8 @@ class AuthorizationService:
                         or "timeout" in err_text
                         or rail_res.details.get("status_code", 0) >= 500
                         or rail_res.details.get("http_status", 0) >= 500
+                        or rail_res.details.get("status_code", 0) in (408, 429)
+                        or rail_res.details.get("http_status", 0) in (408, 429)
                     )
 
                     if rail_res.success and rail_res.status in ("COMPLETED", "SUCCESS"):
@@ -1440,6 +1442,8 @@ class AuthorizationService:
                             or "timeout" in err_text
                             or rail_res.details.get("status_code", 0) >= 500
                             or rail_res.details.get("http_status", 0) >= 500
+                            or rail_res.details.get("status_code", 0) in (408, 429)
+                            or rail_res.details.get("http_status", 0) in (408, 429)
                         )
 
                         if rail_res.success and rail_res.status in ("COMPLETED", "SUCCESS"):
@@ -1485,7 +1489,14 @@ class AuthorizationService:
                                 with self._db_session_factory() as session, session.begin():
                                     repo = BudgetRepository(session)
                                     repo.release_reservation(db_res_id, confirmed_failure=False)
-                        elif is_ambiguous or rail_res.status == "RECONCILE":
+                        elif (
+                            is_ambiguous
+                            or rail_res.status == "RECONCILE"
+                            or not (
+                                rail_res.status == "FAILED"
+                                and rail_res.details.get("business_rejection") is True
+                            )
+                        ):
                             current_req_state = transition_request_state(
                                 current_req_state,
                                 RequestState.RECONCILE,
