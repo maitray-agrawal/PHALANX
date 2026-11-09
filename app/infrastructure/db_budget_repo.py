@@ -261,9 +261,12 @@ class BudgetRepository:
 
     def confirm_reservation(self, reservation_id: str) -> BudgetReservationModel:
         """Confirm settlement of a reservation, moving reserved funds to spent."""
+        dialect = self.session.bind.dialect.name if self.session.bind else ""
         res_stmt = select(BudgetReservationModel).where(
             BudgetReservationModel.reservation_id == reservation_id
         )
+        if dialect in ("postgresql", "postgres"):
+            res_stmt = res_stmt.with_for_update()
         res = self.session.scalar(res_stmt)
         if not res:
             raise ReservationNotFoundError(f"Reservation '{reservation_id}' not found")
@@ -278,6 +281,8 @@ class BudgetRepository:
             )
 
         budget_stmt = select(AgentBudgetModel).where(AgentBudgetModel.agent_id == res.agent_id)
+        if dialect in ("postgresql", "postgres"):
+            budget_stmt = budget_stmt.with_for_update()
         budget = self.session.scalar(budget_stmt)
         if not budget:
             raise ValueError(f"Budget for agent '{res.agent_id}' not found")
@@ -303,9 +308,12 @@ class BudgetRepository:
         Only a confirmed failure releases reserved funds. An ambiguous/unknown outcome
         transitions to RECONCILE, preserving budget lock to prevent double-spending.
         """
+        dialect = self.session.bind.dialect.name if self.session.bind else ""
         res_stmt = select(BudgetReservationModel).where(
             BudgetReservationModel.reservation_id == reservation_id
         )
+        if dialect in ("postgresql", "postgres"):
+            res_stmt = res_stmt.with_for_update()
         res = self.session.scalar(res_stmt)
         if not res:
             raise ReservationNotFoundError(f"Reservation '{reservation_id}' not found")
@@ -319,6 +327,8 @@ class BudgetRepository:
             )
 
         budget_stmt = select(AgentBudgetModel).where(AgentBudgetModel.agent_id == res.agent_id)
+        if dialect in ("postgresql", "postgres"):
+            budget_stmt = budget_stmt.with_for_update()
         budget = self.session.scalar(budget_stmt)
         if not budget:
             raise ValueError(f"Budget for agent '{res.agent_id}' not found")

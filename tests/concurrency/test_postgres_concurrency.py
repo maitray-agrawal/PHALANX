@@ -699,3 +699,106 @@ def test_postgres_cross_process_concurrent_ledger_sequence_lock(
     ledger = DatabaseLedgerAdapter(session_factory=pg_session_factory)
     is_valid, msg, broken_idx = ledger.verify_integrity()
     assert is_valid is True, f"Ledger hash chain broken at {broken_idx}: {msg}"
+
+
+def test_postgres_concurrent_confirm_and_release_exact_budget(
+    pg_session_factory: Any,
+) -> None:
+    """Verify row-level locking on reservations and agent budget in PostgreSQL.
+
+    1. Parallel confirm(res_1) + release(res_2) on one agent.
+    2. Two parallel confirms of the same reservation (res_3).
+    Assert budgets are exact with zero lost updates.
+    """
+    agent_id = f"agent_conc_lock_{uuid.uuid4().hex[:8]}"
+    allocated = 100_000
+
+    # 1. Setup budget and initial reservations
+    with pg_session_factory() as session, session.begin():
+        session.add(
+            AgentBudgetModel(
+                agent_id=agent_id,
+                mandate_id=f"man_{uuid.uuid4().hex[:6]}",
+                currency="USD",
+                allocated_minor=allocated,
+                spent_minor=0,
+                reserved_minor=0,
+            )
+        )
+        session.flush()
+        repo = BudgetRepository(session)
+        res_1 = repo.reserve_budget(
+            agent_id=agent_id,
+            amount_minor=30_000,
+            currency="USD",
+            idempotency_key=f"idem_1_{uuid.uuid4().hex}",
+            intent_digest=f"dig_1_{uuid.uuid4().hex}",
+        ).reservation_id
+        res_2 = repo.reserve_budget(
+            agent_id=agent_id,
+            amount_minor=20_000,
+            currency="USD",
+            idempotency_key=f"idem_2_{uuid.uuid4().hex}",
+            intent_digest=f"dig_2_{uuid.uuid4().hex}",
+        ).reservation_id
+
+    # 2. Parallel confirm(res_1) + release(res_2) on one agent
+    def do_confirm(res_id: str) -> None:
+        with pg_session_factory() as session, session.begin():
+            repo = BudgetRepository(session)
+            repo.confirm_reservation(res_id)
+
+    def do_release(res_id: str) -> None:
+        with pg_session_factory() as session, session.begin():
+            repo = BudgetRepository(session)
+            repo.release_reservation(res_id, confirmed_failure=True)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        f1 = executor.submit(do_confirm, res_1)
+        f2 = executor.submit(do_release, res_2)
+        f1.result(timeout=10)
+        f2.result(timeout=10)
+
+    with pg_session_factory() as session:
+        b = session.scalar(select(AgentBudgetModel).where(AgentBudgetModel.agent_id == agent_id))
+        assert b is not None
+        assert b.spent_minor == 30_000, f"Expected spent 30000, got {b.spent_minor}"
+        assert b.reserved_minor == 0, f"Expected reserved 0, got {b.reserved_minor}"
+
+    # 3. Two parallel confirms of the same reservation (res_3)
+    with pg_session_factory() as session, session.begin():
+        repo = BudgetRepository(session)
+        res_3 = repo.reserve_budget(
+            agent_id=agent_id,
+            amount_minor=15_000,
+            currency="USD",
+            idempotency_key=f"idem_3_{uuid.uuid4().hex}",
+            intent_digest=f"dig_3_{uuid.uuid4().hex}",
+        ).reservation_id
+
+    results: list[Any] = []
+    errors: list[Exception] = []
+
+    def try_confirm_res3() -> None:
+        try:
+            with pg_session_factory() as session, session.begin():
+                repo = BudgetRepository(session)
+                r = repo.confirm_reservation(res_3)
+                results.append(r.status)
+        except Exception as exc:
+            errors.append(exc)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        f3 = executor.submit(try_confirm_res3)
+        f4 = executor.submit(try_confirm_res3)
+        f3.result(timeout=10)
+        f4.result(timeout=10)
+
+    # Exactly one confirmation should succeed (or second gets InvalidApprovalStateError)
+    assert len(results) >= 1
+    with pg_session_factory() as session:
+        b = session.scalar(select(AgentBudgetModel).where(AgentBudgetModel.agent_id == agent_id))
+        assert b is not None
+        assert b.spent_minor == 45_000, f"Expected spent 45000, got {b.spent_minor}"
+        assert b.reserved_minor == 0, f"Expected reserved 0, got {b.reserved_minor}"
+
