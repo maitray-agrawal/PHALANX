@@ -783,6 +783,70 @@ class AuthorizationService:
                 return self._lifetime_spent.get(agent_id, 0)
             return sum(self._lifetime_spent.values())
 
+    def _resolve_replay_request_state(
+        self,
+        request_id: str,
+        idempotency_key: str,
+        cached_dec: DecisionOutcome,
+        record: Any | None = None,
+        session: Any | None = None,
+    ) -> RequestState:
+        """Resolve the real request_state for an idempotent replay from stored state."""
+        # 1. In-memory request states or held reservations
+        with self._lock:
+            st = self._request_states.get(request_id)
+            if st is not None:
+                return st
+            held = self._held_reservations.get(request_id)
+            if held and held.get("state"):
+                try:
+                    return RequestState(held["state"])
+                except Exception:
+                    pass
+            prev_resp = self._responses_by_id.get(request_id)
+            if prev_resp and prev_resp.request_state:
+                return prev_resp.request_state
+
+        # 2. Check response_payload in idempotency record
+        if record and getattr(record, "response_payload", None):
+            try:
+                import json
+
+                payload_data = json.loads(record.response_payload)
+                if payload_data.get("request_state"):
+                    return RequestState(payload_data["request_state"])
+            except Exception:
+                pass
+
+        # 3. Check DB budget_reservations table
+        if session is not None:
+            try:
+                from app.infrastructure.models import BudgetReservationModel, ReservationStatus
+
+                res_row = session.scalar(
+                    select(BudgetReservationModel).where(
+                        BudgetReservationModel.idempotency_key == idempotency_key
+                    )
+                )
+                if res_row:
+                    if res_row.status == ReservationStatus.RECONCILE.value:
+                        return RequestState.RECONCILE
+                    if res_row.status == ReservationStatus.RELEASED.value:
+                        return RequestState.FAILED
+                    if res_row.status == ReservationStatus.CONFIRMED.value:
+                        return RequestState.SETTLED
+                    if res_row.status == ReservationStatus.PENDING.value:
+                        return RequestState.EXECUTING
+            except Exception:
+                pass
+
+        # 4. Fallback based on cached decision without blindly returning SETTLED
+        if cached_dec == DecisionOutcome.DENY:
+            return RequestState.DENIED
+        if cached_dec == DecisionOutcome.STEP_UP:
+            return RequestState.PENDING_APPROVAL
+        return RequestState.EXECUTING
+
     def authorize(self, command: AuthorizeTransactionCommand) -> AuthorizationResponseDTO:
         now_utc = self._clock.now_utc()
         money = Money(amount_minor=command.amount_minor, currency=command.currency)
@@ -858,6 +922,13 @@ class AuthorizationService:
                                         detail="Transaction currently executing",
                                     ) from e
                                 cached_dec = DecisionOutcome(e.record.decision)
+                                replay_req_state = self._resolve_replay_request_state(
+                                    request_id=request_id,
+                                    idempotency_key=intent.idempotency_key,
+                                    cached_dec=cached_dec,
+                                    record=e.record,
+                                    session=session,
+                                )
                                 return AuthorizationResponseDTO(
                                     request_id=request_id,
                                     decision=cached_dec,
@@ -870,11 +941,7 @@ class AuthorizationService:
                                     intent_digest=intent_digest,
                                     evaluated_at_utc=now_utc,
                                     payout_id=None,
-                                    request_state=(
-                                        RequestState.SETTLED
-                                        if cached_dec == DecisionOutcome.ALLOW
-                                        else RequestState.PENDING_APPROVAL
-                                    ),
+                                    request_state=replay_req_state,
                                 )
 
                     agent_lifetime = self.get_lifetime_spent(command.agent_id)
@@ -1022,6 +1089,13 @@ class AuthorizationService:
                                         detail="Transaction currently executing",
                                     ) from replay_err
                                 cached_dec = DecisionOutcome(replay_err.record.decision)
+                                replay_req_state = self._resolve_replay_request_state(
+                                    request_id=request_id,
+                                    idempotency_key=intent.idempotency_key,
+                                    cached_dec=cached_dec,
+                                    record=replay_err.record,
+                                    session=session,
+                                )
                                 return AuthorizationResponseDTO(
                                     request_id=request_id,
                                     decision=cached_dec,
@@ -1034,11 +1108,7 @@ class AuthorizationService:
                                     intent_digest=intent_digest,
                                     evaluated_at_utc=now_utc,
                                     payout_id=None,
-                                    request_state=(
-                                        RequestState.SETTLED
-                                        if cached_dec == DecisionOutcome.ALLOW
-                                        else RequestState.PENDING_APPROVAL
-                                    ),
+                                    request_state=replay_req_state,
                                 )
                     else:
                         # In-memory reserve budget
@@ -1213,7 +1283,11 @@ class AuthorizationService:
                 else:
                     prev_resp = self._responses_by_id.get(request_id)
                     payout_id = prev_resp.payout_id if prev_resp else None
-                    current_req_state = self._request_states.get(request_id, RequestState.SETTLED)
+                    current_req_state = self._resolve_replay_request_state(
+                        request_id=request_id,
+                        idempotency_key=intent.idempotency_key,
+                        cached_dec=final_decision,
+                    )
 
             self._request_states[request_id] = current_req_state
 

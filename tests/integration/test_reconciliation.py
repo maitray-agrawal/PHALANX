@@ -1534,3 +1534,63 @@ def test_concurrent_reconciler_instances_skip_locked_no_double_processing(db_eng
         b = session.scalar(select(AgentBudgetModel).where(AgentBudgetModel.agent_id == agent_id))
         assert b.reserved_minor == 0
         assert b.spent_minor == 40_000
+
+
+def test_idempotent_replay_in_reconcile_and_needs_review(session_factory):
+    """Idempotent replay returns the real request_state from stored state,
+    never SETTLED by default.
+    """
+    agent_id = f"agent_replay_{uuid.uuid4().hex[:8]}"
+    mandate_id = f"mandate_{uuid.uuid4().hex[:8]}"
+    allocated_minor = 100_000
+    tx_amount_minor = 15_000
+
+    clock = ControllableClock(datetime(2026, 11, 1, 12, 0, 0, tzinfo=UTC))
+    _seed_agent_mandate_and_budget(session_factory, agent_id, mandate_id, allocated_minor, clock)
+
+    # Initial execution returns RECONCILE (ambiguous rail outcome)
+    rail = FakePaymentRail(should_succeed=True, status="RECONCILE")
+    ledger = InMemoryLedgerAdapter()
+    mandate_service = MandateService(clock=clock, db_session_factory=session_factory)
+    auth_service = AuthorizationService(
+        clock=clock,
+        ledger=ledger,
+        mandate_service=mandate_service,
+        payment_rail=rail,
+        db_session_factory=session_factory,
+    )
+
+    idem_key = f"idem_replay_{uuid.uuid4().hex}"
+    cmd = AuthorizeTransactionCommand(
+        agent_id=agent_id,
+        recipient_id="vendor-paypal-sandbox-1",
+        amount_minor=tx_amount_minor,
+        currency="USD",
+        purpose="Replay state check",
+        idempotency_key=idem_key,
+    )
+    auth_resp1 = auth_service.authorize(cmd)
+    assert auth_resp1.request_state == RequestState.RECONCILE
+
+    # 1. Replay while in RECONCILE state: must return RECONCILE, NEVER SETTLED
+    auth_resp_replay1 = auth_service.authorize(cmd)
+    assert auth_resp_replay1.request_state == RequestState.RECONCILE
+    assert auth_resp_replay1.request_state != RequestState.SETTLED
+
+    # 2. Advance time past max_age so request moves to NEEDS_REVIEW
+    clock.advance(timedelta(seconds=90_000))
+    reconciler = ReconcilerService(
+        auth_service=auth_service,
+        payment_rail=rail,
+        clock=clock,
+        db_session_factory=session_factory,
+        max_age_seconds=86_400,
+    )
+    # Payment rail lookup still returns RECONCILE / ambiguous
+    state = reconciler.reconcile_single(auth_resp1.request_id, force=True)
+    assert state == RequestState.NEEDS_REVIEW
+
+    # 3. Replay while in NEEDS_REVIEW state: must return NEEDS_REVIEW, NEVER SETTLED
+    auth_resp_replay2 = auth_service.authorize(cmd)
+    assert auth_resp_replay2.request_state == RequestState.NEEDS_REVIEW
+    assert auth_resp_replay2.request_state != RequestState.SETTLED
