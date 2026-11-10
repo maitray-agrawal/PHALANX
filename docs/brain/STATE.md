@@ -1,28 +1,28 @@
 # STATE (update after every task)
 Date: 10 Nov 2026 | Branch: dev | Last pushed commit on main: 2332aef | CI: passing (run 42807377469)
-Working tree: clean | M0 complete, hardened & all reviewer findings resolved
-Completed: T1, T2 (H1-H7), T3/T4 (N1, U1), M0 Hardening (H8, H9, H10 closed), M0 Invariants (reconcile untrusted status removed, role auditor restricted, idempotent replay real state, may_release helper on all sites, FakePaymentRail business_rejection, exact paypal webhook events & lookup) | Doing: T5 | Next: T5 | Blocked on me: nothing
+Working tree: clean | M0 complete, hardened & all reviewer findings resolved; T8 Real LLM Invoice Agent implemented
+Completed: T1, T2 (H1-H7), T3/T4 (N1, U1), M0 Hardening (H8, H9, H10 closed), M0 Invariants (reconcile untrusted status removed, role auditor restricted, idempotent replay real state, may_release helper on all sites, FakePaymentRail business_rejection, exact paypal webhook events & lookup), T8 Real LLM Invoice Agent & Gemini Adapter | Doing: T8 verification & CI | Next: T5 | Blocked on me: nothing
 Database password rotated 7 Nov; verified live 9 Nov (active connection ok, old passwords rejected). Hosting: nothing deployed.
 
 ---
 
 # context.md
-Phase: R13 Live PayPal Sandbox (Orders v2 Two-Phase Flow, Payouts 403 Restricted Proof, Webhook Verification)   Branches: main, dev   Last green CI: https://github.com/maitray-agrawal/PHALANX/actions/runs/42807377469
+Phase: R13 Live PayPal Sandbox (Orders v2 Two-Phase Flow, Payouts 403 Restricted Proof, Webhook Verification) + T8 Invoice Agent   Branches: main, dev   Last green CI: https://github.com/maitray-agrawal/PHALANX/actions/runs/42807377469
 Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
 - app/domain: Pure deterministic policy engine, Ed25519 mandate invariants, canonical RFC 8785 JSON, cryptographic hash-chained ledger. AST purity test enforced.
-- app/application: AuthorizationService, MandateService, LedgerService, ProviderAgnosticLLMClient (quotas, timeouts, retries), IntentExtractor (delimiter isolation, strict Pydantic draft), GroundedExplanationValidator, PrincipalSessionMemory, DeterministicKnowledgeBase, CompositeAdvisoryPipeline. SubmitApprovalRequestDTO enforces strict mass-assignment prevention (`extra="forbid"`). Row-level locking on reservations and budgets. Allowlist of explicit provider failures in reconciler. Verification of external settlement proofs via provider before resolving NEEDS_REVIEW. In H9: `resolve_needs_review` treats `LOOKUP_FAILED`, timeouts, and transport errors as "cannot confirm", refusing `MARK_FAILED` and `PROVIDE_PROOF`.
-- app/infrastructure: Multi-stage container packaging (Node 20 + Python 3.12 slim), single managed SQLAlchemy engine, dialect-specific connect args, request-scoped sessions, Ed25519 signing/verification (PEM & raw hex), HMAC-SHA256 role tokens (validated >= 32-byte secret key), DatabaseLedgerAdapter (re-entrant RLock to prevent deadlocks), PayPal Sandbox rail adapter (with deterministic request IDs from intent digests, real provider states, live webhook signature verification API, strict SSRF validation restricting certificate URLs to exact PayPal API hosts without userinfo or ports), UTC clock. FOR UPDATE SKIP LOCKED row claiming for concurrent reconcilers. Self-hosted distinct font weights for Inter and JetBrains Mono.
-- app/api: Complete FastAPI REST suite with /v1/ and /api/v1/ contracts, strictly validated Bearer tokens, timing-safe admin reset (hmac.compare_digest with min 24-char token), disabled in production environment (403 Forbidden), fail-closed dependencies (mandatory PostgreSQL outside test mode), fail-closed webhooks (503 if unconfigured, 401 on forged signature), demo mode guardrails (/v1/auth/demo-token with configurable rate limit, /v1/ledger/tamper, /restore, /v1/attack-lab/run gated on DEMO_MODE), strict query parameter length validation, paginated/windowed `/v1/ledger?limit=50` to guarantee high performance on slow 4G, CSP header with `default-src 'self'; frame-ancestors 'none'; form-action 'self'`, and HTTP caching controls (`Cache-Control: no-store`, `ETag`, `Vary: Authorization`). Role.AGENT explicitly forbidden from supervisor approval queue. Fail-closed 503 on database failure in pending approvals.
-- app/mcp: Model Context Protocol server exposing financial agent governance tools through identical application authorization boundary.
-- web: React + Vite + TypeScript security console with PayPal-inspired clarity, mobile-first design (Inter & JetBrains Mono typography with true distinct font weights, gold/blue actions, semantic state tokens, 8px grid, max width 1120px). Topbar + bottom tabbar (< 768px), sticky primary action, demo persona switcher, and mandatory footer disclaimer: 'Not affiliated with PayPal.'.
+- app/application: AuthorizationService, MandateService, LedgerService, InvoiceAgent (autonomous supplier invoice ingestion with strict prompt delimiter isolation and deterministic PHALANX policy boundary), ProviderAgnosticLLMClient (quotas, timeouts, retries), IntentExtractor, GroundedExplanationValidator, PrincipalSessionMemory, DeterministicKnowledgeBase, CompositeAdvisoryPipeline.
+- app/infrastructure: Multi-stage container packaging (Node 20 + Python 3.12 slim), single managed SQLAlchemy engine, dialect-specific connect args, request-scoped sessions, Ed25519 signing/verification (PEM & raw hex), HMAC-SHA256 role tokens (validated >= 32-byte secret key), DatabaseLedgerAdapter (re-entrant RLock to prevent deadlocks), GeminiLLMClient (official Gemini API adapter, temperature 0, strict JSON schema output, timeout 10s, 1 retry, token cap 1024, daily quota tracker with demo budget cap, server-side only key handling), PayPal Sandbox rail adapter, UTC clock. FOR UPDATE SKIP LOCKED row claiming for concurrent reconcilers.
+- app/api: Complete FastAPI REST suite with /v1/ and /api/v1/ contracts, strictly validated Bearer tokens, Invoice Agent endpoints (`GET /v1/invoice-agent/samples`, `POST /v1/invoice-agent/process`).
+- web: React + Vite + TypeScript security console with PayPal-inspired clarity, mobile-first design.
 - web screens:
-  1. Home: Three numbers (remaining authority, pending approvals, last recorded activity), primary Pay action, recent activity stream.
+  1. Home: Three numbers, primary Pay action, recent activity stream.
   2. Pay: Request console with scenario presets, custom input, intent card, instant decision badge with plain reason.
-  3. Approvals: Step-up queue, exact request, RFC 8785 canonical digest, inspect diff, Approve/Decline bound to digest, Agent role locking, deterministic empty-queue state when unseeded. Stored XSS rendered inertly.
-  4. Activity: Ledger journal, windowed visual chain strip (latest 20 blocks with total count indicator), honest provider states, Verify chain trigger, receipt links. Stored XSS rendered inertly.
-  5. Mandates: Read-only Ed25519 limits, lifetime budget meter with accessible ARIA progressbar, allowed payees, authorized purposes, signature status.
-  6. Attack Lab: 6 canned threat vectors (prompt injection, payee swap, amount tamper after approval, replay, forged webhook, agent self-approval), Run suite trigger, 100% defense check.
-  7. Receipt & Verify: Cryptographic receipt card, public SHA-256 hash chain proof verifier, search input. Stored XSS rendered inertly.
+  3. Approvals: Step-up queue, exact request, RFC 8785 canonical digest, inspect diff, Approve/Decline bound to digest.
+  4. Activity: Ledger journal, windowed visual chain strip, honest provider states, Verify chain trigger.
+  5. Mandates: Read-only Ed25519 limits, lifetime budget meter with accessible ARIA progressbar.
+  6. Invoice Agent (Screen): Autonomous AI invoice parsing with Gemini, displaying raw invoice text, extracted fields, exact authorization request sent to /v1/authorize, deterministic PHALANX decision, hash-chained ledger event, and clear 'RECORDED RUN' fallback indicator.
+  7. Attack Lab: 6 canned threat vectors.
+  8. Receipt & Verify: Cryptographic receipt card, public SHA-256 hash chain proof verifier.
 
 Test status (All Verified Live):
 - Backend: 400 passed, 0 skipped, 0 failed in 149.85s (400 total backend tests across full test suite)
