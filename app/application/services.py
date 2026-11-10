@@ -1663,19 +1663,35 @@ class AuthorizationService:
                 raise ValueError(msg)
 
             resp = self._responses_by_id.get(request_id)
-            payout_id = (resp.payout_id if resp else None) or (
-                held.get("payout_id") if held else None
+            payout_id = (
+                (held.get("payout_id") if held else None)
+                or (resp.payout_id if resp else None)
+                or (held.get("order_id") if held else None)
             )
 
-            if rail_status is None and payout_id:
+            # Reconcile always performs the provider lookup
+            lookup_res: Any | None = None
+            if payout_id:
                 try:
                     lookup_res = self._payment_rail.lookup(payout_id)
                     rail_status = lookup_res.status
                 except Exception as exc:
                     logger.warning("Payment rail lookup exception for '%s': %s", payout_id, exc)
                     rail_status = "LOOKUP_FAILED"
+            else:
+                rail_status = "LOOKUP_FAILED"
 
-            status_norm = (rail_status or "UNKNOWN").upper()
+            details = (lookup_res.details or {}) if lookup_res else {}
+            details_str = str(details).lower()
+            if (
+                details.get("http_status") == 404
+                or details.get("name") in ("RESOURCE_NOT_FOUND", "INVALID_RESOURCE_ID")
+                or "not found" in details_str
+            ):
+                status_norm = "FAILED"
+            else:
+                status_norm = (rail_status or "UNKNOWN").upper()
+
             CONFIRMED_SUCCESS = {"SUCCESS", "COMPLETED", "CONFIRMED", "SETTLED"}
             CONFIRMED_FAILURE = {
                 "FAILED",
@@ -1687,6 +1703,8 @@ class AuthorizationService:
                 "RETURNED",
                 "EXPIRED",
                 "VOIDED",
+                "NOT_FOUND",
+                "RESOURCE_NOT_FOUND",
             }
             AMBIGUOUS_ERRORS = {
                 "LOOKUP_FAILED",
@@ -2138,7 +2156,8 @@ class AuthorizationService:
                         f"Provided capture ID '{capture_id}' could not be verified with provider: "
                         f"status is {provider_status}"
                     )
-                new_state = self.reconcile(request_id, rail_status="COMPLETED")
+                held["payout_id"] = capture_id.strip()
+                new_state = self.reconcile(request_id)
                 intent = held.get("intent")
                 if intent:
                     dom_res = PolicyEvaluationResult(

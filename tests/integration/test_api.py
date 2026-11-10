@@ -1,5 +1,6 @@
 """API integration tests."""
 
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -177,3 +178,78 @@ def test_request_id_header_propagated(client: TestClient) -> None:
     resp = client.get("/healthz", headers={"X-Request-ID": "custom-req-id-12345"})
     assert resp.status_code == status.HTTP_200_OK
     assert resp.headers.get("X-Request-ID") == "custom-req-id-12345"
+
+
+def test_reconcile_auditor_gets_403(client: TestClient, auditor_token: str) -> None:
+    """Mutating endpoint /v1/reconcile/{id} strictly rejects Role.AUDITOR with 403."""
+    resp = client.post(
+        "/v1/reconcile/req_audit_test",
+        json={"status": "COMPLETED"},
+        headers={"Authorization": f"Bearer {auditor_token}"},
+    )
+    assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_tamper_and_restore_auditor_gets_403(
+    client: TestClient, auditor_token: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mutating ledger endpoints strictly reject Role.AUDITOR with 403."""
+    from app.infrastructure.config import settings
+
+    monkeypatch.setattr(settings, "demo_mode", True)
+    resp1 = client.post(
+        "/v1/ledger/tamper",
+        headers={"Authorization": f"Bearer {auditor_token}"},
+    )
+    assert resp1.status_code == status.HTTP_403_FORBIDDEN
+
+    resp2 = client.post(
+        "/v1/ledger/restore",
+        headers={"Authorization": f"Bearer {auditor_token}"},
+    )
+    assert resp2.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_reconcile_forged_completed_and_failed_bodies_change_nothing(
+    client: TestClient,
+    approver_token: str,
+    test_authorization_service: Any,
+    test_payment_rail: Any,
+) -> None:
+    """POST /v1/reconcile/{id} removes caller-supplied status entirely.
+    Forged COMPLETED and FAILED bodies change nothing; real provider lookup dictates outcome.
+    """
+    from app.domain.state_machine import RequestState
+
+    req_id = "req_forged_status_test"
+    test_authorization_service._request_states[req_id] = RequestState.RECONCILE
+    test_authorization_service._held_reservations[req_id] = {
+        "state": RequestState.RECONCILE.value,
+        "payout_id": "tx_lookup_test_404",
+        "agent_id": "agent-auto-1",
+    }
+    # Payment rail lookup returns LOOKUP_FAILED (not completed)
+    test_payment_rail.should_succeed = False
+    test_payment_rail.status = "LOOKUP_FAILED"
+
+    # Forged COMPLETED body must NOT settle the transaction
+    resp_comp = client.post(
+        f"/v1/reconcile/{req_id}",
+        json={"status": "COMPLETED"},
+        headers={"Authorization": f"Bearer {approver_token}"},
+    )
+    assert resp_comp.status_code == status.HTTP_200_OK
+    assert resp_comp.json()["state"] != "SETTLED"
+    assert test_authorization_service.get_request_state(req_id) != RequestState.SETTLED
+
+    # Forged FAILED body when rail is actually COMPLETED must NOT fail or release
+    test_payment_rail.should_succeed = True
+    test_payment_rail.status = "COMPLETED"
+    resp_fail = client.post(
+        f"/v1/reconcile/{req_id}",
+        json={"status": "FAILED"},
+        headers={"Authorization": f"Bearer {approver_token}"},
+    )
+    assert resp_fail.status_code == status.HTTP_200_OK
+    assert resp_fail.json()["state"] == "SETTLED"
+    assert test_authorization_service.get_request_state(req_id) == RequestState.SETTLED

@@ -659,7 +659,7 @@ def tamper_ledger(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Endpoint not found: Demo mode is disabled",
         )
-    if identity.role not in (Role.AUDITOR, Role.PRINCIPAL):
+    if identity.role != Role.PRINCIPAL:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Forbidden: Role '{identity.role.value}' cannot simulate ledger tamper.",
@@ -682,7 +682,7 @@ def restore_ledger(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Endpoint not found: Demo mode is disabled",
         )
-    if identity.role not in (Role.AUDITOR, Role.PRINCIPAL):
+    if identity.role != Role.PRINCIPAL:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Forbidden: Role '{identity.role.value}' cannot restore ledger.",
@@ -757,19 +757,19 @@ def resolve_needs_review_endpoint(
 @router.post("/v1/reconcile/{request_id}", status_code=status.HTTP_200_OK)
 def reconcile_request(
     request_id: str,
-    payload: dict[str, Any],
     identity: Annotated[Identity, Depends(get_current_identity)],
     service: Annotated[AuthorizationService, Depends(get_authorization_service)],
+    payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Reconcile an ambiguous payment request outcome against confirmed rail status."""
-    if identity.role not in (Role.APPROVER, Role.PRINCIPAL, Role.AUDITOR):
+    if identity.role not in (Role.APPROVER, Role.PRINCIPAL):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Forbidden: Role '{identity.role.value}' cannot reconcile payments.",
         )
-    rail_status = payload.get("status")
+    _ = payload
     try:
-        new_state = service.reconcile(request_id, rail_status=rail_status)
+        new_state = service.reconcile(request_id)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
