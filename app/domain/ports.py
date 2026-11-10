@@ -40,6 +40,76 @@ class PaymentResult:
     transaction_id: str
     status: str
     details: dict[str, Any]
+    business_rejection: bool = False
+
+
+def may_release(result: PaymentResult | None) -> bool:
+    """Determine if a payment rail result permits releasing a budget reservation.
+
+    Fail-closed: returns True ONLY on confirmed business rejections from the provider.
+    Never releases on ambiguous outcomes, transient errors, timeouts, or network failures.
+    """
+    if result is None:
+        return False
+    if getattr(result, "business_rejection", False) is True:
+        return True
+    details = result.details if isinstance(result.details, dict) else {}
+    if details.get("business_rejection") is True:
+        return True
+    if (
+        getattr(result, "business_rejection", None) is False
+        and details.get("business_rejection") is False
+    ):
+        return False
+
+    status_upper = (result.status or "").upper()
+    AMBIGUOUS_OR_TRANSIENT = {
+        "RECONCILE",
+        "LOOKUP_FAILED",
+        "TIMEOUT",
+        "NETWORK_ERROR",
+        "CONNECTION_ERROR",
+        "PROCESSING",
+        "PENDING",
+        "UNKNOWN",
+        "ERROR",
+        "CAPTURE_AMBIGUOUS",
+        "TOKEN_ERROR",
+    }
+    if status_upper in AMBIGUOUS_OR_TRANSIENT:
+        return False
+
+    http_st = details.get("http_status")
+    if http_st in (408, 429, 500, 502, 503, 504):
+        return False
+
+    CONFIRMED_REJECTION_STATUSES = {
+        "DENIED",
+        "REJECTED",
+        "PAYOUT_REJECTED",
+        "CANCELED",
+        "EXPIRED",
+        "VOIDED",
+        "NOT_FOUND",
+        "RESOURCE_NOT_FOUND",
+    }
+    details_str = str(details).lower()
+    is_not_found = (
+        details.get("http_status") == 404
+        or details.get("name") in ("RESOURCE_NOT_FOUND", "INVALID_RESOURCE_ID")
+        or "not found" in details_str
+    )
+    if status_upper in CONFIRMED_REJECTION_STATUSES or is_not_found:
+        return True
+
+    return bool(
+        status_upper == "FAILED"
+        and (
+            getattr(result, "business_rejection", False) is True
+            or details.get("business_rejection") is True
+            or (isinstance(http_st, int) and 400 <= http_st < 500 and http_st not in (408, 429))
+        )
+    )
 
 
 @runtime_checkable

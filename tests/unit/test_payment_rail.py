@@ -77,7 +77,8 @@ def test_paypal_adapter_lookup_simulation_when_no_token(monkeypatch) -> None:
     monkeypatch.setattr(adapter, "_get_access_token", lambda: "")
     res = adapter.lookup("mock-tx-12345")
     assert res.success is False
-    assert res.status == "FAILED"
+    assert res.status in ("LOOKUP_FAILED", "RECONCILE")
+    assert res.business_rejection is False
     assert "credentials missing" in res.details.get("error", "").lower()
 
 

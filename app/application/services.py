@@ -43,7 +43,7 @@ from app.domain.policy import (
     PolicyState,
     evaluate_policy,
 )
-from app.domain.ports import ClockPort, LedgerPort, PaymentRail, PaymentResult
+from app.domain.ports import ClockPort, LedgerPort, PaymentRail, PaymentResult, may_release
 from app.domain.state_machine import RequestState, transition_request_state
 from app.infrastructure.crypto import (
     load_or_generate_keypair,
@@ -1211,12 +1211,7 @@ class AuthorizationService:
                                     response_payload=json.dumps(payload_meta),
                                 )
                     elif (
-                        is_ambiguous
-                        or rail_res.status == "RECONCILE"
-                        or not (
-                            rail_res.status == "FAILED"
-                            and rail_res.details.get("business_rejection") is True
-                        )
+                        is_ambiguous or rail_res.status == "RECONCILE" or not may_release(rail_res)
                     ):
                         current_req_state = transition_request_state(
                             current_req_state,
@@ -1557,10 +1552,7 @@ class AuthorizationService:
                         elif (
                             is_ambiguous
                             or rail_res.status == "RECONCILE"
-                            or not (
-                                rail_res.status == "FAILED"
-                                and rail_res.details.get("business_rejection") is True
-                            )
+                            or not may_release(rail_res)
                         ):
                             current_req_state = transition_request_state(
                                 current_req_state,
@@ -1805,7 +1797,11 @@ class AuthorizationService:
                         repo.confirm_reservation(held["reservation_id"])
                         new_st = transition_request_state(current_state, RequestState.SETTLED)
                         self._held_reservations.pop(request_id, None)
-                    elif status_norm in CONFIRMED_FAILURE and not is_ambiguous_error:
+                    elif (
+                        may_release(lookup_res)
+                        and status_norm in CONFIRMED_FAILURE
+                        and not is_ambiguous_error
+                    ):
                         repo.release_reservation(held["reservation_id"], confirmed_failure=True)
                         new_st = transition_request_state(current_state, RequestState.FAILED)
                         self._held_reservations.pop(request_id, None)
@@ -1898,7 +1894,11 @@ class AuthorizationService:
                             recorded_at_utc=now_utc,
                         )
                 return new_state
-            elif status_norm in CONFIRMED_FAILURE and not is_ambiguous_error:
+            elif (
+                may_release(lookup_res)
+                and status_norm in CONFIRMED_FAILURE
+                and not is_ambiguous_error
+            ):
                 new_state = transition_request_state(current_state, RequestState.FAILED)
                 self._request_states[request_id] = new_state
                 if held:
@@ -2051,13 +2051,23 @@ class AuthorizationService:
                             recorded_at_utc=now_utc,
                             provider_state="COMPLETED",
                         )
-                elif result.status == "FAILED":
+                elif may_release(result):
                     self._request_states[target_req_id] = RequestState.FAILED
                     if self._db_session_factory is not None and res_id:
                         with self._db_session_factory() as session, session.begin():
                             repo = BudgetRepository(session)
                             repo.release_reservation(res_id, confirmed_failure=True)
                     self._held_reservations.pop(target_req_id, None)
+                else:
+                    # Capture outcome is ambiguous: keep reservation held
+                    if (
+                        target_req_id in self._request_states
+                        and self._request_states[target_req_id] != RequestState.NEEDS_REVIEW
+                    ):
+                        self._request_states[target_req_id] = RequestState.RECONCILE
+                    held["state"] = self._request_states.get(
+                        target_req_id, RequestState.RECONCILE
+                    ).value
 
             return result
 
@@ -2285,8 +2295,8 @@ class AuthorizationService:
                                 provider_state=provider_status,
                             )
                     return new_state
-                elif provider_status in CONFIRMED_FAILURE:
-                    new_state = self.reconcile(request_id, rail_status=provider_status)
+                elif may_release(lookup_res) and provider_status in CONFIRMED_FAILURE:
+                    new_state = self.reconcile(request_id)
                     intent = held.get("intent")
                     if intent:
                         dom_res = PolicyEvaluationResult(
@@ -2332,22 +2342,15 @@ class AuthorizationService:
                         "provider lookup returned LOOKUP_FAILED; cannot confirm failure."
                     )
 
-                details = lookup_res.details or {}
-                details_str = str(details).lower()
-                is_not_found = (
-                    provider_status in ("NOT_FOUND", "RESOURCE_NOT_FOUND")
-                    or details.get("http_status") == 404
-                    or details.get("name") in ("RESOURCE_NOT_FOUND", "INVALID_RESOURCE_ID")
-                    or "not found" in details_str
-                )
-                is_confirmed_fail = (provider_status in CONFIRMED_FAILURE) or is_not_found
+                is_confirmed_fail = may_release(lookup_res)
                 if not is_confirmed_fail:
                     raise ValueError(
                         f"Cannot mark transaction '{request_id}' as failed: "
                         f"provider status is '{provider_status}', "
-                        "which is not a confirmed failure or not-found."
+                        "which is not a confirmed business rejection; "
+                        "not a confirmed failure or not-found."
                     )
-                new_state = self.reconcile(request_id, rail_status="FAILED")
+                new_state = self.reconcile(request_id)
                 intent = held.get("intent")
                 if intent:
                     dom_res = PolicyEvaluationResult(
