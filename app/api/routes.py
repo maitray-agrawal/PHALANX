@@ -783,6 +783,26 @@ def reconcile_request(
 
 processed_webhook_events: set[str] = set()
 
+EXACT_PAYPAL_EVENT_TYPES: set[str] = {
+    # Orders v2 / Captures
+    "PAYMENT.CAPTURE.COMPLETED",
+    "PAYMENT.CAPTURE.DENIED",
+    "PAYMENT.CAPTURE.DECLINED",
+    "PAYMENT.CAPTURE.REFUNDED",
+    "PAYMENT.CAPTURE.REVERSED",
+    "CHECKOUT.ORDER.APPROVED",
+    "CHECKOUT.ORDER.COMPLETED",
+    # Payouts
+    "PAYMENT.PAYOUTS-ITEM.SUCCEEDED",
+    "PAYMENT.PAYOUTS-ITEM.FAILED",
+    "PAYMENT.PAYOUTS-ITEM.CANCELED",
+    "PAYMENT.PAYOUTS-ITEM.DENIED",
+    "PAYMENT.PAYOUTS-ITEM.BLOCKED",
+    "PAYMENT.PAYOUTSBATCH.SUCCESS",
+    "PAYMENT.PAYOUTSBATCH.DENIED",
+    "PAYMENT.PAYOUTSBATCH.PROCESSING",
+}
+
 
 @router.post("/v1/webhooks/paypal", status_code=status.HTTP_200_OK)
 async def paypal_webhook(
@@ -826,23 +846,16 @@ async def paypal_webhook(
             return {"status": "duplicate_ignored", "event_id": event_id}
         processed_webhook_events.add(event_id)
 
-    # Trigger reconciliation if the webhook maps to an in-flight transaction
+    event_type = str(data.get("event_type", "")).upper() if isinstance(data, dict) else ""
+    if event_type not in EXACT_PAYPAL_EVENT_TYPES:
+        return {"status": "ignored_unhandled_event", "event_id": event_id or "unknown"}
+
+    # Trigger reconciliation via provider lookup; never settle or release based on caller status
     resource = data.get("resource", {}) if isinstance(data, dict) else {}
     resource_id = resource.get("id") or resource.get("payout_batch_id")
-    event_type = str(data.get("event_type", "")).upper() if isinstance(data, dict) else ""
-
-    inferred_rail_status: str | None = None
-    if any(k in event_type for k in ("COMPLETED", "SUCCESS", "CAPTURED")):
-        inferred_rail_status = "COMPLETED"
-    elif any(
-        k in event_type for k in ("DENIED", "FAILED", "REJECTED", "CANCEL", "VOID", "EXPIRED")
-    ):
-        inferred_rail_status = "FAILED"
 
     if resource_id:
-        reconciled = reconciler.reconcile_by_transaction_id(
-            str(resource_id), rail_status=inferred_rail_status, force=True
-        )
+        reconciled = reconciler.reconcile_by_transaction_id(str(resource_id), force=True)
         if reconciled:
             return {
                 "status": "processed",

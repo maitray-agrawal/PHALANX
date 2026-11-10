@@ -619,11 +619,7 @@ def test_webhook_triggers_reconciliation(session_factory):
     client = TestClient(app)
 
     # Configure fake rail with valid signature fixture
-    test_rail = FakePaymentRail(
-        should_succeed=True,
-        status="RECONCILE",
-        valid_signatures={"test-recon-webhook-sig"},
-    )
+    test_rail = FakePaymentRail(should_succeed=True, status="RECONCILE")
     app.dependency_overrides[get_payment_rail] = lambda: test_rail
 
     clock = SystemUtcClock()
@@ -682,6 +678,240 @@ def test_webhook_triggers_reconciliation(session_factory):
     assert final_state == RequestState.SETTLED
 
     app.dependency_overrides.clear()
+
+
+def test_webhook_maps_only_exact_paypal_event_types(session_factory):
+    """Webhook must ignore unmapped event types and process only exact PayPal events."""
+    from app.main import app
+    from starlette.testclient import TestClient
+
+    clock = SystemUtcClock()
+    test_rail = FakePaymentRail(should_succeed=True, status="RECONCILE")
+    ledger = InMemoryLedgerAdapter()
+    mandate_service = MandateService(clock=clock, db_session_factory=session_factory)
+    auth_service = AuthorizationService(
+        clock=clock,
+        ledger=ledger,
+        mandate_service=mandate_service,
+        payment_rail=test_rail,
+        db_session_factory=session_factory,
+    )
+    reconciler = ReconcilerService(
+        auth_service=auth_service,
+        payment_rail=test_rail,
+        clock=clock,
+        db_session_factory=session_factory,
+        max_age_seconds=86400,
+    )
+    from app.api.dependencies import (
+        get_authorization_service,
+        get_payment_rail,
+        get_reconciler_service,
+    )
+
+    app.dependency_overrides[get_payment_rail] = lambda: test_rail
+    app.dependency_overrides[get_authorization_service] = lambda: auth_service
+    app.dependency_overrides[get_reconciler_service] = lambda: reconciler
+    client = TestClient(app)
+
+    try:
+        agent_id = f"agent_evt_{uuid.uuid4().hex[:8]}"
+        mandate_id = f"mandate_{uuid.uuid4().hex[:8]}"
+        _seed_agent_mandate_and_budget(session_factory, agent_id, mandate_id, 100_000, clock)
+
+        cmd = AuthorizeTransactionCommand(
+            agent_id=agent_id,
+            recipient_id="vendor-paypal-sandbox-1",
+            amount_minor=5000,
+            currency="USD",
+            purpose="Event mapping test",
+            idempotency_key=f"idem_{uuid.uuid4().hex}",
+        )
+        auth_resp = auth_service.authorize(cmd)
+        tx_id = auth_resp.payout_id
+
+        # 1. Fuzzy or unmapped event containing 'COMPLETED' substring like 'UNKNOWN.SUBSCRIPTION.COMPLETED'
+        # must be ignored, NOT trigger settlement
+        headers = {
+            "PAYPAL-TRANSMISSION-SIG": "test-recon-webhook-sig",
+            "PAYPAL-CERT-URL": "https://api-m.sandbox.paypal.com/cert.pem",
+            "PAYPAL-TRANSMISSION-ID": f"trans_{uuid.uuid4().hex[:8]}",
+            "PAYPAL-AUTH-ALGO": "SHA256withRSA",
+            "PAYPAL-TRANSMISSION-TIME": "2026-11-01T12:00:00Z",
+        }
+        resp = client.post(
+            "/v1/webhooks/paypal",
+            json={
+                "id": f"WH-IGN-{uuid.uuid4().hex[:8]}",
+                "event_type": "UNKNOWN.SUBSCRIPTION.COMPLETED",
+                "resource": {"id": tx_id},
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json().get("status") in ("ignored_unhandled_event", "ignored")
+        assert auth_service.get_request_state(auth_resp.request_id) == RequestState.RECONCILE
+
+        # 2. Exact event type PAYMENT.CAPTURE.COMPLETED is accepted
+        test_rail.set_lookup_result(
+            tx_id,
+            PaymentResult(
+                success=True, transaction_id=tx_id, status="COMPLETED", details={}
+            ),
+        )
+        resp2 = client.post(
+            "/v1/webhooks/paypal",
+            json={
+                "id": f"WH-ACC-{uuid.uuid4().hex[:8]}",
+                "event_type": "PAYMENT.CAPTURE.COMPLETED",
+                "resource": {"id": tx_id},
+            },
+            headers=headers,
+        )
+        assert resp2.status_code == 200
+        assert resp2.json().get("status") == "processed"
+        assert auth_service.get_request_state(auth_resp.request_id) == RequestState.SETTLED
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_webhook_always_looks_up_before_release_or_settle(session_factory):
+    """Webhook must always lookup rail and NEVER settle/release on unconfirmed provider state."""
+    from app.main import app
+    from starlette.testclient import TestClient
+
+    clock = SystemUtcClock()
+    test_rail = FakePaymentRail(should_succeed=True, status="RECONCILE")
+    ledger = InMemoryLedgerAdapter()
+    mandate_service = MandateService(clock=clock, db_session_factory=session_factory)
+    auth_service = AuthorizationService(
+        clock=clock,
+        ledger=ledger,
+        mandate_service=mandate_service,
+        payment_rail=test_rail,
+        db_session_factory=session_factory,
+    )
+    reconciler = ReconcilerService(
+        auth_service=auth_service,
+        payment_rail=test_rail,
+        clock=clock,
+        db_session_factory=session_factory,
+        max_age_seconds=86400,
+    )
+    from app.api.dependencies import (
+        get_authorization_service,
+        get_payment_rail,
+        get_reconciler_service,
+    )
+
+    app.dependency_overrides[get_payment_rail] = lambda: test_rail
+    app.dependency_overrides[get_authorization_service] = lambda: auth_service
+    app.dependency_overrides[get_reconciler_service] = lambda: reconciler
+    client = TestClient(app)
+
+    try:
+        agent_id = f"agent_hook_lookup_{uuid.uuid4().hex[:8]}"
+        mandate_id = f"mandate_{uuid.uuid4().hex[:8]}"
+        _seed_agent_mandate_and_budget(session_factory, agent_id, mandate_id, 100_000, clock)
+
+        cmd = AuthorizeTransactionCommand(
+            agent_id=agent_id,
+            recipient_id="vendor-paypal-sandbox-1",
+            amount_minor=5000,
+            currency="USD",
+            purpose="Webhook lookup invariant test",
+            idempotency_key=f"idem_{uuid.uuid4().hex}",
+        )
+        auth_resp = auth_service.authorize(cmd)
+        tx_id = auth_resp.payout_id
+
+        headers = {
+            "PAYPAL-TRANSMISSION-SIG": "test-recon-webhook-sig",
+            "PAYPAL-CERT-URL": "https://api-m.sandbox.paypal.com/cert.pem",
+            "PAYPAL-TRANSMISSION-ID": f"trans_{uuid.uuid4().hex[:8]}",
+            "PAYPAL-AUTH-ALGO": "SHA256withRSA",
+            "PAYPAL-TRANSMISSION-TIME": "2026-11-01T12:00:00Z",
+        }
+
+        # 1. Event claims PAYMENT.CAPTURE.COMPLETED, but provider lookup returns LOOKUP_FAILED (transient error).
+        # MUST NOT settle!
+        test_rail.set_lookup_result(
+            tx_id,
+            PaymentResult(
+                success=False,
+                transaction_id=tx_id,
+                status="LOOKUP_FAILED",
+                details={"business_rejection": False},
+                business_rejection=False,
+            ),
+        )
+        resp1 = client.post(
+            "/v1/webhooks/paypal",
+            json={
+                "id": f"WH-LOOKUP-FAIL-{uuid.uuid4().hex[:8]}",
+                "event_type": "PAYMENT.CAPTURE.COMPLETED",
+                "resource": {"id": tx_id},
+            },
+            headers=headers,
+        )
+        assert resp1.status_code == 200
+        # State must remain held (NEEDS_REVIEW or RECONCILE), never SETTLED without provider confirmation
+        assert auth_service.get_request_state(auth_resp.request_id) in (
+            RequestState.RECONCILE,
+            RequestState.NEEDS_REVIEW,
+        )
+        assert auth_service.get_request_state(auth_resp.request_id) != RequestState.SETTLED
+
+        # 2. Event claims PAYMENT.PAYOUTS-ITEM.FAILED, but provider lookup returns 500 error / ambiguous.
+        # MUST NOT release!
+        test_rail.set_lookup_result(
+            tx_id,
+            PaymentResult(
+                success=False,
+                transaction_id=tx_id,
+                status="RECONCILE",
+                details={"http_status": 500, "business_rejection": False},
+                business_rejection=False,
+            ),
+        )
+        resp2 = client.post(
+            "/v1/webhooks/paypal",
+            json={
+                "id": f"WH-FAIL-AMBIG-{uuid.uuid4().hex[:8]}",
+                "event_type": "PAYMENT.PAYOUTS-ITEM.FAILED",
+                "resource": {"id": tx_id},
+            },
+            headers=headers,
+        )
+        assert resp2.status_code == 200
+        # Still not released: state must stay RECONCILE
+        assert auth_service.get_request_state(auth_resp.request_id) == RequestState.RECONCILE
+
+        # 3. Event claims PAYMENT.PAYOUTS-ITEM.FAILED, and provider lookup confirms business rejection:
+        # NOW it releases!
+        test_rail.set_lookup_result(
+            tx_id,
+            PaymentResult(
+                success=False,
+                transaction_id=tx_id,
+                status="FAILED",
+                details={"error": "Explicit rejection", "business_rejection": True},
+                business_rejection=True,
+            ),
+        )
+        resp3 = client.post(
+            "/v1/webhooks/paypal",
+            json={
+                "id": f"WH-FAIL-CONFIRMED-{uuid.uuid4().hex[:8]}",
+                "event_type": "PAYMENT.PAYOUTS-ITEM.FAILED",
+                "resource": {"id": tx_id},
+            },
+            headers=headers,
+        )
+        assert resp3.status_code == 200
+        assert auth_service.get_request_state(auth_resp.request_id) == RequestState.FAILED
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_lookup_failed_never_releases_budget_and_stays_held(db_engine):

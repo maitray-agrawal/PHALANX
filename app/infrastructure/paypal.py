@@ -81,7 +81,11 @@ class FakePaymentRail(PaymentRail):
         self.valid_signatures = (
             valid_signatures
             if valid_signatures is not None
-            else {"fixture-valid-test-sig", "valid_mock_signature_test_123"}
+            else {
+                "fixture-valid-test-sig",
+                "valid_mock_signature_test_123",
+                "test-recon-webhook-sig",
+            }
         )
         self.lookup_results: dict[str, PaymentResult] = {}
         if business_rejection is not None:
