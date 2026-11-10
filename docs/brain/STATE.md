@@ -1,13 +1,13 @@
 # STATE (update after every task)
-Date: 10 Nov 2026 | Branch: dev | Last pushed commit on main: 2332aef | CI: passing (run 42807377469)
-Working tree: clean | M0 complete, hardened & all reviewer findings resolved; T8 Real LLM Invoice Agent implemented
-Completed: T1, T2 (H1-H7), T3/T4 (N1, U1), M0 Hardening (H8, H9, H10 closed), M0 Invariants (reconcile untrusted status removed, role auditor restricted, idempotent replay real state, may_release helper on all sites, FakePaymentRail business_rejection, exact paypal webhook events & lookup), T8 Real LLM Invoice Agent & Gemini Adapter | Doing: T8 verification & CI | Next: T5 | Blocked on me: nothing
+Date: 10 Nov 2026 | Branch: dev | Last pushed commit on main: 2332aef | CI: passing (run 42816173523)
+Working tree: clean | M0 complete, hardened & all reviewer findings resolved; T8 Real LLM Invoice Agent complete with green CI
+Completed: T1, T2 (H1-H7), T3/T4 (N1, U1), M0 Hardening (H8, H9, H10 closed), M0 Invariants (reconcile untrusted status removed, role auditor restricted, idempotent replay real state, may_release helper on all sites, FakePaymentRail business_rejection, exact paypal webhook events & lookup), T8 Real LLM Invoice Agent & Gemini Adapter | Doing: T5 | Next: T5 | Blocked on me: nothing
 Database password rotated 7 Nov; verified live 9 Nov (active connection ok, old passwords rejected). Hosting: nothing deployed.
 
 ---
 
 # context.md
-Phase: R13 Live PayPal Sandbox (Orders v2 Two-Phase Flow, Payouts 403 Restricted Proof, Webhook Verification) + T8 Invoice Agent   Branches: main, dev   Last green CI: https://github.com/maitray-agrawal/PHALANX/actions/runs/42807377469
+Phase: R13 Live PayPal Sandbox (Orders v2 Two-Phase Flow, Payouts 403 Restricted Proof, Webhook Verification) + T8 Invoice Agent   Branches: main, dev   Last green CI: https://github.com/maitray-agrawal/PHALANX/actions/runs/42816173523
 Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
 - app/domain: Pure deterministic policy engine, Ed25519 mandate invariants, canonical RFC 8785 JSON, cryptographic hash-chained ledger. AST purity test enforced.
 - app/application: AuthorizationService, MandateService, LedgerService, InvoiceAgent (autonomous supplier invoice ingestion with strict prompt delimiter isolation and deterministic PHALANX policy boundary), ProviderAgnosticLLMClient (quotas, timeouts, retries), IntentExtractor, GroundedExplanationValidator, PrincipalSessionMemory, DeterministicKnowledgeBase, CompositeAdvisoryPipeline.
