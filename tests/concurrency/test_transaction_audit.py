@@ -704,7 +704,14 @@ def test_f6_reconcile_confirmed_failure_transitions_to_released(db_session_facto
             transaction_id="tx_fail_01",
             status="PAYOUT_EXCEPTION",
             details={"error": "Network timeout"},
-        )
+        ),
+        lookup_result=PaymentResult(
+            success=False,
+            transaction_id="tx_fail_01",
+            status="FAILED",
+            details={"error": "Confirmed provider rejection"},
+            business_rejection=True,
+        ),
     )
     authz = AuthorizationService(
         clock=clock,
