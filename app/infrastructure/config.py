@@ -87,12 +87,33 @@ class Settings(BaseSettings):
     mandate_signing_key_hex: str = Field(default="")
     mandate_signing_key_file: str = Field(default="")
 
+    # Scheduled reconciliation secret (external cron; constant-time compare)
+    reconcile_secret: str = Field(
+        default="",
+        description="Secret for POST /v1/admin/reconcile-scheduled; min 24 chars when set",
+    )
+
     # LLM & AI Guardrails (Manual 41-44)
     llm_model_name: str = Field(default="gpt-4o-mini")
     llm_timeout_seconds: float = Field(default=5.0)
     llm_max_retries: int = Field(default=2)
     llm_token_cap_per_identity: int = Field(default=50_000)
     llm_cost_cap_dollars_per_identity: float = Field(default=2.0)
+
+    @field_validator("database_url", mode="after")
+    @classmethod
+    def require_ssl_for_neon(cls, v: str) -> str:
+        """Warn when DATABASE_URL targets Neon but lacks sslmode=require.
+
+        Neon rejects plain-text connections; fail loudly so the error is
+        obvious at startup rather than at the first query.
+        """
+        if "neon.tech" in v and "sslmode" not in v:
+            raise ValueError(
+                "DATABASE_URL targets Neon but is missing '?sslmode=require'. "
+                "Append '?sslmode=require' to the connection string."
+            )
+        return v
 
 
 settings = Settings()

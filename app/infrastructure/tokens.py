@@ -55,7 +55,7 @@ class TokenSignatureError(TokenError):
 
 def is_test_environment() -> bool:
     """Check if execution is running in test mode."""
-    if settings.environment.lower() in ("production", "staging", "prod"):
+    if settings.environment.lower() in ("production", "staging", "prod", "demo"):
         return False
     return (
         settings.environment.lower() in ("test", "testing") or "PYTEST_CURRENT_TEST" in os.environ

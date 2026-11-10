@@ -1785,6 +1785,8 @@ class AuthorizationService:
 
             now_utc = self._clock.now_utc()
             created_at = held.get("created_at_utc", now_utc) if held else now_utc
+            if created_at and created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=UTC)
             age_seconds = (now_utc - created_at).total_seconds() if created_at else 0
             is_ambiguous_error = status_norm in AMBIGUOUS_ERRORS
 

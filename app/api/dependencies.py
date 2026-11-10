@@ -21,7 +21,7 @@ from app.infrastructure.paypal import FakePaymentRail, PayPalPaymentRailAdapter
 
 
 def is_test_environment() -> bool:
-    if settings.environment.lower() in ("production", "staging", "prod"):
+    if settings.environment.lower() in ("production", "staging", "prod", "demo"):
         return False
     return (
         "pytest" in sys.modules

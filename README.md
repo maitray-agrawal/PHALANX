@@ -44,44 +44,25 @@ Agent Request (JSON)
 
 ## Running Locally
 
-### Docker Compose
 ```bash
 docker compose up --build
 ```
-The API is available at `http://localhost:8000` and the web UI at `http://localhost:5173`.
-
-### Local Development
-```bash
-# Backend
-uv sync
-uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
-
-# Frontend
-cd web
-npm install
-npm run dev
-```
+API: `http://localhost:8000`, Web UI: `http://localhost:5173`.
 
 ## Running Tests
 
-Run the test suite without hardcoded metric expectations:
-
 ```bash
-# Backend unit and integration suite
-uv run pytest -q
-
-# Adversarial red-team suite
-uv run pytest -q -m redteam
-
-# Linters and type checking
-uv run ruff check . && uv run ruff format --check .
-uv run mypy app
-
-# Frontend tests and production build
+uv run pytest -q && uv run pytest -q -m redteam
+uv run ruff check . && uv run ruff format --check . && uv run mypy app
 cd web && npm test -- --run && npm run build
 ```
 
-Empirical test counts, latency distributions, and benchmark details are documented in [docs/testing.md](docs/testing.md).
+## Run the Demo
+
+- **Hosted Demo**: `https://phalanx-demo.onrender.com` (placeholder; set after deployment).
+- **Cold Starts**: Render free instances spin down after 15 minutes of inactivity; first request takes 30–60s.
+- **Local Path**: `docker compose up --build` (API on `http://localhost:8000`, UI on `http://localhost:5173`).
+- **Honest Limits**: Free-tier deployment, in-memory webhook deduplication (resets on container restart), PayPal sandbox only.
 
 ## Demo Mode
 

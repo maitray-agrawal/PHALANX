@@ -1,50 +1,74 @@
-# Render Blueprint configuration for PHALANX
-# Purpose: Authorization & Governance layer for Autonomous Financial Agents (PayPal AI Hackathon 2026)
-# Database Plan: Starter (persists through evaluation & judging through 15 Dec 2026; free tier expires after 30 days)
+# Render deployment manifest for PHALANX
+# Runtime: Docker (builds from Dockerfile in repo root)
+# Plan: free
+#
+# autoDeploy: false — the CI workflow's deploy job calls RENDER_DEPLOY_HOOK on
+# every green push to main. Using both autoDeploy and the hook would trigger
+# two deployments per push; autoDeploy: false avoids that conflict.
+#
+# healthCheckPath: /healthz — liveness probe only; never touches the database.
+# /readyz is the DB-checking readiness probe (not used by Render health check).
+#
+# All secrets have sync: false. Set them manually in the Render Environment UI.
+# Never commit secret values to this file.
 
 services:
   - type: web
-    name: phalanx-governance
+    name: phalanx
     runtime: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
     region: oregon
-    plan: starter
+    plan: free
     branch: main
     healthCheckPath: /healthz
+    autoDeploy: false
     envVars:
-      - key: PORT
-        value: 8000
-      - key: ENVIRONMENT
-        value: production
-      - key: DEMO_MODE
-        value: "true"
-      - key: LOG_LEVEL
-        value: INFO
-      - key: PAYMENT_RAIL
-        value: paypal
-      - key: DATABASE_URL
-        fromDatabase:
-          name: phalanx-postgres
-          property: connectionString
+      # ---- Secrets: set manually in Render dashboard (sync: false) ----------
       - key: SECRET_KEY
-        generateValue: true
+        sync: false
       - key: ADMIN_TOKEN
-        generateValue: true
+        sync: false
       - key: PAYPAL_CLIENT_ID
         sync: false
       - key: PAYPAL_CLIENT_SECRET
         sync: false
       - key: PAYPAL_WEBHOOK_ID
         sync: false
+      - key: MANDATE_SIGNING_KEY_HEX
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: RECONCILE_SECRET
+        sync: false
+      # DATABASE_URL must include ?sslmode=require for Neon (see docs/evidence/neon-manual-setup.md)
+      - key: DATABASE_URL
+        sync: false
+      # ---- Non-secret configuration -----------------------------------------
+      - key: PORT
+        value: "10000"
+      - key: ENVIRONMENT
+        value: demo
+      - key: DEMO_MODE
+        value: "true"
+      - key: DEMO_SEED
+        value: "true"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: PAYMENT_RAIL
+        value: paypal
       - key: PAYPAL_ENVIRONMENT
         value: sandbox
+      - key: RECONCILER_ENABLED
+        value: "false"
+      # Render routes through two proxy hops (Cloudflare edge + Render LB).
+      # Set TRUSTED_PROXY_COUNT=2 so extract_client_ip correctly peels the two
+      # rightmost hops and returns the real client IP as the leftmost XFF entry.
+      - key: TRUSTED_PROXY_COUNT
+        value: "2"
+      - key: FORWARDED_ALLOW_IPS
+        value: "*"
+      - key: GEMINI_MODEL
+        value: gemini-1.5-flash
       - key: ALLOWED_HOSTS
-        value: "phalanx-governance.onrender.com,localhost,127.0.0.1"
-
-databases:
-  - name: phalanx-postgres
-    databaseName: phalanx_db
-    user: phalanx_app
-    region: oregon
-    plan: starter
+        value: "*"

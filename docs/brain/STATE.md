@@ -1,8 +1,8 @@
 # STATE (update after every task)
 Date: 10 Nov 2026 | Branch: dev | Last pushed commit on main: 2332aef | CI: passing (run 42816173523)
-Working tree: clean | M0 complete, hardened & all reviewer findings resolved; T8 Real LLM Invoice Agent complete with green CI
-Completed: T1, T2 (H1-H7), T3/T4 (N1, U1), M0 Hardening (H8, H9, H10 closed), M0 Invariants (reconcile untrusted status removed, role auditor restricted, idempotent replay real state, may_release helper on all sites, FakePaymentRail business_rejection, exact paypal webhook events & lookup), T8 Real LLM Invoice Agent & Gemini Adapter | Doing: T5 | Next: T5 | Blocked on me: nothing
-Database password rotated 7 Nov; verified live 9 Nov (active connection ok, old passwords rejected). Hosting: nothing deployed.
+Working tree: clean | M0 complete, hardened; T8 Real LLM Invoice Agent complete; D1 Render & Neon deployment ready
+Completed: T1, T2 (H1-H7), T3/T4 (N1, U1), M0 Hardening (H8-H10 closed), M0 Invariants (reconcile, auditor role, idempotent replay, may_release, exact webhooks), T8 Real LLM Invoice Agent, D1 Free Hosted Demo Config (render.yaml, Neon setup, healthz DB-isolation, reconcile-scheduled endpoint, demo env model, proxy-aware rate limits) | Doing: D1 verification | Next: T5 | Blocked on me: nothing
+Database password rotated 7 Nov; verified live 9 Nov (active connection ok, old passwords rejected). Hosting: Render + Neon manifests ready; awaiting user dashboard action.
 
 ---
 

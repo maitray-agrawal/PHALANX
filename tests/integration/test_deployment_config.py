@@ -17,9 +17,9 @@ def test_database_url_normalization_postgres() -> None:
     assert s1.database_url.startswith("postgresql+psycopg://")
     assert "user:pass@render-db.internal:5432/phalanx_db" in s1.database_url
 
-    s2 = Settings(database_url="postgresql://user:pass@neon.tech:5432/phalanx_db")
+    s2 = Settings(database_url="postgresql://user:pass@neon.tech:5432/phalanx_db?sslmode=require")
     assert s2.database_url.startswith("postgresql+psycopg://")
-    assert "user:pass@neon.tech:5432/phalanx_db" in s2.database_url
+    assert "user:pass@neon.tech:5432/phalanx_db?sslmode=require" in s2.database_url
 
     s3 = Settings(database_url="sqlite:///./test.db")
     assert s3.database_url == "sqlite:///./test.db"

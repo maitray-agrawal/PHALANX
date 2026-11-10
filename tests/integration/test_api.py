@@ -12,9 +12,12 @@ from app.infrastructure.tokens import Role, create_role_token
 
 
 def test_api_healthz_endpoint(client: TestClient) -> None:
-    response = client.get("/healthz")
-    assert response.status_code == status.HTTP_200_OK
-    assert response.json() == {"status": "ok"}
+    """Liveness probe (/healthz) must return 200 OK without accessing the database."""
+    with patch("app.api.routes.check_database_readiness") as mock_db:
+        response = client.get("/healthz")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"status": "ok"}
+        mock_db.assert_not_called()
 
 
 def test_api_readyz_endpoint_success(client: TestClient) -> None:
@@ -253,3 +256,78 @@ def test_reconcile_forged_completed_and_failed_bodies_change_nothing(
     assert resp_fail.status_code == status.HTTP_200_OK
     assert resp_fail.json()["state"] == "SETTLED"
     assert test_authorization_service.get_request_state(req_id) == RequestState.SETTLED
+
+
+def test_reconcile_scheduled_endpoint_auth_and_rate_limits(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """POST /v1/admin/reconcile-scheduled tests:
+    - Missing or wrong secret -> 401 Unauthorized
+    - Unconfigured secret -> 503 Service Unavailable
+    - Valid secret -> 200 OK
+    - Rate limit exceeded -> 429 Too Many Requests
+    """
+    from app.api.routes import _reconcile_scheduled_rate_limits
+    from app.infrastructure.config import settings
+
+    _reconcile_scheduled_rate_limits.clear()
+    valid_secret = "scheduled-reconcile-super-secret-key-24chars"
+    monkeypatch.setattr(settings, "reconcile_secret", valid_secret)
+
+    # 1. Missing secret header -> 401
+    resp_no_secret = client.post("/v1/admin/reconcile-scheduled")
+    assert resp_no_secret.status_code == status.HTTP_401_UNAUTHORIZED
+    assert "missing or invalid" in resp_no_secret.json()["detail"].lower()
+
+    # 2. Wrong secret header -> 401
+    resp_wrong = client.post(
+        "/v1/admin/reconcile-scheduled",
+        headers={"X-Reconcile-Secret": "wrong-secret-value-1234567890"},
+    )
+    assert resp_wrong.status_code == status.HTTP_401_UNAUTHORIZED
+
+    # 3. Unconfigured / short secret -> 503
+    monkeypatch.setattr(settings, "reconcile_secret", "short")
+    resp_unconfigured = client.post(
+        "/v1/admin/reconcile-scheduled",
+        headers={"X-Reconcile-Secret": "short"},
+    )
+    assert resp_unconfigured.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    monkeypatch.setattr(settings, "reconcile_secret", valid_secret)
+
+    # Clear rate limit counter before testing the rate limit progression
+    _reconcile_scheduled_rate_limits.clear()
+
+    # 4. Valid secret -> 5 allowed calls per minute
+    for _ in range(5):
+        resp_call = client.post(
+            "/v1/admin/reconcile-scheduled",
+            headers={"X-Reconcile-Secret": valid_secret},
+        )
+        assert resp_call.status_code == status.HTTP_200_OK
+        assert resp_call.json()["status"] == "reconciliation_completed"
+
+    # 5. 6th call exceeds the 5-per-minute cap -> 429 Too Many Requests
+    resp_limited = client.post(
+        "/v1/admin/reconcile-scheduled",
+        headers={"X-Reconcile-Secret": valid_secret},
+    )
+    assert resp_limited.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+    assert "rate limit exceeded" in resp_limited.json()["detail"].lower()
+
+
+def test_admin_reset_allowed_in_demo_environment(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verify /v1/admin/reset is permitted in demo environment with valid admin token."""
+    from app.infrastructure.config import settings
+
+    monkeypatch.setenv("ENVIRONMENT", "demo")
+    monkeypatch.setattr(settings, "environment", "demo")
+
+    resp = client.post(
+        "/v1/admin/reset",
+        headers={"X-Admin-Token": settings.admin_token},
+    )
+    assert resp.status_code == status.HTTP_200_OK
+    assert resp.json()["status"] == "reset_completed"

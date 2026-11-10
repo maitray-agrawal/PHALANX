@@ -987,6 +987,54 @@ def admin_reconcile(
     return {"status": "reconciliation_completed", "metrics": metrics}
 
 
+# External Cron Reconciliation Endpoint (POST /v1/admin/reconcile-scheduled)
+
+_reconcile_scheduled_rate_limits: dict[str, list[float]] = {}
+
+
+@router.post("/v1/admin/reconcile-scheduled", status_code=status.HTTP_200_OK)
+def reconcile_scheduled(
+    request: Request,
+    x_reconcile_secret: Annotated[str | None, Header(alias="X-Reconcile-Secret")] = None,
+    reconciler: Annotated[Any, Depends(get_reconciler_service)] = None,
+) -> dict[str, Any]:
+    """Trigger one reconciliation pass from an external cron (e.g. Render Cron Jobs).
+
+    Authentication: constant-time compare of X-Reconcile-Secret header against
+    RECONCILE_SECRET env var (must be >= 24 characters).  Returns 401 for a
+    missing or wrong secret; 429 when the per-IP rate limit is exceeded (max 5
+    calls/minute to guard against accidental hammering from a misconfigured cron).
+    """
+    # Rate limit: 5 calls/minute per client IP (cron callers, not interactive users)
+    client_ip = extract_client_ip(request)
+    now = time.time()
+    history = _reconcile_scheduled_rate_limits.setdefault(client_ip, [])
+    _reconcile_scheduled_rate_limits[client_ip] = [t for t in history if now - t < 60.0]
+    if len(_reconcile_scheduled_rate_limits[client_ip]) >= 5:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Rate limit exceeded: reconcile-scheduled allows 5 calls per minute.",
+        )
+    _reconcile_scheduled_rate_limits[client_ip].append(now)
+
+    expected = settings.reconcile_secret
+    if not expected or len(expected) < 24:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Reconcile-scheduled disabled: RECONCILE_SECRET not configured or too short.",
+        )
+    if not x_reconcile_secret or not hmac.compare_digest(
+        x_reconcile_secret.encode("utf-8"), expected.encode("utf-8")
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized: missing or invalid X-Reconcile-Secret.",
+        )
+
+    metrics = reconciler.reconcile_all(force=True)
+    return {"status": "reconciliation_completed", "metrics": metrics}
+
+
 # Cockpit Overview & Activity Feed Endpoints (GET /v1/overview, GET /v1/activity)
 
 
@@ -1467,7 +1515,7 @@ def process_invoice(
     identity: Annotated[Identity, Depends(get_current_identity)],
     service: Annotated[AuthorizationService, Depends(get_authorization_service)],
 ) -> dict[str, Any]:
-    """Invoice Agent parses supplier invoice text and requests PHALANX authorization."""
+    """Invoice Agent parses supplier invoice text, proposes intent, requests authorization."""
     from app.application.invoice_agent import InvoiceAgent
 
     agent_id = identity.agent_id or "agent-auto-1"
