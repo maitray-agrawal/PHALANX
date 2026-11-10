@@ -24,3 +24,8 @@ Changed: .trivyignore, Dockerfile, tests/load/test_paypal_stub_workload.py, test
 Commands: git push origin dev (c545c66); GitHub Actions run 42638236207 (all 8 jobs green: Frontend, Bandit, Backend, Compose, Gitleaks, Red Team, Docker, Dependencies).
 Findings closed: All M0 hardening items verified green in CI.
 Next: T5 (Reviewer R1 hostile review).
+2026-11-10 | M0: Untrusted status removed, idempotent replay real state, may_release helper routing, exact webhook events.
+Changed: routes.py, services.py, ports.py, paypal.py, test_api.py, test_reconciliation.py, test_may_release_and_rail.py, test_transaction_audit.py.
+Commands: pytest -q (400 passed in 149.85s); pytest -m redteam (105 passed); npm test (28 passed); ruff check, ruff format, mypy app clean.
+Findings closed: M0 items 1-5 verified with targeted failing tests and full suites.
+Next: Push dev to origin and verify CI.

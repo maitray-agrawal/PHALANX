@@ -1,7 +1,7 @@
 # STATE (update after every task)
-Date: 9 Nov 2026 | Branch: dev | Last pushed commit on main: 2332aef | CI: passing (run 42638236207)
+Date: 10 Nov 2026 | Branch: dev | Last pushed commit on main: 2332aef | CI: passing (run 42638236207)
 Working tree: clean | M0 complete, hardened & all reviewer findings resolved
-Completed: T1, T2 (H1-H7), T3/T4 (N1, U1), M0 Hardening (H8, H9, H10 closed), Process note, CI Green | Doing: T5 | Next: T5 | Blocked on me: nothing
+Completed: T1, T2 (H1-H7), T3/T4 (N1, U1), M0 Hardening (H8, H9, H10 closed), M0 Invariants (reconcile untrusted status removed, role auditor restricted, idempotent replay real state, may_release helper on all sites, FakePaymentRail business_rejection, exact paypal webhook events & lookup) | Doing: T5 | Next: T5 | Blocked on me: nothing
 Database password rotated 7 Nov; verified live 9 Nov (active connection ok, old passwords rejected). Hosting: nothing deployed.
 
 ---
@@ -25,11 +25,11 @@ Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
   7. Receipt & Verify: Cryptographic receipt card, public SHA-256 hash chain proof verifier, search input. Stored XSS rendered inertly.
 
 Test status (All Verified Live):
-- Backend: 387 passed, 0 skipped, 0 failed in 182.91s (387 total backend tests across full test suite)
-- Red Team: 105 passed, 0 failed, 282 deselected in 9.15s
+- Backend: 400 passed, 0 skipped, 0 failed in 149.85s (400 total backend tests across full test suite)
+- Red Team: 105 passed, 0 failed, 295 deselected in 5.92s
 - Performance & Invariants: All accounting and ledger invariants tested across 13,345 events; budget invariants verified with payment in flight and under concurrent PostgreSQL transactions
-- Static Analysis: ruff check clean (0 errors), ruff format clean (99 files checked), mypy app clean (0 errors across 39 source files)
-- Frontend: Vitest passed (28/28 tests across 3 suites in 9.32s), ESLint clean (0 errors, 0 warnings), TypeScript clean (0 errors across web codebase)
+- Static Analysis: ruff check clean (0 errors), ruff format clean (100 files checked), mypy app clean (0 errors across 39 source files)
+- Frontend: Vitest passed (28/28 tests across 3 suites in 5.92s), ESLint clean (0 errors, 0 warnings), TypeScript clean (0 errors across web codebase)
 - E2E Smoke: Playwright smoke passed (30/30 tests across all 6 browsers/viewports: Chromium, WebKit, Firefox, iPhone SE, Pixel 7, iPad in 1.9m)
 - Web Build: Vite production build succeeded (index.html, CSS, JS chunks generated cleanly in 5.84s)
 - License: Apache-2.0 (OSI-approved)
