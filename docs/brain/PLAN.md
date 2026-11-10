@@ -2,6 +2,7 @@
 | ID | Task | Level | Needs | Findings | Status |
 | T1 | Confirm F2 and F1b results (ask me for their reports; run only the checks they name) | MED | - | U1-U5, G1.. | DONE |
 | T2 | F1c-fix | HIGH | T1 | H1-H7 | DONE |
+| T2c | Reconcile caller status removal, auditor restriction, idempotent replay real state, may_release helper routing, FakePaymentRail param, exact webhook events | HIGH | T2 | Q1-Q5,Q8 | DONE |
 | T3 | F1b fail closed, keys, schema, test DB, audits | HIGH | T2 | G1,G4-G8 | DONE |
 | T4 | Env alignment after the password change | MED | T3 | N1 | DONE |
 | T5 | STOP: YOU run reviewer R1 with a different model on git diff origin/main..HEAD, paste findings | HIGH | T4 | - | TODO |
