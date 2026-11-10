@@ -682,8 +682,9 @@ def test_webhook_triggers_reconciliation(session_factory):
 
 def test_webhook_maps_only_exact_paypal_event_types(session_factory):
     """Webhook must ignore unmapped event types and process only exact PayPal events."""
-    from app.main import app
     from starlette.testclient import TestClient
+
+    from app.main import app
 
     clock = SystemUtcClock()
     test_rail = FakePaymentRail(should_succeed=True, status="RECONCILE")
@@ -730,7 +731,7 @@ def test_webhook_maps_only_exact_paypal_event_types(session_factory):
         auth_resp = auth_service.authorize(cmd)
         tx_id = auth_resp.payout_id
 
-        # 1. Fuzzy or unmapped event containing 'COMPLETED' substring like 'UNKNOWN.SUBSCRIPTION.COMPLETED'
+        # 1. Fuzzy or unmapped event like 'UNKNOWN.SUBSCRIPTION.COMPLETED'
         # must be ignored, NOT trigger settlement
         headers = {
             "PAYPAL-TRANSMISSION-SIG": "test-recon-webhook-sig",
@@ -755,9 +756,7 @@ def test_webhook_maps_only_exact_paypal_event_types(session_factory):
         # 2. Exact event type PAYMENT.CAPTURE.COMPLETED is accepted
         test_rail.set_lookup_result(
             tx_id,
-            PaymentResult(
-                success=True, transaction_id=tx_id, status="COMPLETED", details={}
-            ),
+            PaymentResult(success=True, transaction_id=tx_id, status="COMPLETED", details={}),
         )
         resp2 = client.post(
             "/v1/webhooks/paypal",
@@ -777,8 +776,9 @@ def test_webhook_maps_only_exact_paypal_event_types(session_factory):
 
 def test_webhook_always_looks_up_before_release_or_settle(session_factory):
     """Webhook must always lookup rail and NEVER settle/release on unconfirmed provider state."""
-    from app.main import app
     from starlette.testclient import TestClient
+
+    from app.main import app
 
     clock = SystemUtcClock()
     test_rail = FakePaymentRail(should_succeed=True, status="RECONCILE")
@@ -833,7 +833,7 @@ def test_webhook_always_looks_up_before_release_or_settle(session_factory):
             "PAYPAL-TRANSMISSION-TIME": "2026-11-01T12:00:00Z",
         }
 
-        # 1. Event claims PAYMENT.CAPTURE.COMPLETED, but provider lookup returns LOOKUP_FAILED (transient error).
+        # 1. Event claims PAYMENT.CAPTURE.COMPLETED, but lookup returns LOOKUP_FAILED.
         # MUST NOT settle!
         test_rail.set_lookup_result(
             tx_id,
@@ -855,14 +855,14 @@ def test_webhook_always_looks_up_before_release_or_settle(session_factory):
             headers=headers,
         )
         assert resp1.status_code == 200
-        # State must remain held (NEEDS_REVIEW or RECONCILE), never SETTLED without provider confirmation
+        # State must remain held (NEEDS_REVIEW or RECONCILE), never SETTLED without confirmation
         assert auth_service.get_request_state(auth_resp.request_id) in (
             RequestState.RECONCILE,
             RequestState.NEEDS_REVIEW,
         )
         assert auth_service.get_request_state(auth_resp.request_id) != RequestState.SETTLED
 
-        # 2. Event claims PAYMENT.PAYOUTS-ITEM.FAILED, but provider lookup returns 500 error / ambiguous.
+        # 2. Event claims PAYMENT.PAYOUTS-ITEM.FAILED, but provider lookup returns 500/ambiguous.
         # MUST NOT release!
         test_rail.set_lookup_result(
             tx_id,
@@ -887,7 +887,7 @@ def test_webhook_always_looks_up_before_release_or_settle(session_factory):
         # Still not released: state must stay RECONCILE
         assert auth_service.get_request_state(auth_resp.request_id) == RequestState.RECONCILE
 
-        # 3. Event claims PAYMENT.PAYOUTS-ITEM.FAILED, and provider lookup confirms business rejection:
+        # 3. Event claims PAYMENT.PAYOUTS-ITEM.FAILED, provider lookup confirms rejection:
         # NOW it releases!
         test_rail.set_lookup_result(
             tx_id,
