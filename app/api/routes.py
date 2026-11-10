@@ -15,8 +15,6 @@ import time
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
-
 from fastapi import (
     APIRouter,
     Depends,
@@ -28,6 +26,7 @@ from fastapi import (
     status,
 )
 from fastapi.security import HTTPAuthorizationCredentials
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.auth import (
     check_agent_object_authorization,
@@ -1468,11 +1467,10 @@ def process_invoice(
     identity: Annotated[Identity, Depends(get_current_identity)],
     service: Annotated[AuthorizationService, Depends(get_authorization_service)],
 ) -> dict[str, Any]:
-    """Invoice Agent parses supplier invoice text, proposes intent, and requests PHALANX authorization."""
+    """Invoice Agent parses supplier invoice text and requests PHALANX authorization."""
     from app.application.invoice_agent import InvoiceAgent
 
     agent_id = identity.agent_id or "agent-auto-1"
     agent = InvoiceAgent(authorization_service=service, agent_id=agent_id)
     result = agent.process_invoice(payload.invoice_text, force_fallback=payload.force_fallback)
     return result.model_dump()
-
