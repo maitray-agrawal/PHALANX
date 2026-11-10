@@ -9,6 +9,7 @@ Invariants:
 """
 
 import hashlib
+import json
 import logging
 import os
 from datetime import UTC, datetime, timedelta
@@ -799,10 +800,9 @@ class AuthorizationService:
                 return st
             held = self._held_reservations.get(request_id)
             if held and held.get("state"):
-                try:
-                    return RequestState(held["state"])
-                except Exception:
-                    pass
+                held_st = held["state"]
+                if isinstance(held_st, str) and held_st in RequestState._value2member_map_:
+                    return RequestState(held_st)
             prev_resp = self._responses_by_id.get(request_id)
             if prev_resp and prev_resp.request_state:
                 return prev_resp.request_state
@@ -810,13 +810,14 @@ class AuthorizationService:
         # 2. Check response_payload in idempotency record
         if record and getattr(record, "response_payload", None):
             try:
-                import json
-
                 payload_data = json.loads(record.response_payload)
-                if payload_data.get("request_state"):
-                    return RequestState(payload_data["request_state"])
-            except Exception:
-                pass
+            except (json.JSONDecodeError, TypeError, ValueError) as exc:
+                logger.debug("Failed to decode idempotency response payload: %s", exc)
+                payload_data = None
+            if isinstance(payload_data, dict) and payload_data.get("request_state"):
+                raw_st = payload_data["request_state"]
+                if isinstance(raw_st, str) and raw_st in RequestState._value2member_map_:
+                    return RequestState(raw_st)
 
         # 3. Check DB budget_reservations table
         if session is not None:
@@ -837,8 +838,8 @@ class AuthorizationService:
                         return RequestState.SETTLED
                     if res_row.status == ReservationStatus.PENDING.value:
                         return RequestState.EXECUTING
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Database reservation lookup for replay state failed: %s", exc)
 
         # 4. Fallback based on cached decision without blindly returning SETTLED
         if cached_dec == DecisionOutcome.DENY:
