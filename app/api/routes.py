@@ -15,6 +15,8 @@ import time
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
+from pydantic import BaseModel, ConfigDict, Field
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -1436,3 +1438,41 @@ def run_attack_lab(
         all_defended=all(r.blocked for r in results),
         results=results,
     )
+
+
+# ---------------------------------------------------------------------------
+# Invoice Agent Endpoints (TASK T8)
+# ---------------------------------------------------------------------------
+
+
+class ProcessInvoiceRequestDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    invoice_text: str = Field(..., max_length=10000, description="Raw invoice text to parse")
+    force_fallback: bool = Field(default=False, description="Force recorded run fallback")
+
+
+@router.get("/v1/invoice-agent/samples", status_code=status.HTTP_200_OK)
+def get_invoice_samples() -> list[dict[str, Any]]:
+    """Return the three built-in sample invoices (legitimate, step-up, injection)."""
+    from app.application.invoice_agent import BUILTIN_SAMPLES
+
+    return BUILTIN_SAMPLES
+
+
+@router.post(
+    "/v1/invoice-agent/process",
+    status_code=status.HTTP_200_OK,
+)
+def process_invoice(
+    payload: ProcessInvoiceRequestDTO,
+    identity: Annotated[Identity, Depends(get_current_identity)],
+    service: Annotated[AuthorizationService, Depends(get_authorization_service)],
+) -> dict[str, Any]:
+    """Invoice Agent parses supplier invoice text, proposes intent, and requests PHALANX authorization."""
+    from app.application.invoice_agent import InvoiceAgent
+
+    agent_id = identity.agent_id or "agent-auto-1"
+    agent = InvoiceAgent(authorization_service=service, agent_id=agent_id)
+    result = agent.process_invoice(payload.invoice_text, force_fallback=payload.force_fallback)
+    return result.model_dump()
+

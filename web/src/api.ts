@@ -162,6 +162,41 @@ export interface LedgerVerificationResponse {
   message: string;
   broken_index: number | null;
   total_events: number;
+  chain_head_hash?: string;
+  tamper_detected_at?: number | null;
+}
+
+export interface InvoiceSampleDTO {
+  id: string;
+  title: string;
+  description: string;
+  text: string;
+}
+
+export interface InvoiceExtractionDTO {
+  payee_name: string;
+  account: string;
+  amount_minor: number;
+  currency: string;
+  due_date: string | null;
+  confidence?: number;
+}
+
+export interface InvoiceProcessingResultDTO {
+  is_live: boolean;
+  status_label: string;
+  extraction: InvoiceExtractionDTO;
+  authorization_request: Record<string, unknown>;
+  decision: "ALLOW" | "STEP_UP" | "DENY";
+  reasons: string[];
+  request_state: string;
+  ledger_event: {
+    event_id: string;
+    event_type: string;
+    request_id: string;
+    payload_hash: string;
+  } | null;
+  payment_response: Record<string, unknown> | null;
 }
 
 export interface MandateResponse {
@@ -318,4 +353,20 @@ export const api = {
 
   getMandate: (mandateId = "mandate_default_sandbox", token?: string) =>
     request<MandateResponse>(`/v1/mandates/${mandateId}`, { method: "GET" }, token),
+
+  getInvoiceSamples: (token?: string) =>
+    request<InvoiceSampleDTO[]>("/v1/invoice-agent/samples", { method: "GET" }, token),
+
+  processInvoice: (
+    cmd: { invoice_text: string; agent_id?: string; force_fallback?: boolean },
+    token?: string
+  ) =>
+    request<InvoiceProcessingResultDTO>(
+      "/v1/invoice-agent/process",
+      {
+        method: "POST",
+        body: JSON.stringify(cmd),
+      },
+      token
+    ),
 };

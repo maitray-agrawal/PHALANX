@@ -273,23 +273,25 @@ class MandateService:
     def create_mandate(self, cmd: CreateMandateCommand) -> MandateResponseDTO:
         now = self._clock.now_utc()
         valid_until = now + timedelta(days=cmd.valid_days)
-        signable_dict = {
-            "mandate_id": cmd.mandate_id,
-            "version": 1,
-            "principal_id": cmd.principal_id,
-            "agent_id": cmd.agent_id,
-            "single_limit_minor": cmd.single_limit_minor,
-            "instant_threshold_minor": cmd.instant_threshold_minor,
-            "lifetime_budget_minor": cmd.lifetime_budget_minor,
-            "currency": cmd.currency,
-            "allowed_payees": cmd.allowed_payees,
-            "allow_unregistered_payees": cmd.allow_unregistered_payees,
-            "allowed_purposes": cmd.allowed_purposes,
-            "valid_from_utc": now.isoformat(),
-            "valid_until_utc": valid_until.isoformat(),
-            "status": MandateStatus.ACTIVE.value,
-            "key_id": self._key_id,
-        }
+        mandate_pre = Mandate(
+            mandate_id=cmd.mandate_id,
+            version=1,
+            principal_id=cmd.principal_id,
+            agent_id=cmd.agent_id,
+            single_limit_minor=cmd.single_limit_minor,
+            instant_threshold_minor=cmd.instant_threshold_minor,
+            lifetime_budget_minor=cmd.lifetime_budget_minor,
+            currency=cmd.currency,
+            allowed_payees=tuple(cmd.allowed_payees),
+            allow_unregistered_payees=cmd.allow_unregistered_payees,
+            allowed_purposes=tuple(cmd.allowed_purposes),
+            valid_from_utc=now,
+            valid_until_utc=valid_until,
+            status=MandateStatus.ACTIVE,
+            key_id=self._key_id,
+            signature="",
+        )
+        signable_dict = mandate_pre.to_signable_dict()
         signed_bytes = canonical_json_bytes(signable_dict)
         sig = sign_bytes(self._priv_key, signed_bytes)
         mandate = Mandate(

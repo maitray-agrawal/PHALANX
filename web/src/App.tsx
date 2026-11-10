@@ -24,6 +24,7 @@ import { ActivityScreen } from "./screens/ActivityScreen";
 import { MandatesScreen } from "./screens/MandatesScreen";
 import { AttackLabScreen } from "./screens/AttackLabScreen";
 import { ReceiptVerifyScreen } from "./screens/ReceiptVerifyScreen";
+import { InvoiceAgentScreen } from "./screens/InvoiceAgentScreen";
 
 export type RoleType = "APPROVER" | "AGENT" | "PRINCIPAL" | "AUDITOR";
 
@@ -186,6 +187,13 @@ export const App: React.FC = () => {
             </button>
             <button
               type="button"
+              className={`nav-link-btn ${activeTab === "invoice-agent" ? "active" : ""}`}
+              onClick={() => navigateTo("invoice-agent")}
+            >
+              Invoice Agent
+            </button>
+            <button
+              type="button"
               className={`nav-link-btn ${activeTab === "attack-lab" ? "active" : ""}`}
               onClick={() => navigateTo("attack-lab")}
             >
@@ -295,6 +303,13 @@ export const App: React.FC = () => {
             <MandatesScreen
               token={token}
               onNavigate={navigateTo}
+              onNotify={addToast}
+            />
+          )}
+
+          {activeTab === "invoice-agent" && (
+            <InvoiceAgentScreen
+              token={token}
               onNotify={addToast}
             />
           )}
@@ -420,6 +435,18 @@ export const App: React.FC = () => {
                 <div className="sheet-text">
                   <span className="sheet-item-title">Ed25519 Authority Mandate</span>
                   <span className="sheet-item-sub">Budget limits and allowlists</span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                className="sheet-nav-item"
+                onClick={() => navigateTo("invoice-agent")}
+              >
+                <Zap size={18} className="sheet-icon text-blue-500" aria-hidden="true" />
+                <div className="sheet-text">
+                  <span className="sheet-item-title">Invoice Agent (Autonomous AI)</span>
+                  <span className="sheet-item-sub">Gemini parsing with PHALANX guardrails</span>
                 </div>
               </button>
 
