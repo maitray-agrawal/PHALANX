@@ -319,15 +319,20 @@ class LogRedactionFilter(logging.Filter):
 
     SENSITIVE_PATTERNS = [
         re.compile(
-            r'(?i)(secret|token|password|authorization|signature|key)\s*[:=]\s*["\']?([^"\'\s]+)'
+            r'(?i)(["\']?(?:secret|token|password|authorization|signature|key)["\']?\s*[:=]\s*["\']?)([^"\'\s,{}]+)'
         ),
         re.compile(r"(?i)(bearer\s+)([A-Za-z0-9_\-\.]+)"),
     ]
 
     def filter(self, record: logging.LogRecord) -> bool:
-        if isinstance(record.msg, str):
-            msg = record.msg
-            for pattern in self.SENSITIVE_PATTERNS:
-                msg = pattern.sub(r"\1 [REDACTED]", msg)
-            record.msg = msg
+        try:
+            msg = record.getMessage()
+        except Exception:
+            msg = str(record.msg)
+
+        for pattern in self.SENSITIVE_PATTERNS:
+            msg = pattern.sub(r"\1[REDACTED]", msg)
+
+        record.msg = msg
+        record.args = ()
         return True
