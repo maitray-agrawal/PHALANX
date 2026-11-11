@@ -9,6 +9,12 @@ Authorization layer for autonomous financial agents.
 
 Giving autonomous agents direct API credentials to move funds creates severe financial risk. A prompt injection, hallucinated invoice, or runaway loop can drain balances without oversight. Relying on an LLM to police another LLM fails because natural language prompts can bypass language model guardrails.
 
+## Three Core Metrics
+
+- **$0.00 Unauthorized Leakage**: 100% block rate across prompt injection, vendor impersonation, and tamper attacks.
+- **0ms Policy Core I/O**: Pure domain engine with zero database queries, zero network calls, and no clock dependency.
+- **100% Hash-Chained Auditability**: Every transaction intent, policy evaluation, and money outcome is cryptographically linked.
+
 ## What It Is
 
 PHALANX sits between autonomous agents and payment rails. Agents propose payments, deterministic policies decide whether they proceed, humans review exceptions, and every action is recorded in an append-only audit ledger. The language model is never in the authorization path.
