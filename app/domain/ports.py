@@ -73,7 +73,7 @@ def may_release(result: PaymentResult | None) -> bool:
     status_to_evaluate = result.status
     if is_not_found:
         age_sec = details.get("age_seconds")
-        if age_sec is not None and age_sec < 600:
+        if age_sec is None or age_sec < 600:
             return False
         if getattr(result, "business_rejection", False) is True:
             biz_rej = True

@@ -45,6 +45,8 @@ services:
       # DATABASE_URL must include ?sslmode=require for Neon (see docs/evidence/neon-manual-setup.md)
       - key: DATABASE_URL
         sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
       # ---- Non-secret configuration -----------------------------------------
       - key: PORT
         value: "10000"
@@ -75,7 +77,7 @@ services:
         value: "*"
       - key: GEMINI_MODEL
         value: gemini-2.5-flash
-      - key: PUBLIC_BASE_URL
-        value: "https://phalanx-demo.onrender.com"
+      - key: GEMINI_DAILY_CALL_CAP
+        value: "300"
       - key: ALLOWED_HOSTS
         value: "*"

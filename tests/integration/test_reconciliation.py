@@ -912,6 +912,70 @@ def test_webhook_always_looks_up_before_release_or_settle(session_factory):
         )
         assert resp3.status_code == 200
         assert auth_service.get_request_state(auth_resp.request_id) == RequestState.FAILED
+
+        # 4. Webhook for a freshly created transaction where lookup returns 404:
+        # Under 10 minutes: MUST NOT release (holds in RECONCILE)
+        # After 10 minutes: releases (transitions to FAILED)
+        cmd4 = AuthorizeTransactionCommand(
+            agent_id=agent_id,
+            recipient_id="vendor-paypal-sandbox-1",
+            amount_minor=3000,
+            currency="USD",
+            purpose="Webhook 404 age guard test",
+            idempotency_key=f"idem_404_{uuid.uuid4().hex}",
+        )
+        auth_resp4 = auth_service.authorize(cmd4)
+        tx_id4 = auth_resp4.payout_id
+
+        test_rail.set_lookup_result(
+            tx_id4,
+            PaymentResult(
+                success=False,
+                transaction_id=tx_id4,
+                status="NOT_FOUND",
+                details={"http_status": 404, "name": "RESOURCE_NOT_FOUND"},
+                business_rejection=True,
+            ),
+        )
+        # Under 10m: must hold in RECONCILE
+        resp4_under = client.post(
+            "/v1/webhooks/paypal",
+            json={
+                "id": f"WH-404-UNDER-{uuid.uuid4().hex[:8]}",
+                "event_type": "PAYMENT.PAYOUTS-ITEM.FAILED",
+                "resource": {"id": tx_id4},
+            },
+            headers=headers,
+        )
+        assert resp4_under.status_code == 200
+        assert auth_service.get_request_state(auth_resp4.request_id) == RequestState.RECONCILE
+
+        # Over 10m: releases
+        from sqlalchemy import update
+
+        from app.infrastructure.models import BudgetReservationModel
+
+        res_id4 = auth_service._held_reservations[auth_resp4.request_id]["reservation_id"]
+        with session_factory() as s, s.begin():
+            s.execute(
+                update(BudgetReservationModel)
+                .where(BudgetReservationModel.reservation_id == res_id4)
+                .values(created_at_utc=clock.now_utc() - timedelta(seconds=601))
+            )
+        auth_service._held_reservations[auth_resp4.request_id]["created_at_utc"] = (
+            clock.now_utc() - timedelta(seconds=601)
+        )
+        resp4_over = client.post(
+            "/v1/webhooks/paypal",
+            json={
+                "id": f"WH-404-OVER-{uuid.uuid4().hex[:8]}",
+                "event_type": "PAYMENT.PAYOUTS-ITEM.FAILED",
+                "resource": {"id": tx_id4},
+            },
+            headers=headers,
+        )
+        assert resp4_over.status_code == 200
+        assert auth_service.get_request_state(auth_resp4.request_id) == RequestState.FAILED
     finally:
         app.dependency_overrides.clear()
 
@@ -1681,7 +1745,8 @@ def test_resolve_needs_review_h9_lookup_errors_refuse_and_failures_release(db_en
     with pytest.raises(ValueError, match="lookup error or timeout|could not be verified"):
         auth_service.resolve_needs_review(req_id, action="PROVIDE_PROOF", capture_id="cap_timeout")
 
-    # 5. MARK_FAILED succeeds and releases when provider explicitly reports NOT_FOUND (HTTP 404)
+    # 5. MARK_FAILED refused when provider reports NOT_FOUND within 10 minutes (replication lag)
+    # and succeeds when age >= 10 minutes (confirmed failure)
     monkeypatch.undo()
     test_rail.set_lookup_result(
         auth_resp.payout_id,
@@ -1691,6 +1756,12 @@ def test_resolve_needs_review_h9_lookup_errors_refuse_and_failures_release(db_en
             status="NOT_FOUND",
             details={"http_status": 404, "name": "RESOURCE_NOT_FOUND"},
         ),
+    )
+    with pytest.raises(ValueError, match="10 minutes|replication lag|cannot confirm failure"):
+        auth_service.resolve_needs_review(req_id, action="MARK_FAILED")
+
+    auth_service._held_reservations[req_id]["created_at_utc"] = clock.now_utc() - timedelta(
+        seconds=601
     )
     res_state = auth_service.resolve_needs_review(req_id, action="MARK_FAILED")
     assert res_state == RequestState.FAILED

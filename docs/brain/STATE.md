@@ -1,8 +1,8 @@
 # STATE (update after every task)
-Date: 11 Nov 2026 | Branch: dev | Last pushed commit on dev: c196c82 | CI: PASSING (Run 186, ID 43005262915)
-Working tree: modified (README.md, routes.py, invoice_agent.py, InvoiceAgentScreen.tsx, metrics.md, docs/gallery/*, scripts/capture_gallery.mjs)
-CI Green across all 8 jobs; Full local battery verified (639 passed pytest, 0 skipped, 105 redteam, 30 vitest, ruff clean, mypy clean, bandit clean, tsc clean, build clean).
-Completed: Gallery capture script (scripts/capture_gallery.mjs), 15 desktop/mobile screenshots in docs/gallery/, 15 Devpost crops in docs/gallery/devpost/, docs/gallery/README.md, docs/evidence/metrics.md, README.md rewritten (~131 lines, GitHub rendered, zero emojis, zero hype).
+Date: 11 Nov 2026 | Branch: dev | Last pushed commit on dev: d70ad82 | CI: PASSING (Run 191, ID 43029134603)
+Working tree: clean on dev (main untouched)
+CI Green across all 8 jobs (Run 43029134603); Full local battery verified (657 passed pytest, 0 skipped, 105 redteam, 30 vitest, ruff clean, mypy clean, bandit clean, tsc clean, build clean).
+Completed: Neon agent skills untracked (.gitignore updated), render.yaml configured with dashboard PUBLIC_BASE_URL (sync: false) and GEMINI_DAILY_CALL_CAP ("300"), 10-minute age guard strictly enforced on all NOT_FOUND release sites (resolve_needs_review and webhook included, test-first), scripts/neon_check.sql added with read-only validation queries.
 
 ---
 
