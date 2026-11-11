@@ -78,8 +78,6 @@ def run_boot(raise_on_error: bool = False) -> bool:
     # Step 1: Key validation
     print("[boot] step: key validation", flush=True)
     sys.stdout.flush()
-    from app.infrastructure.config import settings
-    from app.infrastructure.crypto import validate_mandate_signing_key_hex
     from app.infrastructure.tokens import validate_secret_key
 
     is_key_valid, key_error = validate_secret_key()
@@ -91,18 +89,6 @@ def run_boot(raise_on_error: bool = False) -> bool:
         if raise_on_error:
             raise BootError(msg)
         return False
-
-    if settings.mandate_signing_key_hex:
-        try:
-            validate_mandate_signing_key_hex(settings.mandate_signing_key_hex)
-        except ValueError as exc:
-            msg = f"Key validation failed: {exc}"
-            sys.stderr.write(f"Boot aborted: {msg}\n")
-            sys.stderr.flush()
-            logger.error("Boot aborted: %s", msg)
-            if raise_on_error:
-                raise BootError(msg) from exc
-            return False
 
     engine = get_engine()
 
@@ -330,6 +316,18 @@ def run_boot(raise_on_error: bool = False) -> bool:
 
         tb = redact_message(traceback.format_exc())
         redacted_exc = redact_message(str(exc))
+        if "MANDATE_SIGNING_KEY_HEX" in redacted_exc:
+            from app.infrastructure.config import settings
+
+            raw_key = getattr(settings, "mandate_signing_key_hex", None)
+            if raw_key is None:
+                raw_key = os.getenv("MANDATE_SIGNING_KEY_HEX", "")
+            raw_len = len(raw_key) if raw_key is not None else 0
+            hint = (
+                f" (configured length={raw_len}; delete the variable to derive "
+                "the key from SECRET_KEY, or set exactly 64 hex characters)"
+            )
+            redacted_exc = f"{redacted_exc}{hint}"
         sys.stderr.write(f"Boot mandate seeding error: {redacted_exc}\n{tb}\n")
         sys.stderr.flush()
         logger.error("Boot aborted: error during mandate seeding: %s", redacted_exc)
