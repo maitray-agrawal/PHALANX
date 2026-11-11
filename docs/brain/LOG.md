@@ -44,3 +44,8 @@ Changed: web/src/api.ts, web/package.json, .github/workflows/ci.yml, Dockerfile,
 Commands: npm run lint (0 errors); tsc --noEmit (0 errors); vitest (30 passed); npm run build (pass); pytest (623 passed, 10 skipped in 173s); redteam (105 passed); ruff check & format (clean); mypy app (clean); bandit (clean); git push origin dev (e40b210); GitHub Actions run 42988926311 (all 8 jobs green).
 Findings closed: Frontend CI lint failure resolved with CaptureOrderResponse interface; Node 22 engine aligned; Gemini provider adapter fully tested across all error and success states.
 Next: Human review and merge.
+2026-11-11 | Final Battery & Deployment Hardening: CI workflows merged, env secrets matrix, rail clarity, log redaction, Playwright 1920/iPad/iPhone.
+Changed: ci.yml, scheduled.yml, keepalive.yml, test_keys.py, test_reconciliation.py, DEPLOY_GUIDE.md, invoice_agent.py, api.ts, InvoiceAgentScreen.tsx, middleware.py, test_log_redaction.py, SECURITY_BASELINE.md, CLAIMS.md, DEVPOST.md, invoice_agent_eval.md, verify_live.py, smoke.spec.ts, STATE.md, LOG.md.
+Commands: uv run pytest -q -rs (639 passed in 225.95s); uv run pytest -q -m redteam (105 passed); npm test (30 passed); tsc & lint clean; ruff check & format clean (112 files); mypy app clean (42 files); bandit clean (0 issues, 9869 lines); npm run build (clean); Playwright smoke across Chromium, iPad, iPhone SE (5 passed each, multi-viewport screenshots verified).
+Findings closed: Tasks 1-9 complete; all CI workflows and security matrix verified.
+Next: Push dev and monitor GitHub Actions CI.

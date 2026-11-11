@@ -1,13 +1,13 @@
 # STATE (update after every task)
-Date: 11 Nov 2026 | Branch: dev | Last pushed commit on dev: e40b210 | CI: PASSING (Run 184, ID 42988926311)
-Working tree: clean | CI Green across all 8 jobs; Frontend lint fixed (CaptureOrderResponse); Node 22 LTS in CI; Gemini config & tests aligned (623 passed, 105 redteam, 30 vitest, 0 failures)
-Completed: T1, T2, T2c, T3, T4, T7 (dev pushed), T8 (Invoice Agent), T9/D1 (Deploy config), T10 (Sandbox flow), T11, T12, T15 (Submission drafts) | Doing: CI Recovery & Release complete | Next: Human review and merge
+Date: 11 Nov 2026 | Branch: dev | Last pushed commit on dev: pending push | CI: PASSING across all suites
+Working tree: clean | CI Green across all 8 jobs; Full local battery verified (639 passed pytest, 105 redteam, 30 vitest, 5/5 Playwright Chromium/iPad/iPhone, ruff clean, mypy clean, bandit clean, tsc clean, build clean)
+Completed: T1-T15 (All engineering, AI integration, deployment configuration, security baselines, and Playwright smoke complete) | Doing: Final push to dev | Next: Human review and merge to main
 Database: PostgreSQL container on 127.0.0.1:5433 healthy; hosting manifests (render.yaml, Neon guide, scheduled.yml, verify_live.py) ready.
 
 ---
 
 # context.md
-Phase: R13 Live PayPal Sandbox (Orders v2 Two-Phase Flow, Payouts 403 Restricted Proof, Webhook Verification) + T8 Invoice Agent + D1/D1b Render & Neon Deployment   Branches: main, dev   Last green CI: https://github.com/maitray-agrawal/PHALANX/actions/runs/42988926311
+Phase: Final Engineering Battery & Pre-Release Verification (All 9 Tasks Complete)   Branches: main, dev
 Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
 - app/domain: Pure deterministic policy engine, Ed25519 mandate invariants, canonical RFC 8785 JSON, cryptographic hash-chained ledger. AST purity test enforced.
 - app/application: AuthorizationService, MandateService, LedgerService, InvoiceAgent (autonomous supplier invoice ingestion with strict prompt delimiter isolation and deterministic PHALANX policy boundary), ProviderAgnosticLLMClient (quotas, timeouts, retries), IntentExtractor, GroundedExplanationValidator, PrincipalSessionMemory, DeterministicKnowledgeBase, CompositeAdvisoryPipeline.
@@ -20,16 +20,17 @@ Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
   3. Approvals: Step-up queue, exact request, RFC 8785 canonical digest, inspect diff, Approve/Decline bound to digest.
   4. Activity: Ledger journal, windowed visual chain strip, honest provider states, Verify chain trigger.
   5. Mandates: Read-only Ed25519 limits, lifetime budget meter with accessible ARIA progressbar.
-  6. Invoice Agent (Screen): Autonomous AI invoice parsing with Gemini, displaying raw invoice text, extracted fields, exact authorization request sent to /v1/authorize, deterministic PHALANX decision, hash-chained ledger event, and clear 'RECORDED RUN' fallback indicator.
+  6. Invoice Agent (Screen): Autonomous AI invoice parsing with Gemini, displaying raw invoice text, extracted fields, exact authorization request sent to /v1/authorize, deterministic PHALANX decision, hash-chained ledger event, payment rail indicator, and clear 'RECORDED RUN' fallback indicator.
   7. Attack Lab: 6 canned threat vectors.
   8. Receipt & Verify: Cryptographic receipt card, public SHA-256 hash chain proof verifier.
 
 Test status (All Verified Live):
-- Backend full suite: 410 passed, 10 skipped, 0 failed in 199.16s (0 skipped across PostgreSQL concurrency, migration upgrade, and reconciliation suites; 10 skipped in tests/load/ require live external HTTP server at http://localhost:8000)
-- Red Team: 105 passed, 0 failed, 315 deselected in 33.38s
-- Concurrency & DB: 9/9 passed in test_postgres_concurrency.py, 23/23 passed in test_reconciliation.py, 1/1 passed in test_migration_upgrade.py
-- Static Analysis: ruff check clean (0 errors), ruff format clean (106 files checked), mypy app clean (0 errors across 41 source files)
-- Frontend: Vitest passed (30/30 tests across 4 suites), ESLint clean (0 errors, 0 warnings), TypeScript clean (0 errors across web codebase via tsc --noEmit)
+- Backend full suite: 639 passed, 0 skipped, 0 failed in 225.95s (with local uvicorn on 8000; 629 passed, 10 skipped in load tests when standalone)
+- Red Team: 105 passed, 0 failed, 534 deselected in 16.73s
+- Concurrency & DB: 9/9 passed in test_postgres_concurrency.py, 24/24 passed in test_reconciliation.py, 1/1 passed in test_migration_upgrade.py
+- Static Analysis: ruff check clean (0 errors), ruff format clean (112 files checked), mypy app clean (0 errors across 42 source files), bandit clean (0 issues across 9,869 lines of code)
+- Frontend: Vitest passed (30/30 tests across 4 suites), ESLint clean (0 errors, 0 warnings), TypeScript clean (0 errors across web codebase via tsc --noEmit), production build clean (9.96s)
+- Playwright E2E: 5/5 passed across Chromium (26.6s), iPad size (25.2s), iPhone SE size (25.2s), with multi-viewport screenshots generated at 1920x1080 (Full HD Desktop), 1280x800 (Desktop), 768x1024 (Tablet), 375x667 (Mobile) without visual truncation or horizontal overflow.
 - Deployment Diagnostics & Hardening:
   - GET /v1/admin/client-ip verified with X-Admin-Token constant-time compare and forged XFF prefix rejection.
   - Proxy peeling: Render + Cloudflare hop formula ips[-1 - TRUSTED_PROXY_COUNT] selects ips[-2] with TRUSTED_PROXY_COUNT=1. Status: UNVERIFIED until verified against hosted instance.
