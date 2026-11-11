@@ -33,7 +33,7 @@ class FixedTestClock(ClockPort):
     """Deterministic test clock."""
 
     def __init__(self, fixed_time: datetime | None = None) -> None:
-        self._fixed_time = fixed_time or datetime(2026, 10, 22, 12, 0, 0, tzinfo=UTC)
+        self._fixed_time = fixed_time or datetime(2026, 11, 15, 12, 0, 0, tzinfo=UTC)
 
     def now_utc(self) -> datetime:
         return self._fixed_time

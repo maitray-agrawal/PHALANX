@@ -2,7 +2,7 @@
 # Non-root user, slim base, container healthcheck
 
 # Stage 1: Build Frontend SPA
-FROM node:20-alpine AS frontend-builder
+FROM node:22-alpine AS frontend-builder
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
@@ -14,7 +14,7 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /build
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     && rm -rf /var/lib/apt/lists/*
@@ -31,7 +31,7 @@ WORKDIR /app
 ENV PYTHONPATH=/app \
     PORT=8000
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -60,4 +60,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/healthz || exit 1
 
-CMD ["sh", "-c", "python scripts/boot.py && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "python scripts/boot.py && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips \"${FORWARDED_ALLOW_IPS:-*}\""]

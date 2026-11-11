@@ -11,13 +11,30 @@ or transit. It does NOT represent human legal non-repudiation.
 """
 
 import hashlib
+import os
 from pathlib import Path
 
 from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
+from app.infrastructure.config import settings
+
+
+def derive_key(secret_key: str | bytes, label: str, length: int = 32) -> bytes:
+    """Derive a cryptographically independent key from SECRET_KEY using HKDF-SHA256."""
+    ikm = secret_key.encode("utf-8") if isinstance(secret_key, str) else secret_key
+    hkdf = HKDF(
+        algorithm=hashes.SHA256(),
+        length=length,
+        salt=None,
+        info=label.encode("utf-8"),
+    )
+    return hkdf.derive(ikm)
 
 
 def generate_ed25519_keypair() -> tuple[bytes, bytes]:
@@ -77,7 +94,24 @@ def load_or_generate_keypair(
             except Exception as e:
                 raise ValueError("Failed to load Ed25519 private key from file") from e
 
-    # Default to ephemeral keypair for development/sandbox testing
+    # If no explicit key provided, derive deterministic seed from secret_key to preserve
+    # cross-process and cross-restart consistency within the deployment environment
+    secret_key = getattr(settings, "secret_key", None)
+    if secret_key and secret_key.strip():
+        seed = derive_key(secret_key.strip(), "phalanx-mandate-ed25519", 32)
+        priv_key = Ed25519PrivateKey.from_private_bytes(seed)
+        pub_bytes = priv_key.public_key().public_bytes_raw()
+        return seed, pub_bytes, get_key_id(pub_bytes)
+
+    # Outside test, ephemeral fallback is strictly forbidden
+    env = getattr(settings, "environment", "")
+    if env != "test" and os.getenv("ENVIRONMENT") != "test":
+        raise ValueError(
+            "MANDATE_SIGNING_KEY_HEX or SECRET_KEY is mandatory outside test environment; "
+            "ephemeral key fallback is prohibited"
+        )
+
+    # Default to ephemeral keypair for test harness only
     priv_raw, pub_raw = generate_ed25519_keypair()
     return priv_raw, pub_raw, get_key_id(pub_raw)
 

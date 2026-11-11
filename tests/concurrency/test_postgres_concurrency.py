@@ -13,14 +13,17 @@ Verifies database-level correctness directly against the running PostgreSQL cont
    - Confirmed failure releases reservation and returns reserved budget to available pool.
 """
 
+import multiprocessing as mp
 import os
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
-from sqlalchemy import create_engine, select, text
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 
 from app.application.dtos import CreateMandateCommand
 from app.infrastructure.db_budget_repo import (
@@ -38,19 +41,25 @@ from app.infrastructure.models import (
 
 
 def _get_postgres_engine():
-    """Retrieve engine for local Docker PostgreSQL if reachable, else return None."""
-    db_password = os.getenv("POSTGRES_PASSWORD", "")
-    default_url = (
-        f"postgresql+psycopg://phalanx_app:{db_password}@127.0.0.1:5433/phalanx_db"
-        if db_password
-        else "postgresql+psycopg://phalanx_app@127.0.0.1:5433/phalanx_db"
-    )
-    db_url = os.getenv("DATABASE_URL", default_url)
-    if "postgres" not in db_url:
+    """Retrieve engine for PostgreSQL test database (phalanx_test via TEST_DATABASE_URL)."""
+    from app.infrastructure.config import settings
+
+    db_url = os.getenv("TEST_DATABASE_URL")
+    if not db_url:
+        base_url = os.getenv("DATABASE_URL") or settings.database_url
+        if "phalanx_db" in base_url:
+            db_url = base_url.replace("/phalanx_db", "/phalanx_test")
+        elif base_url:
+            db_url = base_url
+
+    if not db_url or "postgres" not in db_url:
         return None
+    if "localhost" in db_url and os.name == "nt":
+        db_url = db_url.replace("localhost", "127.0.0.1")
     try:
         engine = create_engine(
             db_url,
+            poolclass=NullPool,
             pool_pre_ping=True,
             connect_args={"connect_timeout": 2},
         )
@@ -62,16 +71,42 @@ def _get_postgres_engine():
 
 
 pg_engine = _get_postgres_engine()
+is_ci_env = os.getenv("CI", "").lower() in ("true", "1")
+
 pytestmark = pytest.mark.skipif(
-    pg_engine is None,
+    pg_engine is None and not is_ci_env,
     reason="PostgreSQL database container is not running or unreachable",
 )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_postgres_schema():
+    if pg_engine is not None:
+        from app.infrastructure.db_schema import create_schema
+
+        create_schema(pg_engine)
+    yield
+    if pg_engine is not None:
+        pg_engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def ensure_not_skipped_in_ci():
+    """Guarantee that PostgreSQL tests never silently skip in CI."""
+    if pg_engine is None and is_ci_env:
+        pytest.fail(
+            "PostgreSQL database is unreachable but CI=true. "
+            "PostgreSQL concurrency tests must execute and pass in CI."
+        )
 
 
 @pytest.fixture
 def pg_session_factory():
     """Session factory for PostgreSQL testing."""
     assert pg_engine is not None
+    from app.infrastructure.db_schema import create_schema
+
+    create_schema(pg_engine)
     return sessionmaker(bind=pg_engine, autoflush=False, expire_on_commit=False)
 
 
@@ -562,3 +597,216 @@ def test_postgres_50_parallel_requests_on_one_budget(pg_session_factory):
         assert budget.spent_minor == 50_000
         assert budget.reserved_minor == 0
         assert budget.available_minor == 0
+
+
+def _ledger_process_worker(db_url: str, process_id: int, count: int, error_queue: Any) -> None:
+    """Independent OS worker process appending events to PostgreSQL without shared locks."""
+    try:
+        from datetime import UTC, datetime
+
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+
+        from app.domain.models import (
+            DecisionOutcome,
+            Money,
+            PolicyEvaluationResult,
+            TransactionIntent,
+        )
+        from app.infrastructure.db_ledger_repo import DatabaseLedgerAdapter
+
+        engine = create_engine(db_url)
+        factory = sessionmaker(bind=engine)
+        ledger = DatabaseLedgerAdapter(session_factory=factory)
+        now = datetime.now(UTC)
+
+        for i in range(count):
+            intent = TransactionIntent(
+                agent_id=f"agent-proc-{process_id}",
+                recipient_id=f"vendor-proc-{process_id}",
+                money=Money(amount_minor=100 * (i + 1), currency="USD"),
+                purpose=f"Cross-process append {process_id}-{i}",
+                idempotency_key=f"idem-p{process_id}-ev{i}-{uuid.uuid4().hex[:8]}",
+                occurred_at_utc=now,
+            )
+            result = PolicyEvaluationResult(
+                outcome=DecisionOutcome.ALLOW,
+                reasons=(f"Approved by cross-process worker {process_id}",),
+                evaluated_at_utc=now,
+            )
+            ledger.append_event(
+                event_type="CROSS_PROCESS_TEST",
+                intent=intent,
+                result=result,
+                recorded_at_utc=now,
+            )
+    except Exception as exc:
+        error_queue.put(f"Worker {process_id} failed: {exc}")
+
+
+def test_postgres_cross_process_concurrent_ledger_sequence_lock(
+    pg_session_factory: Any,
+) -> None:
+    """Manual Section 8: Database-enforced sequence assignment across separate OS processes.
+
+    Two independent OS processes append events concurrently without any in-memory
+    Python lock. Verified by:
+    1. Zero duplicate sequence numbers (unique sequence constraint in DB).
+    2. Strict monotonically increasing sequences with no gaps.
+    3. Cryptographic hash chain verification passes end-to-end.
+    """
+    from app.infrastructure.db_ledger_repo import DatabaseLedgerAdapter
+    from app.infrastructure.models import LedgerEventModel
+
+    ctx = mp.get_context("spawn")
+    error_queue = ctx.Queue()
+    db_url = pg_engine.url.render_as_string(hide_password=False)
+
+    # Record baseline state
+    with pg_session_factory() as session:
+        start_count = session.scalar(select(func.count(LedgerEventModel.event_id))) or 0
+        start_max_seq = session.scalar(select(func.max(LedgerEventModel.event_seq)))
+        start_max_seq = start_max_seq if start_max_seq is not None else -1
+
+    count_per_proc = 10
+    p1 = ctx.Process(target=_ledger_process_worker, args=(db_url, 1, count_per_proc, error_queue))
+    p2 = ctx.Process(target=_ledger_process_worker, args=(db_url, 2, count_per_proc, error_queue))
+
+    p1.start()
+    p2.start()
+
+    p1.join(timeout=30)
+    p2.join(timeout=30)
+
+    # Check for worker exceptions
+    errors = []
+    while not error_queue.empty():
+        errors.append(error_queue.get_nowait())
+    assert not errors, f"Cross-process worker errors: {errors}"
+    assert p1.exitcode == 0, f"Process 1 exited with {p1.exitcode}"
+    assert p2.exitcode == 0, f"Process 2 exited with {p2.exitcode}"
+
+    # Verify database state
+    with pg_session_factory() as session:
+        end_count = session.scalar(select(func.count(LedgerEventModel.event_id))) or 0
+        end_max_seq = session.scalar(select(func.max(LedgerEventModel.event_seq))) or 0
+
+        assert end_count == start_count + (2 * count_per_proc)
+        assert end_max_seq == start_max_seq + (2 * count_per_proc)
+
+        # Retrieve all events in sequence and verify no duplicates or gaps
+        stmt = (
+            select(LedgerEventModel.event_seq)
+            .where(LedgerEventModel.event_seq > start_max_seq)
+            .order_by(LedgerEventModel.event_seq.asc())
+        )
+        new_seqs = list(session.scalars(stmt))
+        expected_seqs = list(range(start_max_seq + 1, start_max_seq + 1 + (2 * count_per_proc)))
+        assert new_seqs == expected_seqs, f"Sequence gap/duplicate detected: {new_seqs}"
+
+    # Verify end-to-end cryptographic hash chaining across all appended events
+    ledger = DatabaseLedgerAdapter(session_factory=pg_session_factory)
+    is_valid, msg, broken_idx = ledger.verify_integrity()
+    assert is_valid is True, f"Ledger hash chain broken at {broken_idx}: {msg}"
+
+
+def test_postgres_concurrent_confirm_and_release_exact_budget(
+    pg_session_factory: Any,
+) -> None:
+    """Verify row-level locking on reservations and agent budget in PostgreSQL.
+
+    1. Parallel confirm(res_1) + release(res_2) on one agent.
+    2. Two parallel confirms of the same reservation (res_3).
+    Assert budgets are exact with zero lost updates.
+    """
+    agent_id = f"agent_conc_lock_{uuid.uuid4().hex[:8]}"
+    allocated = 100_000
+
+    # 1. Setup budget and initial reservations
+    with pg_session_factory() as session, session.begin():
+        session.add(
+            AgentBudgetModel(
+                agent_id=agent_id,
+                mandate_id=f"man_{uuid.uuid4().hex[:6]}",
+                currency="USD",
+                allocated_minor=allocated,
+                spent_minor=0,
+                reserved_minor=0,
+            )
+        )
+        session.flush()
+        repo = BudgetRepository(session)
+        res_1 = repo.reserve_budget(
+            agent_id=agent_id,
+            amount_minor=30_000,
+            currency="USD",
+            idempotency_key=f"idem_1_{uuid.uuid4().hex}",
+            intent_digest=f"dig_1_{uuid.uuid4().hex}",
+        ).reservation_id
+        res_2 = repo.reserve_budget(
+            agent_id=agent_id,
+            amount_minor=20_000,
+            currency="USD",
+            idempotency_key=f"idem_2_{uuid.uuid4().hex}",
+            intent_digest=f"dig_2_{uuid.uuid4().hex}",
+        ).reservation_id
+
+    # 2. Parallel confirm(res_1) + release(res_2) on one agent
+    def do_confirm(res_id: str) -> None:
+        with pg_session_factory() as session, session.begin():
+            repo = BudgetRepository(session)
+            repo.confirm_reservation(res_id)
+
+    def do_release(res_id: str) -> None:
+        with pg_session_factory() as session, session.begin():
+            repo = BudgetRepository(session)
+            repo.release_reservation(res_id, confirmed_failure=True)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        f1 = executor.submit(do_confirm, res_1)
+        f2 = executor.submit(do_release, res_2)
+        f1.result(timeout=10)
+        f2.result(timeout=10)
+
+    with pg_session_factory() as session:
+        b = session.scalar(select(AgentBudgetModel).where(AgentBudgetModel.agent_id == agent_id))
+        assert b is not None
+        assert b.spent_minor == 30_000, f"Expected spent 30000, got {b.spent_minor}"
+        assert b.reserved_minor == 0, f"Expected reserved 0, got {b.reserved_minor}"
+
+    # 3. Two parallel confirms of the same reservation (res_3)
+    with pg_session_factory() as session, session.begin():
+        repo = BudgetRepository(session)
+        res_3 = repo.reserve_budget(
+            agent_id=agent_id,
+            amount_minor=15_000,
+            currency="USD",
+            idempotency_key=f"idem_3_{uuid.uuid4().hex}",
+            intent_digest=f"dig_3_{uuid.uuid4().hex}",
+        ).reservation_id
+
+    results: list[Any] = []
+    errors: list[Exception] = []
+
+    def try_confirm_res3() -> None:
+        try:
+            with pg_session_factory() as session, session.begin():
+                repo = BudgetRepository(session)
+                r = repo.confirm_reservation(res_3)
+                results.append(r.status)
+        except Exception as exc:
+            errors.append(exc)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        f3 = executor.submit(try_confirm_res3)
+        f4 = executor.submit(try_confirm_res3)
+        f3.result(timeout=10)
+        f4.result(timeout=10)
+
+    # Exactly one confirmation should succeed (or second gets InvalidApprovalStateError)
+    assert len(results) >= 1
+    with pg_session_factory() as session:
+        b = session.scalar(select(AgentBudgetModel).where(AgentBudgetModel.agent_id == agent_id))
+        assert b is not None
+        assert b.spent_minor == 45_000, f"Expected spent 45000, got {b.spent_minor}"
+        assert b.reserved_minor == 0, f"Expected reserved 0, got {b.reserved_minor}"

@@ -9,6 +9,7 @@ Strict entry path:
 
 import hashlib
 import hmac
+import logging
 import os
 import time
 from datetime import UTC, datetime
@@ -25,6 +26,7 @@ from fastapi import (
     status,
 )
 from fastapi.security import HTTPAuthorizationCredentials
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.auth import (
     check_agent_object_authorization,
@@ -38,7 +40,9 @@ from app.api.dependencies import (
     get_ledger_service,
     get_mandate_service,
     get_payment_rail,
+    get_reconciler_service,
 )
+from app.api.middleware import extract_client_ip
 from app.application.dtos import (
     ActivityItemDTO,
     ApprovalCommand,
@@ -86,6 +90,7 @@ from app.infrastructure.tokens import (
 )
 
 router = APIRouter()
+logger = logging.getLogger("phalanx.api.routes")
 
 
 # Health and Diagnostics Endpoints (Public)
@@ -132,12 +137,13 @@ def _check_demo_token_rate_limit(client_ip: str) -> None:
     history = _demo_token_rate_limits.setdefault(client_ip, [])
     # Retain timestamps within the last 60 seconds
     _demo_token_rate_limits[client_ip] = [t for t in history if now - t < 60.0]
-    max_tokens = int(os.getenv("DEMO_TOKEN_RATE_LIMIT", "120"))
+    max_tokens = int(os.getenv("DEMO_TOKEN_RATE_LIMIT", str(settings.demo_token_rate_limit)))
     if len(_demo_token_rate_limits[client_ip]) >= max_tokens:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=(
-                "Rate limit exceeded: demo token dispensing is limited to 10 requests per minute."
+                "Rate limit exceeded: demo token dispensing is limited to "
+                f"{max_tokens} requests per minute."
             ),
         )
     _demo_token_rate_limits[client_ip].append(now)
@@ -160,7 +166,7 @@ def create_demo_token(request: DemoTokenRequestDTO, raw_request: Request) -> Dem
             detail="Endpoint not found: Demo mode is disabled",
         )
 
-    client_ip = raw_request.client.host if raw_request.client else "unknown"
+    client_ip = extract_client_ip(raw_request)
     _check_demo_token_rate_limit(client_ip)
 
     try:
@@ -238,7 +244,13 @@ def create_payment_request(
     # Object-level authorization: agent identity must match requested agent_id
     check_agent_object_authorization(identity, command.agent_id)
 
-    return service.authorize(command)
+    try:
+        return service.authorize(command)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get(
@@ -366,6 +378,8 @@ def get_mandate(
         status=mandate.status,
         key_id=mandate.key_id,
         signature=mandate.signature,
+        allow_unregistered_payees=mandate.allow_unregistered_payees,
+        require_invoice_reference=mandate.require_invoice_reference,
         spent_budget_minor=spent,
         remaining_budget_minor=remaining,
     )
@@ -415,7 +429,14 @@ def list_pending_approvals(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden: Autonomous agents cannot access the supervisor approval queue.",
         )
-    return service.get_pending_step_ups()
+    try:
+        return service.get_pending_step_ups()
+    except Exception as exc:
+        logger.error("Failed to fetch pending approvals from database: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database unavailable for pending approvals query",
+        ) from exc
 
 
 @router.post(
@@ -487,10 +508,16 @@ def approve_request_api(
     service: Annotated[AuthorizationService, Depends(get_authorization_service)],
 ) -> AuthorizationResponseDTO:
     """Direct approve endpoint binding human approval to exact intent."""
+    expected_digest = payload.get("expected_digest", "")
+    if len(expected_digest) != 64:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Field 'expected_digest' must be a 64-char SHA-256 hexadecimal string.",
+        )
     approval_dto = SubmitApprovalRequestDTO(
         decision=DecisionOutcome.ALLOW,
         reason=payload.get("reason", "Approved via legacy API"),
-        expected_digest=payload.get("expected_digest", ""),
+        expected_digest=expected_digest,
     )
     return submit_approval(request_id, approval_dto, identity, service)
 
@@ -507,10 +534,16 @@ def reject_request_api(
     service: Annotated[AuthorizationService, Depends(get_authorization_service)],
 ) -> AuthorizationResponseDTO:
     """Direct reject endpoint for human rejection."""
+    expected_digest = payload.get("expected_digest", "")
+    if len(expected_digest) != 64:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Field 'expected_digest' must be a 64-char SHA-256 hexadecimal string.",
+        )
     approval_dto = SubmitApprovalRequestDTO(
         decision=DecisionOutcome.DENY,
         reason=payload.get("reason", "Rejected via legacy API"),
-        expected_digest=payload.get("expected_digest", ""),
+        expected_digest=expected_digest,
     )
     return submit_approval(request_id, approval_dto, identity, service)
 
@@ -627,7 +660,7 @@ def tamper_ledger(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Endpoint not found: Demo mode is disabled",
         )
-    if identity.role not in (Role.AUDITOR, Role.PRINCIPAL):
+    if identity.role != Role.PRINCIPAL:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Forbidden: Role '{identity.role.value}' cannot simulate ledger tamper.",
@@ -650,7 +683,7 @@ def restore_ledger(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Endpoint not found: Demo mode is disabled",
         )
-    if identity.role not in (Role.AUDITOR, Role.PRINCIPAL):
+    if identity.role != Role.PRINCIPAL:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Forbidden: Role '{identity.role.value}' cannot restore ledger.",
@@ -675,21 +708,74 @@ def list_reconcile_items(
     return service.get_held_reservations()
 
 
-@router.post("/v1/reconcile/{request_id}", status_code=status.HTTP_200_OK)
-def reconcile_request(
+@router.get("/v1/needs-review", response_model=list[dict[str, Any]], status_code=status.HTTP_200_OK)
+def list_needs_review_items(
+    identity: Annotated[Identity, Depends(get_current_identity)],
+    service: Annotated[AuthorizationService, Depends(get_authorization_service)],
+) -> list[dict[str, Any]]:
+    """List ambiguous transactions currently in NEEDS_REVIEW awaiting provider proof."""
+    if identity.role == Role.AGENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Agents cannot inspect review queues.",
+        )
+    return service.get_needs_review_items()
+
+
+@router.post("/v1/needs-review/{request_id}/resolve", status_code=status.HTTP_200_OK)
+def resolve_needs_review_endpoint(
     request_id: str,
     payload: dict[str, Any],
     identity: Annotated[Identity, Depends(get_current_identity)],
     service: Annotated[AuthorizationService, Depends(get_authorization_service)],
 ) -> dict[str, Any]:
+    """Resolve a NEEDS_REVIEW item via RETRY_LOOKUP, PROVIDE_PROOF, or MARK_FAILED."""
+    if identity.role not in (Role.APPROVER, Role.PRINCIPAL):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Forbidden: Role '{identity.role.value}' cannot resolve transactions in review."
+            ),
+        )
+    action = payload.get("action", "")
+    capture_id = payload.get("capture_id")
+    reason = payload.get("reason", "")
+    try:
+        new_state = service.resolve_needs_review(
+            request_id=request_id,
+            action=action,
+            capture_id=capture_id,
+            reason=reason,
+            actor=f"{identity.role.value}:{identity.principal_id}",
+        )
+        return {"request_id": request_id, "resolved_state": new_state.value}
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/v1/reconcile/{request_id}", status_code=status.HTTP_200_OK)
+def reconcile_request(
+    request_id: str,
+    identity: Annotated[Identity, Depends(get_current_identity)],
+    service: Annotated[AuthorizationService, Depends(get_authorization_service)],
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Reconcile an ambiguous payment request outcome against confirmed rail status."""
-    if identity.role not in (Role.APPROVER, Role.PRINCIPAL, Role.AUDITOR):
+    if identity.role not in (Role.APPROVER, Role.PRINCIPAL):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Forbidden: Role '{identity.role.value}' cannot reconcile payments.",
         )
-    rail_status = payload.get("status")
-    new_state = service.reconcile(request_id, rail_status=rail_status)
+    _ = payload
+    try:
+        new_state = service.reconcile(request_id)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
     return {"request_id": request_id, "state": new_state.value}
 
 
@@ -698,13 +784,34 @@ def reconcile_request(
 
 processed_webhook_events: set[str] = set()
 
+EXACT_PAYPAL_EVENT_TYPES: set[str] = {
+    # Orders v2 / Captures
+    "PAYMENT.CAPTURE.COMPLETED",
+    "PAYMENT.CAPTURE.DENIED",
+    "PAYMENT.CAPTURE.DECLINED",
+    "PAYMENT.CAPTURE.REFUNDED",
+    "PAYMENT.CAPTURE.REVERSED",
+    "CHECKOUT.ORDER.APPROVED",
+    "CHECKOUT.ORDER.COMPLETED",
+    # Payouts
+    "PAYMENT.PAYOUTS-ITEM.SUCCEEDED",
+    "PAYMENT.PAYOUTS-ITEM.FAILED",
+    "PAYMENT.PAYOUTS-ITEM.CANCELED",
+    "PAYMENT.PAYOUTS-ITEM.DENIED",
+    "PAYMENT.PAYOUTS-ITEM.BLOCKED",
+    "PAYMENT.PAYOUTSBATCH.SUCCESS",
+    "PAYMENT.PAYOUTSBATCH.DENIED",
+    "PAYMENT.PAYOUTSBATCH.PROCESSING",
+}
+
 
 @router.post("/v1/webhooks/paypal", status_code=status.HTTP_200_OK)
 async def paypal_webhook(
     request: Request,
     rail: Annotated[PaymentRail, Depends(get_payment_rail)],
+    reconciler: Annotated[Any, Depends(get_reconciler_service)],
 ) -> dict[str, str]:
-    """Ingest PayPal webhook events with signature verification and idempotency."""
+    """Ingest PayPal webhook events with signature verification, idempotency, and reconciliation."""
     webhook_id = settings.paypal_webhook_id or os.getenv("PAYPAL_WEBHOOK_ID")
     if not webhook_id:
         raise HTTPException(
@@ -739,6 +846,23 @@ async def paypal_webhook(
         if event_id in processed_webhook_events:
             return {"status": "duplicate_ignored", "event_id": event_id}
         processed_webhook_events.add(event_id)
+
+    event_type = str(data.get("event_type", "")).upper() if isinstance(data, dict) else ""
+    if event_type not in EXACT_PAYPAL_EVENT_TYPES:
+        return {"status": "ignored_unhandled_event", "event_id": event_id or "unknown"}
+
+    # Trigger reconciliation via provider lookup; never settle or release based on caller status
+    resource = data.get("resource", {}) if isinstance(data, dict) else {}
+    resource_id = resource.get("id") or resource.get("payout_batch_id")
+
+    if resource_id:
+        reconciled = reconciler.reconcile_by_transaction_id(str(resource_id), force=True)
+        if reconciled:
+            return {
+                "status": "processed",
+                "event_id": event_id or "unknown",
+                "reconciled_state": reconciled.value,
+            }
 
     return {"status": "processed", "event_id": event_id or "unknown"}
 
@@ -789,35 +913,108 @@ def capture_order(
     }
 
 
-# Demo Reset Endpoint (POST /v1/admin/reset)
+# Admin IP Diagnostic Endpoint (GET /v1/admin/client-ip)
 
 
-def verify_admin_reset_access(
+def verify_admin_token_only(
     x_admin_token: Annotated[str | None, Header(alias="X-Admin-Token")] = None,
-    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
 ) -> bool:
-    """Verify admin access via X-Admin-Token or Principal role."""
+    """Strictly verify X-Admin-Token header with constant-time comparison."""
     expected_token = settings.admin_token
     if not expected_token or len(expected_token) < 24:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Admin endpoint disabled: ADMIN_TOKEN unconfigured or insufficient length",
         )
+    if not x_admin_token or not hmac.compare_digest(
+        x_admin_token.encode("utf-8"), expected_token.encode("utf-8")
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized: Invalid or missing X-Admin-Token",
+        )
+    return True
 
+
+@router.get("/v1/admin/client-ip", status_code=status.HTTP_200_OK)
+def get_client_ip(
+    request: Request,
+    _authorized: Annotated[bool, Depends(verify_admin_token_only)],
+) -> dict[str, str | None]:
+    """Diagnostic endpoint to inspect proxy IP resolution in hosted environments."""
+    raw_xff = request.headers.get("x-forwarded-for")
+    tcp_peer = request.client.host if request.client else "unknown"
+    resolved_ip = extract_client_ip(request)
+    return {
+        "raw_x_forwarded_for": raw_xff,
+        "tcp_peer": tcp_peer,
+        "resolved_client_ip": resolved_ip,
+    }
+
+
+# Demo Reset Endpoint (POST /v1/admin/reset)
+
+
+def verify_admin_reset_access(
+    x_admin_token: Annotated[str | None, Header(alias="X-Admin-Token")] = None,
+    x_reconcile_secret: Annotated[str | None, Header(alias="X-Reconcile-Secret")] = None,
+    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+) -> bool:
+    """Verify admin access via X-Admin-Token, X-Reconcile-Secret, or Principal role.
+
+    In ENVIRONMENT=demo, resets require admin token or reconcile secret only
+    (Principal role gets 403).
+    """
+    env = os.getenv("ENVIRONMENT", settings.environment).strip().lower()
+
+    expected_admin = settings.admin_token
+    expected_reconcile = settings.reconcile_secret
+
+    # 1. Check X-Admin-Token
     if x_admin_token:
-        if hmac.compare_digest(x_admin_token.encode("utf-8"), expected_token.encode("utf-8")):
+        if not expected_admin or len(expected_admin) < 24:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Admin endpoint disabled: ADMIN_TOKEN unconfigured or insufficient length",
+            )
+        if hmac.compare_digest(x_admin_token.encode("utf-8"), expected_admin.encode("utf-8")):
             return True
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unauthorized: Invalid X-Admin-Token",
         )
 
+    # 2. Check X-Reconcile-Secret (allowed for daily reset automation)
+    if x_reconcile_secret:
+        if not expected_reconcile or len(expected_reconcile) < 24:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Reconcile secret disabled: RECONCILE_SECRET unconfigured or too short",
+            )
+        if hmac.compare_digest(
+            x_reconcile_secret.encode("utf-8"), expected_reconcile.encode("utf-8")
+        ):
+            return True
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized: Invalid X-Reconcile-Secret",
+        )
+
+    # 3. Check Principal role Bearer token
     if authorization and authorization.lower().startswith("bearer "):
+        if env == "demo":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Forbidden: In demo environment, admin reset requires admin token "
+                    "or reconcile secret (Principal role cannot reset demo state)."
+                ),
+            )
         creds = HTTPAuthorizationCredentials(
             scheme="Bearer", credentials=authorization.split(" ", 1)[1]
         )
         identity = get_current_identity(credentials=creds)
-        if identity.role == Role.PRINCIPAL:
+        if identity.role == Role.PRINCIPAL or settings.demo_mode:
             return True
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -826,7 +1023,10 @@ def verify_admin_reset_access(
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Unauthorized: Authentication required (X-Admin-Token or Principal Bearer token)",
+        detail=(
+            "Unauthorized: Authentication required "
+            "(X-Admin-Token, X-Reconcile-Secret, or Principal Bearer token)"
+        ),
     )
 
 
@@ -839,10 +1039,87 @@ def admin_reset(
     """Reset sandbox demo state (clears spent budgets, idempotency cache, restores ledger).
 
     Only principal role or holder of X-Admin-Token can reset administrative state.
+    Disabled in production environment.
     """
+    env = os.getenv("ENVIRONMENT", settings.environment).strip().lower()
+    if env in ("production", "prod"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Admin reset is disabled in production environment",
+        )
     service.reset_state()
     ledger_service.restore_chain()
+    _demo_token_rate_limits.clear()
+    _invoice_agent_rate_limits.clear()
     return {"status": "reset_completed", "message": "Demo state reset successfully."}
+
+
+@router.post("/v1/admin/daily-reset", status_code=status.HTTP_200_OK)
+def admin_daily_reset(
+    _authorized: Annotated[bool, Depends(verify_admin_reset_access)],
+    service: Annotated[AuthorizationService, Depends(get_authorization_service)],
+    ledger_service: Annotated[LedgerService, Depends(get_ledger_service)],
+) -> dict[str, str]:
+    """Daily reset endpoint for external cron automation."""
+    return admin_reset(_authorized=_authorized, service=service, ledger_service=ledger_service)
+
+
+@router.post("/v1/admin/reconcile", status_code=status.HTTP_200_OK)
+def admin_reconcile(
+    _authorized: Annotated[bool, Depends(verify_admin_reset_access)],
+    reconciler: Annotated[Any, Depends(get_reconciler_service)],
+) -> dict[str, Any]:
+    """Manually trigger immediate reconciliation of all ambiguous transactions."""
+    metrics = reconciler.reconcile_all(force=True)
+    return {"status": "reconciliation_completed", "metrics": metrics}
+
+
+# External Cron Reconciliation Endpoint (POST /v1/admin/reconcile-scheduled)
+
+_reconcile_scheduled_rate_limits: dict[str, list[float]] = {}
+
+
+@router.post("/v1/admin/reconcile-scheduled", status_code=status.HTTP_200_OK)
+def reconcile_scheduled(
+    request: Request,
+    x_reconcile_secret: Annotated[str | None, Header(alias="X-Reconcile-Secret")] = None,
+    reconciler: Annotated[Any, Depends(get_reconciler_service)] = None,
+) -> dict[str, Any]:
+    """Trigger one reconciliation pass from an external cron (e.g. Render Cron Jobs).
+
+    Authentication: constant-time compare of X-Reconcile-Secret header against
+    RECONCILE_SECRET env var (must be >= 24 characters).  Returns 401 for a
+    missing or wrong secret; 429 when the per-IP rate limit is exceeded (max 5
+    calls/minute to guard against accidental hammering from a misconfigured cron).
+    """
+    # Rate limit: 5 calls/minute per client IP (cron callers, not interactive users)
+    client_ip = extract_client_ip(request)
+    now = time.time()
+    history = _reconcile_scheduled_rate_limits.setdefault(client_ip, [])
+    _reconcile_scheduled_rate_limits[client_ip] = [t for t in history if now - t < 60.0]
+    if len(_reconcile_scheduled_rate_limits[client_ip]) >= 5:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Rate limit exceeded: reconcile-scheduled allows 5 calls per minute.",
+        )
+    _reconcile_scheduled_rate_limits[client_ip].append(now)
+
+    expected = settings.reconcile_secret
+    if not expected or len(expected) < 24:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Reconcile-scheduled disabled: RECONCILE_SECRET not configured or too short.",
+        )
+    if not x_reconcile_secret or not hmac.compare_digest(
+        x_reconcile_secret.encode("utf-8"), expected.encode("utf-8")
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized: missing or invalid X-Reconcile-Secret.",
+        )
+
+    metrics = reconciler.reconcile_all(force=True)
+    return {"status": "reconciliation_completed", "metrics": metrics}
 
 
 # Cockpit Overview & Activity Feed Endpoints (GET /v1/overview, GET /v1/activity)
@@ -1295,3 +1572,63 @@ def run_attack_lab(
         all_defended=all(r.blocked for r in results),
         results=results,
     )
+
+
+# ---------------------------------------------------------------------------
+# Invoice Agent Endpoints (TASK T8)
+# ---------------------------------------------------------------------------
+
+_invoice_agent_rate_limits: dict[str, list[float]] = {}
+
+
+def _check_invoice_agent_rate_limit(client_ip: str) -> None:
+    now = time.time()
+    history = _invoice_agent_rate_limits.setdefault(client_ip, [])
+    _invoice_agent_rate_limits[client_ip] = [t for t in history if now - t < 60.0]
+    max_requests = int(os.getenv("INVOICE_AGENT_RATE_LIMIT", "15"))
+    if len(_invoice_agent_rate_limits[client_ip]) >= max_requests:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                f"Rate limit exceeded: invoice agent processing is limited to "
+                f"{max_requests} requests per minute."
+            ),
+        )
+    _invoice_agent_rate_limits[client_ip].append(now)
+
+
+class ProcessInvoiceRequestDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    invoice_text: str = Field(..., max_length=4000, description="Raw invoice text to parse")
+    agent_id: str | None = Field(default=None, description="Optional requesting agent identifier")
+    force_fallback: bool = Field(default=False, description="Force recorded run fallback")
+
+
+@router.get("/v1/invoice-agent/samples", status_code=status.HTTP_200_OK)
+def get_invoice_samples() -> list[dict[str, Any]]:
+    """Return the built-in sample invoices."""
+    from app.application.invoice_agent import BUILTIN_SAMPLES
+
+    return BUILTIN_SAMPLES
+
+
+@router.post(
+    "/v1/invoice-agent/process",
+    status_code=status.HTTP_200_OK,
+)
+def process_invoice(
+    payload: ProcessInvoiceRequestDTO,
+    request: Request,
+    identity: Annotated[Identity, Depends(get_current_identity)],
+    service: Annotated[AuthorizationService, Depends(get_authorization_service)],
+) -> dict[str, Any]:
+    """Invoice Agent parses supplier invoice text, proposes intent, requests authorization."""
+    from app.application.invoice_agent import InvoiceAgent
+
+    client_ip = extract_client_ip(request)
+    _check_invoice_agent_rate_limit(client_ip)
+
+    agent_id = identity.agent_id or "agent-auto-1"
+    agent = InvoiceAgent(authorization_service=service, agent_id=agent_id)
+    result = agent.process_invoice(payload.invoice_text, force_fallback=payload.force_fallback)
+    return result.model_dump()

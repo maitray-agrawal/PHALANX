@@ -261,9 +261,12 @@ class BudgetRepository:
 
     def confirm_reservation(self, reservation_id: str) -> BudgetReservationModel:
         """Confirm settlement of a reservation, moving reserved funds to spent."""
+        dialect = self.session.bind.dialect.name if self.session.bind else ""
         res_stmt = select(BudgetReservationModel).where(
             BudgetReservationModel.reservation_id == reservation_id
         )
+        if dialect in ("postgresql", "postgres"):
+            res_stmt = res_stmt.with_for_update()
         res = self.session.scalar(res_stmt)
         if not res:
             raise ReservationNotFoundError(f"Reservation '{reservation_id}' not found")
@@ -278,6 +281,8 @@ class BudgetRepository:
             )
 
         budget_stmt = select(AgentBudgetModel).where(AgentBudgetModel.agent_id == res.agent_id)
+        if dialect in ("postgresql", "postgres"):
+            budget_stmt = budget_stmt.with_for_update()
         budget = self.session.scalar(budget_stmt)
         if not budget:
             raise ValueError(f"Budget for agent '{res.agent_id}' not found")
@@ -303,9 +308,12 @@ class BudgetRepository:
         Only a confirmed failure releases reserved funds. An ambiguous/unknown outcome
         transitions to RECONCILE, preserving budget lock to prevent double-spending.
         """
+        dialect = self.session.bind.dialect.name if self.session.bind else ""
         res_stmt = select(BudgetReservationModel).where(
             BudgetReservationModel.reservation_id == reservation_id
         )
+        if dialect in ("postgresql", "postgres"):
+            res_stmt = res_stmt.with_for_update()
         res = self.session.scalar(res_stmt)
         if not res:
             raise ReservationNotFoundError(f"Reservation '{reservation_id}' not found")
@@ -319,6 +327,8 @@ class BudgetRepository:
             )
 
         budget_stmt = select(AgentBudgetModel).where(AgentBudgetModel.agent_id == res.agent_id)
+        if dialect in ("postgresql", "postgres"):
+            budget_stmt = budget_stmt.with_for_update()
         budget = self.session.scalar(budget_stmt)
         if not budget:
             raise ValueError(f"Budget for agent '{res.agent_id}' not found")
@@ -348,10 +358,21 @@ class BudgetRepository:
         - Confirmed success: confirms reservation -> CONFIRMED
         - Confirmed failure: releases reservation -> RELEASED
         - Still unknown: holds reservation in RECONCILE
+        - Idempotent: if already CONFIRMED or RELEASED, returns current reservation safely.
         """
+        res_stmt = select(BudgetReservationModel).where(
+            BudgetReservationModel.reservation_id == reservation_id
+        )
+        res = self.session.scalar(res_stmt)
+        if not res:
+            raise ReservationNotFoundError(f"Reservation '{reservation_id}' not found")
+
+        # Idempotency guard for reconciler
+        if res.status in (ReservationStatus.CONFIRMED.value, ReservationStatus.RELEASED.value):
+            return res
         status_norm = (rail_status or "UNKNOWN").upper()
         CONFIRMED_SUCCESS = {"SUCCESS", "COMPLETED", "CONFIRMED", "SETTLED"}
-        CONFIRMED_FAILURE = {
+        EXPLICIT_PROVIDER_FAILURES = {
             "FAILED",
             "DENIED",
             "REJECTED",
@@ -359,15 +380,30 @@ class BudgetRepository:
             "FALLBACK_FAILED",
             "CANCELED",
             "RETURNED",
-            "LOOKUP_FAILED",
+            "EXPIRED",
+            "VOIDED",
         }
 
         if status_norm in CONFIRMED_SUCCESS:
             return self.confirm_reservation(reservation_id)
-        elif status_norm in CONFIRMED_FAILURE:
+        elif status_norm in EXPLICIT_PROVIDER_FAILURES:
             return self.release_reservation(reservation_id, confirmed_failure=True)
         else:
+            # Any unconfirmed or unknown outcome preserves budget lock in RECONCILE
             return self.release_reservation(reservation_id, confirmed_failure=False)
+
+    def get_held_reservations(self) -> list[BudgetReservationModel]:
+        """Fetch all reservations currently held in PENDING or RECONCILE state."""
+        stmt = (
+            select(BudgetReservationModel)
+            .where(
+                BudgetReservationModel.status.in_(
+                    [ReservationStatus.PENDING.value, ReservationStatus.RECONCILE.value]
+                )
+            )
+            .order_by(BudgetReservationModel.created_at_utc.asc())
+        )
+        return list(self.session.scalars(stmt).all())
 
     def record_decision(
         self,

@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     postgres_password: str = Field(
         default="", description="PostgreSQL password required for application database access"
     )
+    phalanx_app_db_password: str = Field(
+        default="", description="PostgreSQL application password for phalanx_app"
+    )
     postgres_port: int = Field(default=5433, description="PostgreSQL port (default host 5433)")
     app_port: int = Field(default=8000, description="Application HTTP server port")
     payment_rail: str = Field(
@@ -32,6 +35,34 @@ class Settings(BaseSettings):
     demo_mode: bool = Field(
         default=False,
         description="Demo mode: allows visitor role switching and simulated tampering",
+    )
+    demo_seed: bool = Field(
+        default=False,
+        description="Explicitly enable demo seed data injection",
+    )
+    forwarded_allow_ips: str = Field(
+        default="127.0.0.1,::1",
+        description="Comma-separated IPs or subnets trusted for X-Forwarded-For headers",
+    )
+    trusted_proxy_count: int = Field(
+        default=0,
+        description="Number of reverse proxies; 0 disables X-Forwarded-For chaining",
+    )
+    demo_token_rate_limit: int = Field(
+        default=15,
+        description="Default rate limit per client IP for demo token dispensing (req/min)",
+    )
+    reconciler_enabled: bool = Field(
+        default=False,
+        description="Enable periodic background reconciliation loop (off in tests)",
+    )
+    reconcile_max_age_seconds: int = Field(
+        default=86400,
+        description="Max age in seconds before ambiguous requests mark NEEDS_REVIEW",
+    )
+    reconcile_interval_seconds: int = Field(
+        default=60,
+        description="Interval in seconds for periodic background reconciliation loop",
     )
 
     @field_validator("database_url", mode="before")
@@ -56,12 +87,41 @@ class Settings(BaseSettings):
     mandate_signing_key_hex: str = Field(default="")
     mandate_signing_key_file: str = Field(default="")
 
+    # Scheduled reconciliation secret (external cron; constant-time compare)
+    reconcile_secret: str = Field(
+        default="",
+        description="Secret for POST /v1/admin/reconcile-scheduled; min 24 chars when set",
+    )
+
+    # Gemini AI Integration (server-side only)
+    gemini_api_key: str = Field(
+        default="", description="Google Gemini API key (server-side secret)"
+    )
+    gemini_model: str = Field(
+        default="gemini-2.5-flash", description="Google Gemini model identifier"
+    )
+
     # LLM & AI Guardrails (Manual 41-44)
     llm_model_name: str = Field(default="gpt-4o-mini")
     llm_timeout_seconds: float = Field(default=5.0)
     llm_max_retries: int = Field(default=2)
     llm_token_cap_per_identity: int = Field(default=50_000)
     llm_cost_cap_dollars_per_identity: float = Field(default=2.0)
+
+    @field_validator("database_url", mode="after")
+    @classmethod
+    def require_ssl_for_neon(cls, v: str) -> str:
+        """Warn when DATABASE_URL targets Neon but lacks sslmode=require.
+
+        Neon rejects plain-text connections; fail loudly so the error is
+        obvious at startup rather than at the first query.
+        """
+        if "neon.tech" in v and "sslmode" not in v:
+            raise ValueError(
+                "DATABASE_URL targets Neon but is missing '?sslmode=require'. "
+                "Append '?sslmode=require' to the connection string."
+            )
+        return v
 
 
 settings = Settings()

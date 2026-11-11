@@ -13,51 +13,78 @@ export interface ApprovalsScreenProps {
   onNotify?: (msg: string, type: "success" | "error" | "info") => void;
 }
 
-const DEFAULT_STEP_UPS: PendingStepUpItem[] = [
-  {
-    request_id: "req_stepup_1001",
-    agent_id: "agent-auto-1",
-    recipient_id: "vendor-paypal-sandbox-1",
-    amount_minor: 120000,
-    currency: "USD",
-    purpose: "High capacity compute nodes",
-    intent_digest: "1e77aa99c8201a88bbfe1009832716a504b2ae41e4649b934ca495991b7852b8",
-    created_at_utc: "2026-10-22T12:05:00Z",
-    status: "PENDING",
-  },
-];
-
 export const ApprovalsScreen: React.FC<ApprovalsScreenProps> = ({
   token,
   role = "approver",
-  onNavigate,
+  onNavigate: _onNavigate,
   onNotify,
 }) => {
-  const [items, setItems] = useState<PendingStepUpItem[]>(DEFAULT_STEP_UPS);
+  const [items, setItems] = useState<PendingStepUpItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [isCreatingSample, setIsCreatingSample] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isAgentRole = role.toLowerCase() === "agent";
 
   const fetchApprovals = async () => {
+    if (isAgentRole) {
+      // Agents are forbidden from fetching the supervisor queue (403 Forbidden).
+      // Keep loaded items in demo mode so supervisor cards show with disabled controls.
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const data = await api.getPendingApprovals(token).catch(() => []);
-      const pending = (data || []).filter((item) => item.status === "PENDING");
-      if (pending.length > 0) {
-        setItems(pending);
-      } else {
-        // Ensure interactive demo always has items to review when remote queue is clear
-        setItems(DEFAULT_STEP_UPS);
-      }
+      const pending = (data || []).filter(
+        (item) => item.status === "PENDING" || item.status === "NEEDS_REVIEW"
+      );
+      setItems(pending);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to load approval queue";
       setError(msg);
       if (onNotify) onNotify(msg, "error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateSampleRequest = async () => {
+    setIsCreatingSample(true);
+    try {
+      let authToken = token;
+      try {
+        const agentTokenResp = await api.getDemoToken("agent", "principal_treasury", "agent-auto-1");
+        if (agentTokenResp?.access_token) {
+          authToken = agentTokenResp.access_token;
+        }
+      } catch {
+        // Fallback to active token
+      }
+
+      const resp = await api.createPaymentRequest(
+        {
+          agent_id: "agent-auto-1",
+          recipient_id: "vendor-paypal-sandbox-1",
+          amount_minor: 120000,
+          currency: "USD",
+          purpose: "Equipment invoice review",
+          idempotency_key: `sample_stepup_${Date.now()}`,
+        },
+        authToken
+      );
+      if (resp.decision === "STEP_UP") {
+        if (onNotify) onNotify("Sample STEP_UP transaction created.", "success");
+      } else {
+        if (onNotify) onNotify(`Transaction evaluated: ${resp.decision}`, "info");
+      }
+      await fetchApprovals();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to create sample request";
+      if (onNotify) onNotify(msg, "error");
+    } finally {
+      setIsCreatingSample(false);
     }
   };
 
@@ -134,18 +161,28 @@ export const ApprovalsScreen: React.FC<ApprovalsScreenProps> = ({
             Autonomous transactions exceeding instant threshold limits ($500.00) require human authorization cryptographically bound to the canonical RFC 8785 intent digest.
           </p>
         </div>
-        <PillButton
-          variant="secondary"
-          size="sm"
-          icon={<RefreshCw size={14} />}
-          onClick={fetchApprovals}
-        >
-          Refresh Queue
-        </PillButton>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <PillButton
+            variant="primary"
+            size="sm"
+            onClick={handleCreateSampleRequest}
+            disabled={isCreatingSample}
+          >
+            {isCreatingSample ? "Creating..." : "Create sample request"}
+          </PillButton>
+          <PillButton
+            variant="secondary"
+            size="sm"
+            icon={<RefreshCw size={14} />}
+            onClick={fetchApprovals}
+          >
+            Refresh Queue
+          </PillButton>
+        </div>
       </div>
 
       {isAgentRole && (
-        <div className="warning-banner mt-4" role="region" aria-label="Role Restriction Banner">
+        <div className="warning-banner mt-4" role="alert" aria-label="Role Restriction Banner">
           <Shield size={16} className="warning-icon" />
           <span>
             <strong>Role Restriction:</strong> You are currently acting under the <code>AGENT</code> persona. Autonomous agents are strictly forbidden from authorizing their own transactions. Switch to <code>APPROVER</code> under More to authorize.
@@ -179,8 +216,8 @@ export const ApprovalsScreen: React.FC<ApprovalsScreenProps> = ({
             icon={<CheckCircle2 size={36} className="text-allow" />}
             title="Queue is completely clear"
             description="No transactions are currently awaiting supervisor authorization."
-            actionLabel="Propose a New Transaction"
-            onAction={() => onNavigate && onNavigate("pay")}
+            actionLabel={isCreatingSample ? "Creating sample request..." : "Create sample request"}
+            onAction={handleCreateSampleRequest}
           />
         </div>
       )}

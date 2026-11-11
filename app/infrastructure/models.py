@@ -8,8 +8,17 @@ Invariants:
 
 from datetime import UTC, datetime
 from enum import Enum
+from typing import Any
 
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, Index, String, Text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -76,9 +85,7 @@ class BudgetReservationModel(Base):
     __tablename__ = "budget_reservations"
 
     reservation_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    idempotency_key: Mapped[str] = mapped_column(
-        String(128), unique=True, nullable=False, index=True
-    )
+    idempotency_key: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
     agent_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
@@ -153,7 +160,7 @@ class LedgerEventModel(Base):
     event_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     event_seq: Mapped[int] = mapped_column(BigInteger, nullable=False)
     prev_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    event_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    event_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     agent_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     recipient_id: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -166,4 +173,88 @@ class LedgerEventModel(Base):
         default=lambda: datetime.now(UTC),
     )
 
-    __table_args__ = (Index("idx_ledger_events_seq", "event_seq"),)
+    __table_args__ = (UniqueConstraint("event_seq", name="uq_ledger_events_event_seq"),)
+
+
+class MandateModel(Base):
+    """Persisted financial authority mandates with cryptographic seal."""
+
+    __tablename__ = "mandates"
+
+    mandate_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    version: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=1)
+    principal_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    agent_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    single_limit_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    instant_threshold_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    lifetime_budget_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    allowed_payees_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    allowed_purposes_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    allow_unregistered_payees: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    require_invoice_reference: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    valid_from_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    valid_until_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="ACTIVE")
+    key_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    signature: Mapped[str] = mapped_column(Text, nullable=False)
+    signed_payload: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at_utc: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+    updated_at_utc: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    def to_domain(self) -> Any:
+        import json
+
+        from app.domain.mandates import Mandate, MandateStatus
+
+        return Mandate(
+            mandate_id=self.mandate_id,
+            version=int(self.version),
+            principal_id=self.principal_id,
+            agent_id=self.agent_id,
+            single_limit_minor=int(self.single_limit_minor),
+            instant_threshold_minor=int(self.instant_threshold_minor),
+            lifetime_budget_minor=int(self.lifetime_budget_minor),
+            currency=self.currency,
+            allowed_payees=tuple(json.loads(self.allowed_payees_json)),
+            allow_unregistered_payees=bool(self.allow_unregistered_payees),
+            require_invoice_reference=bool(self.require_invoice_reference),
+            allowed_purposes=tuple(json.loads(self.allowed_purposes_json)),
+            valid_from_utc=(
+                self.valid_from_utc.replace(tzinfo=UTC)
+                if self.valid_from_utc.tzinfo is None
+                else self.valid_from_utc
+            ),
+            valid_until_utc=(
+                self.valid_until_utc.replace(tzinfo=UTC)
+                if self.valid_until_utc.tzinfo is None
+                else self.valid_until_utc
+            ),
+            status=MandateStatus(self.status),
+            key_id=self.key_id,
+            signature=self.signature,
+        )
+
+
+class DailyQuotaModel(Base):
+    """Persisted daily quota usage counters for API limits (e.g. Gemini daily call cap)."""
+
+    __tablename__ = "daily_quotas"
+
+    quota_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    count: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    updated_at_utc: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )

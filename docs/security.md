@@ -79,3 +79,10 @@ Every attack vector in the red-team catalog is covered by automated regression t
 | **I3** | Static Admin Key Probe | Attacker sends constant `'phalanx-admin-demo-key'` to administrative reset. | **HTTP 401 / 503**: Static key removed; disabled unless `ADMIN_TOKEN` has >= 24 chars; compared via `hmac.compare_digest`. |
 | **I4** | Arbitrary Webhook Signature | Attacker sends webhook with arbitrary signature. | **HTTP 401 / 503**: Checked against PayPal API; fails closed on unconfigured credentials. |
 | **I5** | Insecure/Empty SECRET_KEY | Service started without configured `SECRET_KEY` >= 32 bytes. | **BOOT/READINESS FAILURE**: `/readyz` returns 503; boot sequence aborts immediately. |
+
+## 3. Repository Secret Audit & Gitleaks Scan Evidence
+
+- **Git Commit Count**: `git rev-list --all --count` = 95 commits.
+- **Gitleaks Scan Scope**: 91 commits scanned across all git references (`--log-opts="--all"`).
+- **Scanner Outcome**: 0 leaks detected by automated regex patterns.
+- **Critical Limitation Notice**: Gitleaks did not detect the known historical password and must not be cited as proof of a clean history. Automated regex-based secret scanners only detect patterns matching known token prefixes or entropy heuristics; any historical credentials that were ever committed must be treated as irrevocably compromised and rotated immediately, regardless of scan results.

@@ -58,9 +58,32 @@ export const PayScreen: React.FC<PayScreenProps> = ({
   const [agentId, setAgentId] = useState("agent-auto-1");
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [captureStatus, setCaptureStatus] = useState<string | null>(null);
   const [lastResponse, setLastResponse] = useState<AuthorizationResponse | null>(null);
   const [lastCommand, setLastCommand] = useState<AuthorizeTransactionCommand | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const handleCapture = async () => {
+    if (!lastResponse?.payout_id) return;
+    setIsCapturing(true);
+    try {
+      const res = await api.captureOrder(lastResponse.payout_id, token);
+      if (res.success || res.status === "COMPLETED") {
+        setCaptureStatus("Order successfully captured and settled on PayPal sandbox!");
+        if (onNotify) onNotify("Order captured and settled on PayPal sandbox", "success");
+      } else {
+        setCaptureStatus(`Order status: ${res.status}`);
+        if (onNotify) onNotify(`Capture returned status: ${res.status}`, "info");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Capture failed (ensure buyer approved order in sandbox first)";
+      setCaptureStatus(`Capture error: ${msg}`);
+      if (onNotify) onNotify(msg, "error");
+    } finally {
+      setIsCapturing(false);
+    }
+  };
 
   const handleSelectPreset = (p: typeof PRESETS[0]) => {
     setRecipientId(p.recipientId);
@@ -274,8 +297,36 @@ export const PayScreen: React.FC<PayScreenProps> = ({
 
                 {lastResponse.payout_id && (
                   <div className="payout-banner">
-                    <span className="meta-label">PAYPAL SANDBOX PAYOUT ID</span>
+                    <span className="meta-label">PAYPAL SANDBOX ORDER / TRANSACTION ID</span>
                     <code className="payout-code mono">{lastResponse.payout_id}</code>
+
+                    <div className="sandbox-approval-box mt-3 p-3 bg-card border rounded">
+                      <div className="text-xs font-semibold text-accent mb-1">PayPal Sandbox Checkout Flow</div>
+                      <p className="text-xs text-muted mb-2">
+                        For Orders v2 checkout, approve in the PayPal Sandbox buyer portal, then click Capture.
+                      </p>
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <a
+                          href={`https://www.sandbox.paypal.com/checkoutnow?token=${lastResponse.payout_id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs underline text-brand font-medium"
+                        >
+                          Open PayPal Sandbox Buyer Approval ↗
+                        </a>
+                        <PillButton
+                          variant="primary"
+                          size="sm"
+                          loading={isCapturing}
+                          onClick={handleCapture}
+                        >
+                          Capture Approved Order
+                        </PillButton>
+                      </div>
+                      {captureStatus && (
+                        <div className="mt-2 text-xs font-mono text-accent">{captureStatus}</div>
+                      )}
+                    </div>
                   </div>
                 )}
 

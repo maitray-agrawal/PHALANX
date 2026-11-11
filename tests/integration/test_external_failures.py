@@ -52,7 +52,8 @@ def test_paypal_5xx_server_error_returns_safe_failure(sample_intent: Transaction
         result = adapter.pay(sample_intent)
 
         assert result.success is False
-        assert result.status in ("FAILED", "PAYOUT_REJECTED")
+        assert result.status == "RECONCILE"
+        assert result.details.get("business_rejection") is False
         assert "Service Unavailable" in str(result.details.get("error", ""))
 
 

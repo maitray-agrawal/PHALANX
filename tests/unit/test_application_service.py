@@ -5,6 +5,7 @@ from app.application.services import AuthorizationService, HealthService
 from app.domain.models import DecisionOutcome
 from app.domain.ports import ClockPort
 from app.infrastructure.ledger import InMemoryLedgerAdapter
+from app.infrastructure.paypal import FakePaymentRail
 
 
 def test_authorization_service_allow(
@@ -65,3 +66,42 @@ def test_health_service(test_clock: ClockPort) -> None:
     assert health.status == "ok"
     assert health.version == "0.1.0"
     assert health.timestamp_utc == test_clock.now_utc()
+
+
+def test_idempotent_replay_in_memory_reconcile_and_needs_review(
+    test_authorization_service: AuthorizationService,
+    test_payment_rail: FakePaymentRail,
+) -> None:
+    """In-memory idempotent replay returns real request_state, never SETTLED by default."""
+    from app.domain.state_machine import RequestState
+
+    test_payment_rail.should_succeed = True
+    test_payment_rail.status = "RECONCILE"
+
+    cmd = AuthorizeTransactionCommand(
+        agent_id="agent-auto-1",
+        recipient_id="vendor-paypal-sandbox-1",
+        amount_minor=2000,
+        currency="USD",
+        purpose="In-memory replay test",
+        idempotency_key="idemp-inmem-replay-1",
+    )
+    res1 = test_authorization_service.authorize(cmd)
+    assert res1.request_state == RequestState.RECONCILE
+
+    # Replay while in RECONCILE: must return RECONCILE, never SETTLED
+    res_replay1 = test_authorization_service.authorize(cmd)
+    assert res_replay1.request_state == RequestState.RECONCILE
+    assert res_replay1.request_state != RequestState.SETTLED
+
+    # Move request to NEEDS_REVIEW
+    test_authorization_service._request_states[res1.request_id] = RequestState.NEEDS_REVIEW
+    if res1.request_id in test_authorization_service._held_reservations:
+        test_authorization_service._held_reservations[res1.request_id]["state"] = (
+            RequestState.NEEDS_REVIEW.value
+        )
+
+    # Replay while in NEEDS_REVIEW: must return NEEDS_REVIEW, never SETTLED
+    res_replay2 = test_authorization_service.authorize(cmd)
+    assert res_replay2.request_state == RequestState.NEEDS_REVIEW
+    assert res_replay2.request_state != RequestState.SETTLED

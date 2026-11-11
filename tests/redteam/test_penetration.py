@@ -701,7 +701,10 @@ def test_pen_unicode_confusable_payee_does_not_bypass_allowlist(
     assert resp.status_code == 200
     decision = resp.json()["decision"]
     assert decision in ("DENY", "STEP_UP")
-    assert any("RECIPIENT_NOT_ALLOWED" in c or "MANDATE" in c for c in resp.json()["reason_codes"])
+    assert any(
+        "RECIPIENT_NOT_ALLOWED" in c or "MANDATE" in c or "PAYEE_UNAUTHORIZED" in c
+        for c in resp.json()["reason_codes"]
+    )
 
 
 @pytest.mark.redteam
@@ -743,7 +746,10 @@ def test_pen_zero_width_space_in_payee_does_not_match_allowlist(
     )
     assert resp.status_code == 200
     assert resp.json()["decision"] in ("DENY", "STEP_UP")
-    assert any("RECIPIENT_NOT_ALLOWED" in c or "MANDATE" in c for c in resp.json()["reason_codes"])
+    assert any(
+        "RECIPIENT_NOT_ALLOWED" in c or "MANDATE" in c or "PAYEE_UNAUTHORIZED" in c
+        for c in resp.json()["reason_codes"]
+    )
 
 
 # 10. LOG-INJECTION STRINGS

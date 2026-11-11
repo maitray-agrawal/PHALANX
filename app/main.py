@@ -1,4 +1,7 @@
+import asyncio
 import logging
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +15,41 @@ from app.api.middleware import (
     register_exception_handlers,
 )
 from app.api.routes import router
+from app.infrastructure.config import settings
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+    """Application lifespan manager; starts background reconciler when enabled."""
+    reconcile_task = None
+    if settings.reconciler_enabled:
+
+        async def _reconcile_loop() -> None:
+            from app.api.dependencies import get_reconciler_service
+
+            loop_logger = logging.getLogger("phalanx.reconciler.loop")
+            loop_logger.info(
+                "Starting background reconciler loop (interval=%ds)",
+                settings.reconcile_interval_seconds,
+            )
+            while True:
+                try:
+                    reconciler = get_reconciler_service()
+                    reconciler.reconcile_all(force=False)
+                except asyncio.CancelledError:
+                    break
+                except Exception as err:
+                    loop_logger.warning("Error during background reconcile run: %s", err)
+                await asyncio.sleep(settings.reconcile_interval_seconds)
+
+        reconcile_task = asyncio.create_task(_reconcile_loop())
+
+    yield
+
+    if reconcile_task:
+        reconcile_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await reconcile_task
 
 
 def create_app() -> FastAPI:
@@ -27,6 +65,7 @@ def create_app() -> FastAPI:
         version="0.1.0",
         docs_url="/docs",
         redoc_url="/redoc",
+        lifespan=lifespan,
     )
 
     # Security & observability middlewares

@@ -136,7 +136,7 @@ export interface PendingStepUpItem {
   purpose: string;
   intent_digest: string;
   created_at_utc: string;
-  status: "PENDING" | "APPROVED" | "REJECTED";
+  status: "PENDING" | "APPROVED" | "REJECTED" | "NEEDS_REVIEW";
 }
 
 export interface LedgerEventItem {
@@ -162,6 +162,43 @@ export interface LedgerVerificationResponse {
   message: string;
   broken_index: number | null;
   total_events: number;
+  chain_head_hash?: string;
+  tamper_detected_at?: number | null;
+}
+
+export interface InvoiceSampleDTO {
+  id: string;
+  title: string;
+  description: string;
+  text: string;
+}
+
+export interface InvoiceExtractionDTO {
+  payee_name: string;
+  account: string;
+  amount_minor: number;
+  currency: string;
+  due_date: string | null;
+  confidence?: number;
+}
+
+export interface InvoiceProcessingResultDTO {
+  is_live: boolean;
+  status_label: string;
+  extraction: InvoiceExtractionDTO;
+  authorization_request: Record<string, unknown>;
+  decision: "ALLOW" | "STEP_UP" | "DENY";
+  reasons: string[];
+  request_state: string;
+  payout_id?: string | null;
+  payment_rail?: string | null;
+  ledger_event: {
+    event_id: string;
+    event_type: string;
+    request_id: string;
+    payload_hash: string;
+  } | null;
+  payment_response: Record<string, unknown> | null;
 }
 
 export interface MandateResponse {
@@ -182,6 +219,13 @@ export interface MandateResponse {
   status: string;
   key_id: string;
   signature: string;
+}
+
+export interface CaptureOrderResponse {
+  order_id: string;
+  success: boolean;
+  status: string;
+  details: Record<string, unknown>;
 }
 
 export class ApiError extends Error {
@@ -301,6 +345,13 @@ export const api = {
       token
     ),
 
+  captureOrder: (orderId: string, token?: string) =>
+    request<CaptureOrderResponse>(
+      `/v1/orders/${orderId}/capture`,
+      { method: "POST" },
+      token
+    ),
+
   getLedgerEvents: (token?: string, limit: number = 50) =>
     request<LedgerEventItem[]>(`/v1/ledger?limit=${limit}`, { method: "GET" }, token),
 
@@ -313,6 +364,25 @@ export const api = {
   restoreLedger: (token?: string) =>
     request<{ status: string; message: string }>("/v1/ledger/restore", { method: "POST" }, token),
 
+  resetDemo: (token?: string) =>
+    request<{ status: string; message: string }>("/v1/admin/reset", { method: "POST" }, token),
+
   getMandate: (mandateId = "mandate_default_sandbox", token?: string) =>
     request<MandateResponse>(`/v1/mandates/${mandateId}`, { method: "GET" }, token),
+
+  getInvoiceSamples: (token?: string) =>
+    request<InvoiceSampleDTO[]>("/v1/invoice-agent/samples", { method: "GET" }, token),
+
+  processInvoice: (
+    cmd: { invoice_text: string; agent_id?: string; force_fallback?: boolean },
+    token?: string
+  ) =>
+    request<InvoiceProcessingResultDTO>(
+      "/v1/invoice-agent/process",
+      {
+        method: "POST",
+        body: JSON.stringify(cmd),
+      },
+      token
+    ),
 };

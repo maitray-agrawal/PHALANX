@@ -98,7 +98,7 @@ export const ChainStrip: React.FC<ChainStripProps> = ({
       </div>
 
       {/* Visual Chain of Blocks */}
-      <div className="chain-blocks-scroll">
+      <div className="chain-blocks-scroll" tabIndex={0} role="region" aria-label="Cryptographic hash chain blocks scroll region">
         <div className="chain-blocks">
           {displayEvents.map((ev, i) => {
             const index = offset + i;

@@ -13,13 +13,28 @@ _engine: Engine | None = None
 _session_factory: Any | None = None
 
 
+def get_connection_args(db_url: str) -> dict[str, Any]:
+    """Return dialect-specific connection arguments for PostgreSQL/Neon or SQLite."""
+    if "sqlite" in db_url:
+        return {"timeout": 15, "check_same_thread": False}
+    connect_args: dict[str, Any] = {"connect_timeout": 10}
+    if "-pooler" in db_url or "pooler" in db_url:
+        connect_args["prepare_threshold"] = None
+    return connect_args
+
+
 def get_engine() -> Engine:
     """Return single managed SQLAlchemy engine with dialect-specific connection arguments."""
     global _engine
     if _engine is None:
+        import os
+
         db_url = settings.database_url
+        if os.name == "nt" and "localhost" in db_url:
+            db_url = db_url.replace("localhost", "127.0.0.1")
+
+        connect_args = get_connection_args(db_url)
         if "sqlite" in db_url:
-            connect_args = {"timeout": 15, "check_same_thread": False}
             _engine = create_engine(
                 db_url,
                 pool_pre_ping=True,
@@ -27,13 +42,12 @@ def get_engine() -> Engine:
             )
         else:
             # PostgreSQL / psycopg dialect args
-            connect_args = {"connect_timeout": 5}
             _engine = create_engine(
                 db_url,
                 pool_pre_ping=True,
                 pool_size=10,
                 max_overflow=20,
-                pool_recycle=1800,
+                pool_recycle=240,
                 connect_args=connect_args,
             )
     return _engine

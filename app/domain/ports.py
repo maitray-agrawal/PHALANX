@@ -40,6 +40,45 @@ class PaymentResult:
     transaction_id: str
     status: str
     details: dict[str, Any]
+    business_rejection: bool = False
+
+
+def may_release(result: PaymentResult | None) -> bool:
+    """Determine if a payment rail result permits releasing a budget reservation.
+
+    Fail-closed: returns True ONLY on confirmed business rejections from the provider.
+    Never releases on ambiguous outcomes, transient errors, timeouts, or network failures.
+    Delegates to pure domain money_outcome.
+    """
+    if result is None:
+        return False
+    from app.domain.money_outcome import MoneyOutcome, money_outcome
+
+    details = result.details if isinstance(result.details, dict) else {}
+    http_st = details.get("http_status")
+    if http_st in (408, 429, 500, 502, 503, 504):
+        return False
+
+    biz_rej: bool = (
+        getattr(result, "business_rejection", False) is True
+        or details.get("business_rejection") is True
+    )
+
+    details_str = str(details).lower()
+    is_not_found = (
+        http_st == 404
+        or details.get("name") in ("RESOURCE_NOT_FOUND", "INVALID_RESOURCE_ID")
+        or "not found" in details_str
+    )
+    if is_not_found:
+        biz_rej = True
+
+    outcome = money_outcome(
+        source="payment_rail",
+        provider_status=result.status,
+        business_rejection=biz_rej,
+    )
+    return outcome == MoneyOutcome.RELEASE
 
 
 @runtime_checkable
@@ -64,4 +103,8 @@ class PaymentRail(Protocol):
 
     def capture_order(self, order_id: str, request_id: str | None = None) -> PaymentResult:
         """Capture an approved order on external rail."""
+        ...
+
+    def validate_configuration(self) -> tuple[bool, str]:
+        """Validate rail credentials and configuration before any reservation."""
         ...

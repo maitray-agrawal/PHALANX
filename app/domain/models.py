@@ -85,6 +85,7 @@ class TransactionIntent:
     idempotency_key: str
     occurred_at_utc: datetime
     invoice_reference: str | None = None
+    payee: str | None = None
 
     def __post_init__(self) -> None:
         if not self.agent_id.strip():

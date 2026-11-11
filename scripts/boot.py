@@ -9,6 +9,7 @@ Actions:
 
 import json
 import logging
+import os
 import sys
 from datetime import UTC, datetime, timedelta
 
@@ -22,6 +23,7 @@ from app.infrastructure.models import (
     AgentBudgetModel,
     ApprovalStatus,
     LedgerEventModel,
+    MandateModel,
     StepUpApprovalModel,
 )
 
@@ -88,6 +90,9 @@ def run_boot() -> bool:
         alembic_cfg.set_main_option("sqlalchemy.url", str(engine.url))
         alembic_cfg.attributes["connection"] = engine
         command.upgrade(alembic_cfg, "head")
+        logging.basicConfig(
+            level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", force=True
+        )
         logger.info("Alembic migrations successfully applied to head.")
 
         # Verify the migration revision matches the declarative models
@@ -106,10 +111,112 @@ def run_boot() -> bool:
             return False
         logger.info("Verified database revision '%s' matches migration head.", current_rev)
 
+        # Verify physical schema: tables and required constraints must exist
+        from sqlalchemy import inspect
+
+        inspector = inspect(engine)
+        existing_tables = set(inspector.get_table_names())
+        required_tables = {
+            "agent_budgets",
+            "budget_reservations",
+            "idempotency_records",
+            "step_up_approvals",
+            "ledger_events",
+            "mandates",
+        }
+        missing_tables = required_tables - existing_tables
+        if missing_tables:
+            logger.error("Boot aborted: missing required database tables: %s", missing_tables)
+            return False
+
+        ledger_constraints = inspector.get_unique_constraints("ledger_events")
+        u_names = {c.get("name") for c in ledger_constraints}
+        u_cols = [set(c.get("column_names") or []) for c in ledger_constraints]
+        if "uq_ledger_events_event_seq" not in u_names and {"event_seq"} not in u_cols:
+            logger.error(
+                "Boot aborted: constraint 'uq_ledger_events_event_seq' missing on ledger_events"
+            )
+            return False
+        logger.info("Verified schema tables and unique constraints exist.")
+
         install_ledger_triggers(engine)
         logger.info("Database schema and append-only triggers successfully verified/created.")
     except Exception as exc:
+        sys.stderr.write(f"Boot migration/schema error: {exc}\n")
         logger.error("Boot aborted: migration or schema initialization failure: %s", exc)
+        return False
+
+    # Step 1.5: Seed demo mandate if missing with fixed temporal window (2026-11-01 to 2027-03-31)
+    fixed_valid_from = datetime(2026, 11, 1, 0, 0, 0, tzinfo=UTC)
+    fixed_valid_until = datetime(2027, 3, 31, 23, 59, 59, tzinfo=UTC)
+    try:
+        from app.infrastructure.config import settings
+        from app.infrastructure.crypto import load_or_generate_keypair, sign_bytes
+
+        priv_key, pub_key, key_id = load_or_generate_keypair(
+            key_hex=settings.mandate_signing_key_hex,
+            key_file_path=settings.mandate_signing_key_file,
+        )
+        with Session(engine) as session:
+            existing_mandate = session.scalar(
+                select(MandateModel).where(MandateModel.mandate_id == "mandate_default_sandbox")
+            )
+            if not existing_mandate or existing_mandate.key_id != key_id:
+                if existing_mandate:
+                    logger.info(
+                        "Updating demo mandate key binding to match deployment authority..."
+                    )
+                    session.delete(existing_mandate)
+                    session.flush()
+                logger.info("Seeding demo mandate (mandate_default_sandbox)...")
+                mandate_payload = {
+                    "mandate_id": "mandate_default_sandbox",
+                    "version": 1,
+                    "principal_id": "principal_treasury",
+                    "agent_id": "agent-auto-1",
+                    "single_limit_minor": 500_000,
+                    "instant_threshold_minor": 50_000,
+                    "lifetime_budget_minor": 2_500_000,
+                    "currency": "USD",
+                    "allowed_payees": [],
+                    "allow_unregistered_payees": True,
+                    "allowed_purposes": [],
+                    "valid_from_utc": fixed_valid_from.isoformat(),
+                    "valid_until_utc": fixed_valid_until.isoformat(),
+                    "status": "ACTIVE",
+                    "key_id": key_id,
+                }
+                signed_bytes = canonical_json_bytes(mandate_payload)
+                sig = sign_bytes(priv_key, signed_bytes)
+                mandate_row = MandateModel(
+                    mandate_id="mandate_default_sandbox",
+                    version=1,
+                    principal_id="principal_treasury",
+                    agent_id="agent-auto-1",
+                    single_limit_minor=500_000,
+                    instant_threshold_minor=50_000,
+                    lifetime_budget_minor=2_500_000,
+                    currency="USD",
+                    allowed_payees_json="[]",
+                    allowed_purposes_json="[]",
+                    allow_unregistered_payees=True,
+                    require_invoice_reference=False,
+                    valid_from_utc=fixed_valid_from,
+                    valid_until_utc=fixed_valid_until,
+                    status="ACTIVE",
+                    key_id=key_id,
+                    signature=sig,
+                    signed_payload=signed_bytes.decode("utf-8"),
+                    created_at_utc=fixed_valid_from,
+                    updated_at_utc=fixed_valid_from,
+                )
+                session.add(mandate_row)
+                session.commit()
+                logger.info("Demo mandate seeded with fixed temporal window.")
+            else:
+                logger.info("Demo mandate already seeded (idempotent skip).")
+    except Exception as exc:
+        logger.error("Boot aborted: error during mandate seeding: %s", exc)
         return False
 
     # Step 2: Seed initial AgentBudget if missing
@@ -124,12 +231,12 @@ def run_boot() -> bool:
                 select(AgentBudgetModel).where(AgentBudgetModel.agent_id == "agent-auto-1")
             )
             if not existing_budget:
-                logger.info("Seeding initial demo budget for agent-auto-1 ($10,000 USD)...")
+                logger.info("Seeding initial demo budget for agent-auto-1 ($25,000 USD)...")
                 budget = AgentBudgetModel(
                     agent_id="agent-auto-1",
                     mandate_id="mandate_default_sandbox",
                     currency="USD",
-                    allocated_minor=1_000_000,
+                    allocated_minor=2_500_000,
                     spent_minor=0,
                     reserved_minor=0,
                     created_at_utc=now_utc,
@@ -138,6 +245,10 @@ def run_boot() -> bool:
                 session.add(budget)
                 session.commit()
                 logger.info("Initial demo budget created.")
+            elif existing_budget.allocated_minor != 2_500_000:
+                logger.info("Aligning existing budget allocated_minor to $25,000 USD...")
+                existing_budget.allocated_minor = 2_500_000
+                session.commit()
             else:
                 logger.info("Demo budget for agent-auto-1 already exists (idempotent skip).")
 
@@ -176,48 +287,53 @@ def run_boot() -> bool:
             else:
                 logger.info("Ledger already initialized (idempotent skip).")
 
-            # Step 4: Seed pending step-up request for Scene 2 demo if missing
-            existing_stepup = session.scalar(
-                select(StepUpApprovalModel).where(
-                    StepUpApprovalModel.request_id == "req_stepup_1001"
+            # Step 4: Seed pending step-up request for Scene 2 demo if DEMO_SEED=true
+            demo_seed_enabled = os.getenv("DEMO_SEED", "").strip().lower() in ("true", "1")
+            if demo_seed_enabled:
+                existing_stepup = session.scalar(
+                    select(StepUpApprovalModel).where(
+                        StepUpApprovalModel.request_id == "req_stepup_1001"
+                    )
                 )
-            )
-            if not existing_stepup:
-                logger.info("Seeding human supervisor step-up approval for Scene 2 demo...")
-                intent_payload = {
-                    "agent_id": "agent-auto-1",
-                    "recipient_id": "vendor-paypal-sandbox-1",
-                    "amount_minor": 120000,
-                    "currency": "USD",
-                    "purpose": "Equipment invoice review",
-                    "idempotency_key": "stepup_seed_1001",
-                }
-                digest = compute_intent_digest(
-                    agent_id="agent-auto-1",
-                    recipient_id="vendor-paypal-sandbox-1",
-                    amount_minor=120000,
-                    currency="USD",
-                    purpose="Equipment invoice review",
-                    idempotency_key="stepup_seed_1001",
-                )
+                if not existing_stepup:
+                    logger.info("Seeding human supervisor step-up approval for Scene 2 demo...")
+                    intent_payload = {
+                        "agent_id": "agent-auto-1",
+                        "recipient_id": "vendor-paypal-sandbox-1",
+                        "amount_minor": 120000,
+                        "currency": "USD",
+                        "purpose": "Equipment invoice review",
+                        "idempotency_key": "stepup_seed_1001",
+                    }
+                    digest = compute_intent_digest(
+                        agent_id="agent-auto-1",
+                        recipient_id="vendor-paypal-sandbox-1",
+                        amount_minor=120000,
+                        currency="USD",
+                        purpose="Equipment invoice review",
+                        idempotency_key="stepup_seed_1001",
+                    )
 
-                stepup = StepUpApprovalModel(
-                    request_id="req_stepup_1001",
-                    idempotency_key="stepup_seed_1001",
-                    expected_digest=digest,
-                    intent_payload=json.dumps(intent_payload),
-                    status=ApprovalStatus.PENDING.value,
-                    expires_at_utc=valid_until_mar_2027,
-                    created_at_utc=now_utc,
-                    updated_at_utc=now_utc,
-                )
-                session.add(stepup)
-                session.commit()
-                logger.info("Demo step-up request seeded.")
+                    stepup = StepUpApprovalModel(
+                        request_id="req_stepup_1001",
+                        idempotency_key="stepup_seed_1001",
+                        expected_digest=digest,
+                        intent_payload=json.dumps(intent_payload),
+                        status=ApprovalStatus.PENDING.value,
+                        expires_at_utc=valid_until_mar_2027,
+                        created_at_utc=now_utc,
+                        updated_at_utc=now_utc,
+                    )
+                    session.add(stepup)
+                    session.commit()
+                    logger.info("Demo step-up request seeded.")
+                else:
+                    logger.info("Demo step-up request already present (idempotent skip).")
             else:
-                logger.info("Demo step-up request already present (idempotent skip).")
+                logger.info("DEMO_SEED not enabled; skipping demo step-up request seeding.")
 
     except Exception as exc:
+        sys.stderr.write(f"Boot seeding error: {exc}\n")
         logger.error("Boot aborted: error during data seeding: %s", exc)
         return False
 

@@ -6,8 +6,9 @@ Invariants:
 """
 
 from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.domain.mandates import MandateStatus
 from app.domain.models import DecisionOutcome
@@ -22,7 +23,12 @@ class AuthorizeTransactionCommand(BaseModel):
 
     agent_id: str = Field(..., min_length=1, max_length=128)
     recipient_id: str = Field(..., min_length=1, max_length=128)
-    amount_minor: int = Field(..., ge=0, description="Amount in integer minor units (e.g. cents)")
+    amount_minor: int = Field(
+        ...,
+        ge=0,
+        strict=True,
+        description="Amount in integer minor units (e.g. cents)",
+    )
     currency: str = Field(..., min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
     purpose: str = Field(..., min_length=1, max_length=500)
     idempotency_key: str = Field(..., min_length=1, max_length=128)
@@ -31,10 +37,25 @@ class AuthorizeTransactionCommand(BaseModel):
         max_length=256,
         description="Optional invoice or billing document reference.",
     )
+    payee: str | None = Field(
+        default=None,
+        max_length=256,
+        description="Optional supplier or vendor name from invoice for binding check.",
+    )
     anomaly_signal: DecisionOutcome | None = Field(
         default=None,
         description="Optional heuristic or model risk assessment. Can only escalate decision.",
     )
+
+    @field_validator("invoice_reference", mode="before")
+    @classmethod
+    def validate_invoice_ref(cls, v: Any) -> str | None:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            stripped = v.strip()
+            return stripped if stripped else None
+        return str(v)
 
 
 class AuthorizationResponseDTO(BaseModel):
@@ -93,6 +114,7 @@ class MandateResponseDTO(BaseModel):
     key_id: str
     signature: str
     allow_unregistered_payees: bool = Field(default=False)
+    require_invoice_reference: bool = Field(default=False)
     spent_budget_minor: int = Field(default=0)
     remaining_budget_minor: int = Field(default=0)
 

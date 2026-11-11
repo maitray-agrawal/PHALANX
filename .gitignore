@@ -17,6 +17,7 @@ __pycache__/
 *.so
 .pytest_cache/
 .hypothesis/
+.schemathesis/
 .coverage
 htmlcov/
 .mypy_cache/

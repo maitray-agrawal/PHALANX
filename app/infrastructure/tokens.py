@@ -55,7 +55,7 @@ class TokenSignatureError(TokenError):
 
 def is_test_environment() -> bool:
     """Check if execution is running in test mode."""
-    if settings.environment.lower() in ("production", "staging", "prod"):
+    if settings.environment.lower() in ("production", "staging", "prod", "demo"):
         return False
     return (
         settings.environment.lower() in ("test", "testing") or "PYTEST_CURRENT_TEST" in os.environ
@@ -78,7 +78,7 @@ def validate_secret_key() -> tuple[bool, str]:
 
 
 def _get_signing_key() -> bytes:
-    """Fetch secret key for signing tokens."""
+    """Fetch secret key for signing tokens derived via HKDF."""
     is_valid, msg = validate_secret_key()
     if not is_valid:
         raise ValueError(f"Invalid secret key configuration: {msg}")
@@ -89,7 +89,9 @@ def _get_signing_key() -> bytes:
             settings.mandate_signing_key_hex
             or "test-secret-key-at-least-32-bytes-long-for-test-harness"
         )
-    return key.encode("utf-8")
+    from app.infrastructure.crypto import derive_key
+
+    return derive_key(key, "phalanx-token-hmac", 32)
 
 
 def _b64url_encode(data: bytes) -> str:

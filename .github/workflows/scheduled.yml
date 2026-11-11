@@ -1,0 +1,66 @@
+name: Scheduled Automation & Keepalive
+# NOTE: GitHub Actions scheduled workflows (cron) run only from the default branch (main).
+# On feature/dev branches, workflow_dispatch can be used for manual verification.
+
+on:
+  schedule:
+    # Run every 10 minutes (keepalive, periodic reconciliation, and daily reset)
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  scheduled-tasks:
+    name: Run Scheduled Tasks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Execute Scheduled Maintenance
+        env:
+          APP_URL: ${{ secrets.APP_URL || secrets.PHALANX_TARGET_URL }}
+          RECONCILE_SECRET: ${{ secrets.RECONCILE_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ]; then
+            echo "APP_URL secret is not configured; skipping scheduled execution."
+            exit 0
+          fi
+
+          echo "Target Base URL: $APP_URL"
+          CURRENT_MIN=$(date -u +%M)
+          CURRENT_HOUR=$(date -u +%H)
+          echo "Current UTC Time: $CURRENT_HOUR:$CURRENT_MIN"
+
+          # 1. Healthz Liveness Probe (Every 10 min)
+          echo "Hitting /healthz..."
+          curl -s -f -m 15 "$APP_URL/healthz" || echo "Warning: /healthz probe timed out or failed"
+
+          # 2. Reconcile Scheduled (Every 30 min: at :00, :30 or workflow_dispatch)
+          if [ "$CURRENT_MIN" = "00" ] || [ "$CURRENT_MIN" = "30" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Executing periodic reconciliation..."
+            if [ -n "$RECONCILE_SECRET" ]; then
+              curl -s -f -m 30 -X POST "$APP_URL/v1/admin/reconcile-scheduled" \
+                -H "X-Reconcile-Secret: $RECONCILE_SECRET" \
+                -H "Content-Type: application/json" || echo "Warning: reconcile-scheduled failed"
+            else
+              echo "RECONCILE_SECRET not set; skipping reconcile-scheduled."
+            fi
+          fi
+
+          # 3. Daily Reset (Daily at 00:00 UTC or workflow_dispatch if manually triggered)
+          if [ "$CURRENT_HOUR" = "00" ] && [ "$CURRENT_MIN" = "00" ]; then
+            echo "Executing daily demo reset at 00:00 UTC..."
+            if [ -n "$RECONCILE_SECRET" ]; then
+              curl -s -f -m 30 -X POST "$APP_URL/v1/admin/daily-reset" \
+                -H "X-Reconcile-Secret: $RECONCILE_SECRET" \
+                -H "Content-Type: application/json" || echo "Warning: daily-reset failed"
+            else
+              echo "RECONCILE_SECRET not set; skipping daily-reset."
+            fi
+          fi
+

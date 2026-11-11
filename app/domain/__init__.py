@@ -12,14 +12,24 @@ from app.domain.models import (
     TransactionIntent,
     escalate_decision,
 )
+from app.domain.money_outcome import (
+    EXPLICIT_COMPLETED_STATUSES,
+    EXPLICIT_TERMINAL_FAILURE_STATUSES,
+    MoneyOutcome,
+    money_outcome,
+)
 from app.domain.ports import ClockPort, LedgerPort
 
 __all__ = [
     "ClockPort",
     "DecisionOutcome",
+    "EXPLICIT_COMPLETED_STATUSES",
+    "EXPLICIT_TERMINAL_FAILURE_STATUSES",
     "LedgerPort",
     "Money",
+    "MoneyOutcome",
     "PolicyEvaluationResult",
     "TransactionIntent",
     "escalate_decision",
+    "money_outcome",
 ]

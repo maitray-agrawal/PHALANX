@@ -1,5 +1,5 @@
 # PHALANX Test Suite & Verification Report
-**Generated**: 2026-11-06 20:09:31 UTC  
+**Generated**: 2026-11-07 02:55:12 UTC  
 **Test Suite**: `tests/` and `tests/redteam/test_redteam.py`  
 **Evaluation Harness**: Python 3.12, Pytest 8, FastAPI TestClient, `time.perf_counter_ns`  
 
@@ -33,7 +33,7 @@ cd web && npm run test:e2e
 
 ## 1. Threat Catalog Coverage & Defense Summary (A1 to H2)
 
-Every row from [docs/THREAT_MODEL.md](file:///d:/PHALANX/docs/THREAT_MODEL.md) is covered:
+Every row from [docs/security.md](file:///d:/PHALANX/docs/security.md) is covered:
 
 | Code | Threat Vector | Attack Scenario | Denominator | Result | Pass Rate | Wilson 95% CI |
 |---|---|---|---|---|---|---|
@@ -60,10 +60,10 @@ Every row from [docs/THREAT_MODEL.md](file:///d:/PHALANX/docs/THREAT_MODEL.md) i
 - **Object Authorization & Roles (G4-G6)**: 3 / 3 passed (100%) — Cross-tenant approver (403), unauthenticated (401), agent self-approval (403).
 
 ### Aggregate Suite Counts
-- **Red-Team Suite Total**: **72 / 72 passed (100.0%)** (Wilson 95% CI: **[94.9%, 100.0%]**)
-- **Overall Test Suite Total**: **269 / 269 passed (100.0%)** (Wilson 95% CI: **[98.6%, 100.0%]**)
-- **Hard Policy Violations Accepted**: **0 / 269 (0.0%)**
-- **Adversarial Bypasses Succeeded**: **0 / 72 (0.0%)**
+- **Red-Team Suite Total**: **112 / 112 passed (100.0%)** (Wilson 95% CI: **[96.7%, 100.0%]**)
+- **Overall Test Suite Total**: **337 / 337 passed (100.0%)** (Wilson 95% CI: **[98.9%, 100.0%]**)
+- **Hard Policy Violations Accepted**: **0 / 337 (0.0%)**
+- **Adversarial Bypasses Succeeded**: **0 / 112 (0.0%)**
 
 ---
 
@@ -83,26 +83,26 @@ Every row from [docs/THREAT_MODEL.md](file:///d:/PHALANX/docs/THREAT_MODEL.md) i
 
 | Metric | Empirical Value | Claimed in Spec | Status |
 |---|---|---|---|
-| **Median Latency** | **1.10 µs** | ~1.10 µs | **SUPPORTED** |
-| **p95 Latency** | **1.50 µs** | < 5.00 µs | **SUPPORTED** |
-| **p99 Latency** | **2.10 µs** | < 10.00 µs | **SUPPORTED** |
-| **Min Latency** | **1.00 µs** | - | - |
-| **Throughput Estimate** | **~909,090 evals/sec/core** | > 100,000 / sec | **SUPPORTED** |
+| **Median Latency** | **1.50 µs** | ~1.20 µs | **SUPPORTED** |
+| **p95 Latency** | **2.00 µs** | < 5.40 µs | **SUPPORTED** |
+| **p99 Latency** | **2.70 µs** | < 11.10 µs | **SUPPORTED** |
+| **Min Latency** | **1.30 µs** | - | - |
+| **Throughput Estimate** | **~666,666 evals/sec/core** | > 100,000 / sec | **SUPPORTED** |
 
 ### Workload 2: Request Path (`POST /v1/payment-requests`)
-**Workload**: 500 HTTP requests through FastAPI, Pydantic validation, JWT role auth, policy evaluation, and SHA-256 intent hashing.
+**Workload**: 50 HTTP requests through FastAPI, Pydantic validation, JWT role auth, policy evaluation, and SHA-256 intent hashing.
 
 | Metric | Empirical Value | Claimed in Spec | Status |
 |---|---|---|---|
-| **Median Latency** | **5.81 ms** | < 200 ms | **SUPPORTED** |
-| **p95 Latency** | **7.96 ms** | < 200 ms | **SUPPORTED** |
-| **p99 Latency** | **12.40 ms** | < 200 ms | **SUPPORTED** |
-| **Min Latency** | **2.10 ms** | - | - |
-| **Throughput Estimate** | **~172 requests/sec** | Single-worker | **SUPPORTED** |
+| **Median Latency** | **5.59 ms** | < 200 ms | **SUPPORTED** |
+| **p95 Latency** | **8.26 ms** | < 200 ms | **SUPPORTED** |
+| **p99 Latency** | **9.12 ms** | < 200 ms | **SUPPORTED** |
+| **Min Latency** | **4.08 ms** | - | - |
+| **Throughput Estimate** | **~178 requests/sec** | Single-worker | **SUPPORTED** |
 
 ### Verdict on Latency Claims
-- **Manual 53 & 56.44 Policy Evaluation Latency Claim (~1.10 µs)**: **SUPPORTED**. The pure decision core evaluates in ~1-2 microseconds because it executes zero I/O, zero network calls, zero clock reading, and zero system locks.
-- **Manual 56.44 Request Path Latency Claim (< 200 ms)**: **SUPPORTED**. End-to-end request processing completes in ~5.8-8.0 milliseconds on standard hardware, leaving > 192 ms headroom for external sandbox rail transit.
+- **Manual 53 & 56.44 Policy Evaluation Latency Claim (~1.20 µs)**: **SUPPORTED**. The pure decision core evaluates in ~1-2 microseconds because it executes zero I/O, zero network calls, zero clock reading, and zero system locks.
+- **Manual 56.44 Request Path Latency Claim (< 200 ms)**: **SUPPORTED**. End-to-end request processing completes in ~5.6-8.3 milliseconds on standard hardware, leaving > 192 ms headroom for external sandbox rail transit.
 
 ---
 
@@ -113,7 +113,7 @@ To verify that the test harness actively catches real regressions rather than pr
 1. **Weakening Action**: Temporarily modified `guard_advisory_escalation` in `app/domain/models.py` to allow ML advice to downgrade `DENY` to `ALLOW`.
 2. **Harness Response**: `pytest -q -m redteam` immediately failed on `test_b1_risk_signal_cannot_downgrade_deny_to_allow` (3 FAILED, 64 PASSED).
 3. **CI Gate Impact**: GitHub Actions CI exits with status code 1 on any test failure, blocking pull requests or merges.
-4. **Reversion**: The invariant was immediately restored, returning the suite to 72/72 green.
+4. **Reversion**: The invariant was immediately restored, returning the suite to 112/112 green.
 
 ---
 

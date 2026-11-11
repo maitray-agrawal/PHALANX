@@ -22,6 +22,39 @@ RATE_LIMIT_MAX_REQUESTS = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "120"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 
 
+def extract_client_ip(request: Request) -> str:
+    """Extract real client IP taking into account trusted reverse proxies.
+
+    If the direct peer is not in FORWARDED_ALLOW_IPS (or TRUSTED_PROXY_COUNT == 0
+    without configured trusted proxy), forwarded headers are rejected as untrusted spoofing.
+    """
+    peer_ip = request.client.host if request.client else "unknown"
+    from app.infrastructure.config import settings
+
+    allow_ips_raw = os.getenv("FORWARDED_ALLOW_IPS", settings.forwarded_allow_ips)
+    trusted_count = int(os.getenv("TRUSTED_PROXY_COUNT", str(settings.trusted_proxy_count)))
+
+    trusted_list = [ip.strip() for ip in allow_ips_raw.split(",") if ip.strip()]
+    is_trusted_peer = "*" in trusted_list or peer_ip in trusted_list
+
+    if not is_trusted_peer and trusted_count == 0:
+        return peer_ip
+
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        ips = [ip.strip() for ip in forwarded_for.split(",") if ip.strip()]
+        if ips:
+            if trusted_count > 0 and len(ips) > trusted_count:
+                return ips[-1 - trusted_count]
+            return ips[0]
+
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip:
+        return real_ip.strip()
+
+    return peer_ip
+
+
 class RequestIdAndStructuredLoggingMiddleware(BaseHTTPMiddleware):
     """Assigns X-Request-ID and emits structured JSON access logs with execution latency."""
 
@@ -30,7 +63,7 @@ class RequestIdAndStructuredLoggingMiddleware(BaseHTTPMiddleware):
         request.state.request_id = request_id
 
         start_time = time.perf_counter()
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip = extract_client_ip(request)
 
         response: Response = await call_next(request)
 
@@ -59,7 +92,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; frame-ancestors 'none'; form-action 'self'"
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "font-src 'self'; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'; "
+            "form-action 'self'"
         )
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         response.headers["Referrer-Policy"] = "no-referrer"
@@ -136,7 +176,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return res
 
         auth_header = request.headers.get("authorization", "")
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip = extract_client_ip(request)
         identity_key = auth_header or client_ip
 
         is_limited, retry_after = _rate_limiter.is_rate_limited(identity_key)
@@ -178,6 +218,45 @@ def create_problem_response(
 
 def register_exception_handlers(app: FastAPI) -> None:
     """Register RFC 7807 Problem+JSON error handlers on FastAPI app."""
+    from sqlalchemy.exc import SQLAlchemyError
+
+    @app.exception_handler(SQLAlchemyError)
+    async def db_exception_handler(request: Request, exc: SQLAlchemyError) -> JSONResponse:
+        logging.getLogger("phalanx").error("Database error during request: %s", exc)
+        return create_problem_response(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            title="Service Unavailable",
+            detail=(
+                "Database service unavailable. Request failed closed with no financial decision."
+            ),
+            instance=str(request.url.path),
+        )
+
+    @app.exception_handler(RuntimeError)
+    async def runtime_exception_handler(request: Request, exc: RuntimeError) -> JSONResponse:
+        exc_str = str(exc).lower()
+        if (
+            "database is mandatory" in exc_str
+            or "database unavailable" in exc_str
+            or "paypal credentials missing" in exc_str
+            or "credentials unconfigured" in exc_str
+            or "payment rail misconfigured" in exc_str
+            or "misconfigured" in exc_str
+            or "failing closed before reservation" in exc_str
+            or "service unavailable" in exc_str
+        ):
+            return create_problem_response(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                title="Service Unavailable",
+                detail=str(exc),
+                instance=str(request.url.path),
+            )
+        return create_problem_response(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            title="Internal Server Error",
+            detail=str(exc),
+            instance=str(request.url.path),
+        )
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
@@ -240,15 +319,20 @@ class LogRedactionFilter(logging.Filter):
 
     SENSITIVE_PATTERNS = [
         re.compile(
-            r'(?i)(secret|token|password|authorization|signature|key)\s*[:=]\s*["\']?([^"\'\s]+)'
+            r'(?i)(["\']?(?:secret|token|password|authorization|signature|key)["\']?\s*[:=]\s*["\']?)([^"\'\s,{}]+)'
         ),
         re.compile(r"(?i)(bearer\s+)([A-Za-z0-9_\-\.]+)"),
     ]
 
     def filter(self, record: logging.LogRecord) -> bool:
-        if isinstance(record.msg, str):
-            msg = record.msg
-            for pattern in self.SENSITIVE_PATTERNS:
-                msg = pattern.sub(r"\1 [REDACTED]", msg)
-            record.msg = msg
+        try:
+            msg = record.getMessage()
+        except Exception:
+            msg = str(record.msg)
+
+        for pattern in self.SENSITIVE_PATTERNS:
+            msg = pattern.sub(r"\1[REDACTED]", msg)
+
+        record.msg = msg
+        record.args = ()
         return True

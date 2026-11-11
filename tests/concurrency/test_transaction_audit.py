@@ -92,7 +92,10 @@ class MockPaymentRail(PaymentRail):
 
     def verify_webhook(self, headers: dict[str, str], body_bytes: bytes) -> bool:
         _ = (headers, body_bytes)
-        return True
+        return False
+
+    def validate_configuration(self) -> tuple[bool, str]:
+        return True, ""
 
 
 class ConfigurableRail(PaymentRail):
@@ -118,7 +121,10 @@ class ConfigurableRail(PaymentRail):
 
     def verify_webhook(self, headers: dict[str, str], body_bytes: bytes) -> bool:
         _ = (headers, body_bytes)
-        return True
+        return False
+
+    def validate_configuration(self) -> tuple[bool, str]:
+        return True, ""
 
 
 @pytest.fixture
@@ -698,7 +704,14 @@ def test_f6_reconcile_confirmed_failure_transitions_to_released(db_session_facto
             transaction_id="tx_fail_01",
             status="PAYOUT_EXCEPTION",
             details={"error": "Network timeout"},
-        )
+        ),
+        lookup_result=PaymentResult(
+            success=False,
+            transaction_id="tx_fail_01",
+            status="FAILED",
+            details={"error": "Confirmed provider rejection"},
+            business_rejection=True,
+        ),
     )
     authz = AuthorizationService(
         clock=clock,

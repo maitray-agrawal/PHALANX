@@ -151,7 +151,7 @@ Manual section references: 36, 37, 56.25.
   - **Rule**: Free Web Services spin down (sleep) after **15 minutes of HTTP inactivity**.
   - **Cold Start Latency**: The first incoming request takes 30-50 seconds to wake the service.
   - **Instance Limit**: 750 free instance hours per calendar month across all free services.
-  - **Mitigation**: Scheduled keepalive pinger (`scripts/pinger.py` invoked every 10 minutes via `.github/workflows/keepalive.yml`) sends `GET /healthz` to prevent sleep cycles during the evaluation window.
+  - **Mitigation**: Scheduled keepalive pinger (invoked every 10 minutes via `.github/workflows/scheduled.yml`) sends `GET /healthz` to prevent sleep cycles during the evaluation window. Note: GitHub Actions scheduled cron workflows run exclusively on the default branch (`main`).
 - **PostgreSQL Database Expiry Rule**:
   - **Rule**: Free PostgreSQL instances **expire and are automatically deleted 30 days after creation**.
   - **Data Retention**: Render provides a 14-day grace period to upgrade to a paid plan ($7/mo Starter). If not upgraded, all data is permanently destroyed.
@@ -324,6 +324,23 @@ Empirical evidence gathered directly from live API requests against `https://api
 - **Arbitrary Signature Probe**: Inbound request with invalid signature tested against live API
 - **Response**: HTTP 200 OK with `{"verification_status": "FAILURE"}`
 - **Security Boundary**: Fails closed and rejects unauthorized/forged webhooks with HTTP 401.
+
+---
+
+## 13. PayPal Outcome Isolation & Reservation Guarantees
+
+PHALANX strictly differentiates between deterministic business rejections and transient/ambiguous infrastructure failures at the payment rail boundary:
+
+1. **Definite Provider Rejection (HTTP 4xx Business Errors)**:
+   - When PayPal returns a deterministic 4xx error (e.g., 400 Bad Request, 422 Unprocessable Entity with `ORDER_NOT_APPROVED` or business rule failure), the outcome is confirmed as permanently rejected (`status="FAILED"`, `business_rejection=True`).
+   - The authorization service confirms failure and safely releases the reserved budget back to the agent's available limit via `repo.release_reservation(reservation_id, confirmed_failure=True)`.
+
+2. **Ambiguous Infrastructure Failures (HTTP 5xx, Network Timeouts, Malformed Responses)**:
+   - When PayPal encounters transient infrastructure errors (HTTP 500/502/503/504), network timeouts, connection resets, or unparseable responses, the financial state is indeterminate (the payment may or may not have reached PayPal's internal processing pipeline).
+   - In accordance with fail-safe principles, PHALANX maps these outcomes to `status="RECONCILE"` with `business_rejection=False`.
+   - The reservation is **strictly held** (never released): `repo.release_reservation(reservation_id, confirmed_failure=False)` leaves the budget locked against double-spending until manual human reconciliation or authoritative webhook settlement.
+   - The transaction state transitions to `RequestState.RECONCILE` with an immutable ledger event documenting the ambiguity.
+
 
 
 

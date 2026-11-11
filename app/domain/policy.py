@@ -27,6 +27,7 @@ class PolicyReasonCode(str, Enum):
     MANDATE_EXPIRED = "MANDATE_EXPIRED"
     CURRENCY_MISMATCH = "CURRENCY_MISMATCH"
     PAYEE_UNAUTHORIZED = "PAYEE_UNAUTHORIZED"
+    VENDOR_IMPERSONATION = "VENDOR_IMPERSONATION"
     PURPOSE_UNAUTHORIZED = "PURPOSE_UNAUTHORIZED"
     INVOICE_REFERENCE_REQUIRED = "INVOICE_REFERENCE_REQUIRED"
     LIFETIME_BUDGET_EXCEEDED = "LIFETIME_BUDGET_EXCEEDED"
@@ -58,6 +59,25 @@ class PolicyDecision:
     escalated_from: DecisionOutcome | None
     evaluated_at_utc: datetime
     policy_version: str = "1.0.0"
+
+
+# Registered vendor payee-to-account bindings
+# Enforces that a known vendor name must remit to its exact registered account.
+# Any mismatch is treated as vendor impersonation and MUST NEVER auto-allow.
+KNOWN_VENDOR_BINDINGS: dict[str, str] = {
+    "acme cloud hosting services inc.": "vendor-paypal-sandbox-1",
+    "acme cloud hosting services inc": "vendor-paypal-sandbox-1",
+    "acme cloud": "vendor-paypal-sandbox-1",
+    "global tech hosting corp": "vendor-paypal-sandbox-1",
+    "saas platform inc.": "vendor-paypal-sandbox-1",
+    "saas platform inc": "vendor-paypal-sandbox-1",
+    "devtools co.": "vendor-paypal-sandbox-1",
+    "devtools co": "vendor-paypal-sandbox-1",
+    "database hosting global": "vendor-paypal-sandbox-1",
+    "enterprise analytics suite": "vendor-paypal-sandbox-1",
+    "security audit corp": "vendor-paypal-sandbox-1",
+    "monitoring & alerting ltd": "vendor-paypal-sandbox-1",
+}
 
 
 def evaluate_policy(
@@ -172,6 +192,36 @@ def evaluate_policy(
             escalated_from=None,
             evaluated_at_utc=now_utc,
         )
+
+    # 5b. Vendor impersonation defense: policy binds payee to account
+    payee_to_check = (intent.payee or "").strip().lower()
+    if payee_to_check and payee_to_check in KNOWN_VENDOR_BINDINGS:
+        expected_account = KNOWN_VENDOR_BINDINGS[payee_to_check]
+        if intent.recipient_id.strip() != expected_account:
+            return PolicyDecision(
+                outcome=DecisionOutcome.DENY,
+                reasons=(
+                    f"Vendor impersonation detected: payee '{intent.payee}' is bound to "
+                    f"account '{expected_account}', got '{intent.recipient_id}'",
+                ),
+                reason_codes=(PolicyReasonCode.VENDOR_IMPERSONATION,),
+                escalated_from=None,
+                evaluated_at_utc=now_utc,
+            )
+
+    purpose_lower = intent.purpose.lower()
+    for v_name, bound_acc in KNOWN_VENDOR_BINDINGS.items():
+        if len(v_name) > 8 and v_name in purpose_lower and intent.recipient_id.strip() != bound_acc:
+            return PolicyDecision(
+                outcome=DecisionOutcome.DENY,
+                reasons=(
+                    f"Vendor impersonation detected: purpose refers to known vendor '{v_name}' "
+                    f"bound to '{bound_acc}', got '{intent.recipient_id}'",
+                ),
+                reason_codes=(PolicyReasonCode.VENDOR_IMPERSONATION,),
+                escalated_from=None,
+                evaluated_at_utc=now_utc,
+            )
 
     # 6. Purpose allowlist check
     if mandate.allowed_purposes and intent.purpose not in mandate.allowed_purposes:
