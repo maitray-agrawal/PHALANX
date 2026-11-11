@@ -65,7 +65,7 @@ export const InvoiceAgentScreen: React.FC<InvoiceAgentScreenProps> = ({
     try {
       setProcessing(true);
       const res = await api.processInvoice(
-        { invoice_text: invoiceText, agent_id: "agent-auto-1" },
+        { invoice_text: invoiceText },
         token
       );
       setResult(res);
@@ -241,7 +241,7 @@ export const InvoiceAgentScreen: React.FC<InvoiceAgentScreenProps> = ({
                     <span className="ml-2 font-mono text-xs">({result.request_state})</span>
                   </div>
                 </div>
-                <span className="font-mono text-xs">{result.reasons.join(", ") || "No reason"}</span>
+                <span className="font-mono text-xs">{result.reasons?.join(", ") || "No reason"}</span>
               </div>
 
               {/* Payment Rail & Execution State */}

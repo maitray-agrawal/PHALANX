@@ -1600,6 +1600,7 @@ def _check_invoice_agent_rate_limit(client_ip: str) -> None:
 class ProcessInvoiceRequestDTO(BaseModel):
     model_config = ConfigDict(extra="forbid")
     invoice_text: str = Field(..., max_length=4000, description="Raw invoice text to parse")
+    agent_id: str | None = Field(default=None, description="Optional requesting agent identifier")
     force_fallback: bool = Field(default=False, description="Force recorded run fallback")
 
 

@@ -1,14 +1,14 @@
 # STATE (update after every task)
-Date: 11 Nov 2026 | Branch: dev | Last pushed commit on dev: dad68c2 | CI: PASSING (Run 186, ID 43005262915)
-Working tree: clean | CI Green across all 8 jobs; Full local battery verified (639 passed pytest, 105 redteam, 30 vitest, 5/5 Playwright Chromium/iPad/iPhone, ruff clean, mypy clean, bandit clean, tsc clean, build clean)
-Completed: T1-T15 (All engineering, AI integration, deployment configuration, security baselines, and Playwright smoke complete) | Doing: Pre-release verification complete | Next: Human review and merge to main
-Database: PostgreSQL container on 127.0.0.1:5433 healthy; hosting manifests (render.yaml, Neon guide, scheduled.yml, verify_live.py) ready.
+Date: 11 Nov 2026 | Branch: dev | Last pushed commit on dev: c196c82 | CI: PASSING (Run 186, ID 43005262915)
+Working tree: modified (README.md, routes.py, invoice_agent.py, InvoiceAgentScreen.tsx, metrics.md, docs/gallery/*, scripts/capture_gallery.mjs)
+CI Green across all 8 jobs; Full local battery verified (639 passed pytest, 0 skipped, 105 redteam, 30 vitest, ruff clean, mypy clean, bandit clean, tsc clean, build clean).
+Completed: Gallery capture script (scripts/capture_gallery.mjs), 15 desktop/mobile screenshots in docs/gallery/, 15 Devpost crops in docs/gallery/devpost/, docs/gallery/README.md, docs/evidence/metrics.md, README.md rewritten (~131 lines, GitHub rendered, zero emojis, zero hype).
 
 ---
 
 # context.md
-Phase: Final Engineering Battery & Pre-Release Verification (All 9 Tasks Complete)   Branches: main, dev
-Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
+Phase: Hackathon Submission Artifacts & Gallery Capture Complete   Branches: main, dev
+Architecture: Pure Hexagonal Architecture (Ports and Adapters)
 - app/domain: Pure deterministic policy engine, Ed25519 mandate invariants, canonical RFC 8785 JSON, cryptographic hash-chained ledger. AST purity test enforced.
 - app/application: AuthorizationService, MandateService, LedgerService, InvoiceAgent (autonomous supplier invoice ingestion with strict prompt delimiter isolation and deterministic PHALANX policy boundary), ProviderAgnosticLLMClient (quotas, timeouts, retries), IntentExtractor, GroundedExplanationValidator, PrincipalSessionMemory, DeterministicKnowledgeBase, CompositeAdvisoryPipeline.
 - app/infrastructure: Multi-stage container packaging (Node 20 + Python 3.12 slim), single managed SQLAlchemy engine, dialect-specific connect args (connect_timeout 10s, pool_recycle 240s, pool_pre_ping True, prepare_threshold None for pooler), request-scoped sessions, Ed25519 signing/verification (PEM & raw hex), HMAC-SHA256 role tokens (validated >= 32-byte secret key), DatabaseLedgerAdapter (re-entrant RLock to prevent deadlocks), GeminiLLMClient (official Gemini API adapter, temperature 0, strict JSON schema output, timeout 10s, 1 retry, token cap 1024, daily quota tracker with demo budget cap, server-side only key handling), PayPal Sandbox rail adapter, UTC clock. FOR UPDATE SKIP LOCKED row claiming for concurrent reconcilers.
@@ -25,25 +25,10 @@ Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
   8. Receipt & Verify: Cryptographic receipt card, public SHA-256 hash chain proof verifier.
 
 Test status (All Verified Live):
-- Backend full suite: 639 passed, 0 skipped, 0 failed in 225.95s (with local uvicorn on 8000; 629 passed, 10 skipped in load tests when standalone)
-- Red Team: 105 passed, 0 failed, 534 deselected in 16.73s
+- Backend full suite: 639 passed, 0 skipped, 0 failed in 404.36s
+- Red Team: 105 passed, 0 failed, 534 deselected in 33.24s
 - Concurrency & DB: 9/9 passed in test_postgres_concurrency.py, 24/24 passed in test_reconciliation.py, 1/1 passed in test_migration_upgrade.py
 - Static Analysis: ruff check clean (0 errors), ruff format clean (112 files checked), mypy app clean (0 errors across 42 source files), bandit clean (0 issues across 9,869 lines of code)
-- Frontend: Vitest passed (30/30 tests across 4 suites), ESLint clean (0 errors, 0 warnings), TypeScript clean (0 errors across web codebase via tsc --noEmit), production build clean (9.96s)
-- Playwright E2E: 5/5 passed across Chromium (26.6s), iPad size (25.2s), iPhone SE size (25.2s), with multi-viewport screenshots generated at 1920x1080 (Full HD Desktop), 1280x800 (Desktop), 768x1024 (Tablet), 375x667 (Mobile) without visual truncation or horizontal overflow.
-- Deployment Diagnostics & Hardening:
-  - GET /v1/admin/client-ip verified with X-Admin-Token constant-time compare and forged XFF prefix rejection.
-  - Proxy peeling: Render + Cloudflare hop formula ips[-1 - TRUSTED_PROXY_COUNT] selects ips[-2] with TRUSTED_PROXY_COUNT=1. Status: UNVERIFIED until verified against hosted instance.
-  - Demo reset in ENVIRONMENT=demo requires admin token or reconcile secret only (Principal role token receives 403 Forbidden).
-  - SQLAlchemy engine configured with connect_timeout=10, pool_recycle=240, pool_pre_ping=True, prepare_threshold=None on pooler strings.
-  - scripts/gen_keys.py generates high-entropy SECRET_KEY, ADMIN_TOKEN, RECONCILE_SECRET and outputs directly to stdout without writing files.
-
-Credential Alignment & Hostile Review Resolutions:
-- H8 (Closed): `validate_paypal_cert_url` enforces HTTPS, allowed hostnames strictly in `{api.paypal.com, api.sandbox.paypal.com, api-m.paypal.com, api-m.sandbox.paypal.com}`, rejects userinfo (username/password), and rejects explicit ports. Verified by 8 unit test cases.
-- H9 (Closed): `resolve_needs_review` refuses `MARK_FAILED` and `PROVIDE_PROOF` on `LOOKUP_FAILED`, timeouts, and transport errors. Only explicit provider failure statuses or 404 `NOT_FOUND` release reservations.
-- H10 (Closed): `scripts/boot.py` seeds `req_stepup_1001` only when `DEMO_SEED=true`. Tested: boot with `DEMO_SEED` unset yields empty approvals queue (`[]`).
-- Demo Rate Limit & Admin Reset: Confirmed `DEMO_TOKEN_RATE_LIMIT=1000` is only in local test/dev compose. `admin_reset` requires authentication (401 without auth) and is strictly disabled when `ENVIRONMENT=production` (403 Forbidden). Verified by integration tests.
-- Font Weights: Verified font files in `web/public/fonts/` replaced with genuine, distinct `@fontsource` weights for Inter (400, 500, 600, 700) and JetBrains Mono (400, 500, 600, 700). Distinct SHA-256 hashes verified.
-- Public Documentation: Kept `README.md` clean (< 115 lines); added `docs/process/README.md` to document internal development and agent governance artifacts without deleting or breaking file references.
-
-Next recommended action: Proceed with T5 (Reviewer R1 hostile pass).
+- Frontend: Vitest passed (30/30 tests across 4 suites), ESLint clean (0 errors, 0 warnings), TypeScript clean (0 errors across web codebase via tsc --noEmit), production build clean (4.70s)
+- UI Gallery: 15 standard screenshots (11 desktop, 4 mobile) and 15 Devpost crops (1500x1000) verified in docs/gallery/
+- Metrics Verification: docs/evidence/metrics.md verified with raw outputs, 49 API routes, 15 policy reason codes, 25-case invoice eval (0.0% bypass rate)

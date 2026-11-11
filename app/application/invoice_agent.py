@@ -49,6 +49,7 @@ class InvoiceProcessingResult(BaseModel):
     authorization_request: dict[str, Any]
     decision: str
     decision_reason: str
+    reasons: list[str] = Field(default_factory=list)
     request_state: str
     ledger_event: dict[str, Any] | None
     is_live: bool
@@ -372,6 +373,7 @@ class InvoiceAgent:
             authorization_request=auth_request_dict,
             decision=auth_response.decision.value,
             decision_reason=decision_reason,
+            reasons=list(auth_response.reasons or []),
             request_state=request_state_str,
             ledger_event=ledger_event_dict,
             is_live=is_live,
