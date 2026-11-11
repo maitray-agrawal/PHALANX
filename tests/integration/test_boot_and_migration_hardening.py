@@ -429,26 +429,103 @@ def test_redact_message_masks_secrets_and_passwords():
     assert "api_key=[REDACTED]" in redacted_param
 
 
-def test_boot_fails_fast_in_key_validation_on_invalid_mandate_signing_key_hex(monkeypatch):
-    """Verify that malformed MANDATE_SIGNING_KEY_HEX fails in step: key validation before DB."""
+def test_mandate_seeding_failure_emits_hint_with_configured_length_without_leaking_canary(
+    monkeypatch, caplog
+):
+    """Test that invalid MANDATE_SIGNING_KEY_HEX in seeding emits hint without leaking canary."""
+    if test_db_url is None:
+        return
+
     from app.infrastructure.config import settings
+    from app.infrastructure.database import reset_database
     from scripts.boot import main
 
+    canary = "bad-canary-value-not-hex"
+    _reset_test_schema(test_db_url)
+    monkeypatch.setattr(settings, "database_url", test_db_url)
+    monkeypatch.setenv("DATABASE_URL", test_db_url)
     monkeypatch.setattr(settings, "secret_key", TEST_SECRET_KEY)
-    monkeypatch.setattr(settings, "mandate_signing_key_hex", "a" * 65)
+    monkeypatch.setenv("SECRET_KEY", TEST_SECRET_KEY)
+    monkeypatch.setattr(settings, "mandate_signing_key_hex", canary)
+    monkeypatch.setenv("MANDATE_SIGNING_KEY_HEX", canary)
+    reset_database()
 
     captured_stdout = io.StringIO()
     captured_stderr = io.StringIO()
     monkeypatch.setattr(sys, "stdout", captured_stdout)
     monkeypatch.setattr(sys, "stderr", captured_stderr)
 
-    with pytest.raises(SystemExit) as exc_info:
+    with caplog.at_level(logging.DEBUG), pytest.raises(SystemExit) as exc_info:
         main()
 
-    assert exc_info.value.code == 1
+    assert exc_info.value.code == 1, "main() must exit with status 1 on mandate seeding failure"
     out = captured_stdout.getvalue()
     err = captured_stderr.getvalue()
+    log_text = caplog.text
 
-    assert "[boot] step: key validation" in out
-    assert "[boot] step: migrations" not in out, "Must fail fast before running migrations"
-    assert "MANDATE_SIGNING_KEY_HEX must contain exactly 64 hexadecimal characters." in err
+    # Step name must be printed
+    assert "[boot] step: seeding" in out
+
+    # The hint with the configured length must appear
+    expected_hint = (
+        f"(configured length={len(canary)}; delete the variable to derive "
+        "the key from SECRET_KEY, or set exactly 64 hex characters)"
+    )
+    assert expected_hint in err, f"Expected '{expected_hint}' in stderr, got:\n{err}"
+
+    # The canary string must appear nowhere in stdout, stderr or logs
+    assert canary not in out, "Canary string must not leak in stdout"
+    assert canary not in err, "Canary string must not leak in stderr"
+    assert canary not in log_text, "Canary string must not leak in logs"
+
+    reset_database()
+
+
+def test_unset_mandate_signing_key_hex_derives_stable_key_id(monkeypatch):
+    """Test that unset MANDATE_SIGNING_KEY_HEX with valid SECRET_KEY derives stable key_id."""
+    if test_db_url is None:
+        return
+
+    from sqlalchemy import select
+    from sqlalchemy.orm import Session
+
+    from app.infrastructure.config import settings
+    from app.infrastructure.database import get_engine, reset_database
+    from app.infrastructure.models import MandateModel
+    from scripts.boot import run_boot
+
+    _reset_test_schema(test_db_url)
+    monkeypatch.setattr(settings, "database_url", test_db_url)
+    monkeypatch.setenv("DATABASE_URL", test_db_url)
+    monkeypatch.setattr(settings, "secret_key", TEST_SECRET_KEY)
+    monkeypatch.setenv("SECRET_KEY", TEST_SECRET_KEY)
+    monkeypatch.setattr(settings, "mandate_signing_key_hex", None)
+    monkeypatch.delenv("MANDATE_SIGNING_KEY_HEX", raising=False)
+    reset_database()
+
+    # Run 1: boot and get key_id
+    success_1 = run_boot(raise_on_error=True)
+    assert success_1 is True, "First boot run must succeed with unset MANDATE_SIGNING_KEY_HEX"
+
+    engine = get_engine()
+    with Session(engine) as session:
+        mandate_1 = session.scalar(
+            select(MandateModel).where(MandateModel.mandate_id == "mandate_default_sandbox")
+        )
+        assert mandate_1 is not None, "Demo mandate must be seeded"
+        key_id_1 = mandate_1.key_id
+        assert key_id_1.startswith("key_"), "key_id must follow key_ convention"
+
+    # Run 2: boot again (idempotent run)
+    success_2 = run_boot(raise_on_error=True)
+    assert success_2 is True, "Second boot run must succeed"
+
+    with Session(engine) as session:
+        mandate_2 = session.scalar(
+            select(MandateModel).where(MandateModel.mandate_id == "mandate_default_sandbox")
+        )
+        assert mandate_2 is not None
+        key_id_2 = mandate_2.key_id
+
+    assert key_id_1 == key_id_2, "Derived key_id must be stable across multiple runs"
+    reset_database()

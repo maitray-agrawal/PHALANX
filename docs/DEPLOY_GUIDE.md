@@ -52,11 +52,35 @@ Store the output securely in a password manager.
 | `PAYPAL_CLIENT_ID` | Optional* | No | Boot succeeds. If `PAYMENT_RAIL=paypal`, payment dispatch aborts before any reservation with `503 Service Unavailable` ("PayPal credentials unconfigured"). |
 | `PAYPAL_CLIENT_SECRET` | Optional* | No | Boot succeeds. Same as `PAYPAL_CLIENT_ID` — fail-closed before reservation. |
 | `PAYPAL_WEBHOOK_ID` | Optional | No | Boot succeeds. Inbound webhook endpoint (`POST /v1/webhooks/paypal`) fails closed with `503 Service Unavailable` ("PAYPAL_WEBHOOK_ID unconfigured"). |
-| `MANDATE_SIGNING_KEY_HEX` | Optional | No | Boot succeeds. If unset, HKDF-SHA256 deterministically derives a 32-byte Ed25519 signing seed from `SECRET_KEY` using label `phalanx-mandate-ed25519`. |
+| `MANDATE_SIGNING_KEY_HEX` | Optional | No | Boot succeeds. **Do NOT set on Render.** If unset, HKDF-SHA256 deterministically derives a 32-byte Ed25519 signing seed from `SECRET_KEY` using label `phalanx-mandate-ed25519`. |
 | `GEMINI_API_KEY` | Optional | No | Boot succeeds. Invoice Agent extraction cleanly falls back to certified recorded baseline runs (`is_live: false`, status `RECORDED RUN (GEMINI_API_KEY Unconfigured)`). |
 | `RECONCILE_SECRET` | Optional | No | Boot succeeds. External cron endpoints (`POST /v1/admin/reconcile-scheduled`, `POST /v1/admin/daily-reset`) reject calls with `503` when unset. |
 
 *\*Note: Required only for active PayPal sandbox payment execution; when unconfigured, the application boots normally and refuses payment dispatches fail-closed.*
+
+### Render First-Boot Checklist
+
+Follow this checklist before the initial deployment on Render:
+
+1. **Do NOT set `MANDATE_SIGNING_KEY_HEX`**: Leave it completely unset in the Render dashboard. When unset, the Ed25519 mandate authority signing seed is derived deterministically from `SECRET_KEY` via HKDF-SHA256, guaranteeing 64-hex format validity and cryptographic stability across container restarts. Setting an invalid hex string or a string with trailing newlines/spaces will cause boot to abort.
+2. **`PAYPAL_WEBHOOK_ID`**: May be left blank or set to any placeholder during initial boot because inbound webhook verification fails closed.
+3. **Delete Irrelevant Localhost Variables**: Remove `PORT`, `TEST_DATABASE_URL`, `POSTGRES_*`, `PHALANX_APP_DB_PASSWORD`, and any localhost values pasted from `.env`.
+4. **Required Environment Configuration**:
+   - `ENVIRONMENT=demo`
+   - `PAYMENT_RAIL=paypal`
+   - `PAYPAL_ENVIRONMENT=sandbox`
+   - `TRUSTED_PROXY_COUNT=1`
+   - `RECONCILER_ENABLED=false`
+   - `DEMO_TOKEN_RATE_LIMIT` unset (uses default 10-20/min per IP)
+   - `PUBLIC_BASE_URL` set to the real service URL with no trailing slash (e.g. `https://phalanx-nrxk.onrender.com`)
+5. **Expected Boot Log Sequence**:
+   - `Starting PHALANX idempotent boot sequence...`
+   - `[boot] step: key validation`
+   - `[boot] step: migrations` (Alembic applies migrations 001-004 to head)
+   - `[boot] step: trigger install` (Installs `trg_deny_ledger_mutation` on `ledger_events`)
+   - `[boot] step: seeding` (Seeds Genesis ledger event, demo mandate, and demo budget)
+   - `PHALANX boot sequence complete. Ready to serve traffic.`
+   - `INFO: Uvicorn running on http://0.0.0.0:10000`
 
 ---
 
