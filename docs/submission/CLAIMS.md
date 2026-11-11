@@ -14,3 +14,4 @@ This matrix maps every core capability and security invariant of PHALANX to its 
 | **C8. Fail-Closed Rail Config** | Missing credentials or 401 OAuth error aborts with 503 before any budget reservation. | `app/application/services.py:1034-1051`<br>`app/infrastructure/paypal.py:240-277` | `pytest tests/unit/test_may_release_and_rail.py::test_wrong_oauth_secret_returns_503_before_reservation` | `PASSED` |
 | **C9. Cryptographic Audit Ledger** | Events form an immutable SHA-256 hash chain; tampering breaks chain verification. | `app/infrastructure/ledger.py:30-110`<br>`app/application/services.py:1300-1400` | `pytest tests/integration/test_ledger.py` | `PASSED` |
 | **C10. Step-Up Canonical Digest** | Escalations require human supervisor approval bound to RFC 8785 canonical JSON digest. | `app/domain/models.py:50-80`<br>`app/application/services.py:1450-1550` | `pytest tests/integration/test_approvals.py` | `PASSED` |
+

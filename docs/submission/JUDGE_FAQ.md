@@ -63,3 +63,4 @@ This document addresses 10 rigorous technical questions that a PayPal platform e
 ### Q10: How do you verify that inbound PayPal webhooks are genuinely from PayPal and not spoofed by an attacker?
 **Answer**: Webhook verification verifies the cryptographic signature against PayPal's public certificates. Before calling PayPal's verification endpoint, PHALANX validates the webhook certificate URL using strict security invariants: scheme must be HTTPS, host must be strictly within `{api.paypal.com, api.sandbox.paypal.com, api-m.paypal.com, api-m.sandbox.paypal.com}`, with no userinfo and no custom port. Only verified webhooks with matching event signatures are processed.  
 **Pointers**: `app/infrastructure/paypal.py:30-60, 737-805`, `tests/integration/test_reconciliation.py`.
+

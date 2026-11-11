@@ -16,3 +16,4 @@ Matches `VIDEO_SCRIPT.md` shot-by-shot for recording and editing synchronization
 | **10** | `2:35 - 2:45` | Web UI: **Ledger Screen** | Click "Simulate Row Tamper". Show red "CHAIN BROKEN" badge. Click "Restore & Re-verify". | *"If a malicious insider alters a single byte, the hash chain instantly breaks..."* | 10s |
 | **11** | `2:45 - 3:00` | Full App & Closing Title Card | Zoom out to show full responsive dashboard. Display GitHub repository link and Google Antigravity credits. | *"Agents request. Policies decide. Humans authorize exceptions..."* | 15s |
 | **Total** | `0:00 - 3:00` | — | — | — | **180s** |
+

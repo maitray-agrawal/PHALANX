@@ -52,3 +52,4 @@ To enable live Gemini 2.5 Flash model calls instead of recorded baseline runs:
 3. In SQL Editor, run the initialization statements from `docs/evidence/neon-manual-setup.md`.
 4. Copy the Direct Connection URI (with `sslmode=require`).
 5. Set `DATABASE_URL` in your deployment environment.
+

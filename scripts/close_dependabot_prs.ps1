@@ -35,3 +35,4 @@ foreach ($pr in $prsJson) {
 }
 
 Write-Host "All specified Dependabot PRs processed." -ForegroundColor Green
+
