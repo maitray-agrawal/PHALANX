@@ -1,13 +1,13 @@
 # STATE (update after every task)
-Date: 11 Nov 2026 | Branch: dev | Last pushed commit on dev: f7c435b | CI: passing
-Working tree: clean | Phases A-I Complete: M0 hardened, Gemini Invoice Agent live + evaluated, PayPal Sandbox E1 ready, Deploy readiness configured, Submission drafts authored, Full suites green (614 passed, 105 redteam, 30 vitest, 0 failures)
-Completed: T1, T2, T2c, T3, T4, T7 (dev pushed), T8 (Invoice Agent), T9/D1 (Deploy config), T10 (Sandbox flow), T11, T12, T15 (Submission drafts) | Doing: Phase I complete | Next: Human review and merge
+Date: 11 Nov 2026 | Branch: dev | Last pushed commit on dev: e40b210 | CI: PASSING (Run 184, ID 42988926311)
+Working tree: clean | CI Green across all 8 jobs; Frontend lint fixed (CaptureOrderResponse); Node 22 LTS in CI; Gemini config & tests aligned (623 passed, 105 redteam, 30 vitest, 0 failures)
+Completed: T1, T2, T2c, T3, T4, T7 (dev pushed), T8 (Invoice Agent), T9/D1 (Deploy config), T10 (Sandbox flow), T11, T12, T15 (Submission drafts) | Doing: CI Recovery & Release complete | Next: Human review and merge
 Database: PostgreSQL container on 127.0.0.1:5433 healthy; hosting manifests (render.yaml, Neon guide, scheduled.yml, verify_live.py) ready.
 
 ---
 
 # context.md
-Phase: R13 Live PayPal Sandbox (Orders v2 Two-Phase Flow, Payouts 403 Restricted Proof, Webhook Verification) + T8 Invoice Agent + D1/D1b Render & Neon Deployment   Branches: main, dev   Last green CI: https://github.com/maitray-agrawal/PHALANX/actions/runs/42816173523
+Phase: R13 Live PayPal Sandbox (Orders v2 Two-Phase Flow, Payouts 403 Restricted Proof, Webhook Verification) + T8 Invoice Agent + D1/D1b Render & Neon Deployment   Branches: main, dev   Last green CI: https://github.com/maitray-agrawal/PHALANX/actions/runs/42988926311
 Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
 - app/domain: Pure deterministic policy engine, Ed25519 mandate invariants, canonical RFC 8785 JSON, cryptographic hash-chained ledger. AST purity test enforced.
 - app/application: AuthorizationService, MandateService, LedgerService, InvoiceAgent (autonomous supplier invoice ingestion with strict prompt delimiter isolation and deterministic PHALANX policy boundary), ProviderAgnosticLLMClient (quotas, timeouts, retries), IntentExtractor, GroundedExplanationValidator, PrincipalSessionMemory, DeterministicKnowledgeBase, CompositeAdvisoryPipeline.

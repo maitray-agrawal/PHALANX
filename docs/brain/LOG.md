@@ -39,3 +39,8 @@ Changed: money_outcome.py, gemini.py, invoice_agent.py, alembic/versions/004, ro
 Commands: uv run pytest -q -rs (614 passed, 10 skipped in 171s); uv run pytest -q -m redteam (105 passed); cd web && npm test -- --run (30 passed); npm run build (clean); ruff check, ruff format, mypy app, bandit (all 0 errors); git push origin dev (f7c435b).
 Findings closed: L1, P1, C1, R2, R3, D1 closed with verified artifacts and command runs.
 Next: Human actions: approve sandbox order (docs/HUMAN_STEPS.md), run Neon setup, open draft PR on GitHub, record video.
+2026-11-11 | CI Recovery & Gemini Hardening: Fix TypeScript no-explicit-any, Node 22 in CI, Gemini config/tests.
+Changed: web/src/api.ts, web/package.json, .github/workflows/ci.yml, Dockerfile, app/infrastructure/config.py, app/infrastructure/gemini.py, docker-compose.yml, .env.example, tests/unit/test_invoice_agent.py.
+Commands: npm run lint (0 errors); tsc --noEmit (0 errors); vitest (30 passed); npm run build (pass); pytest (623 passed, 10 skipped in 173s); redteam (105 passed); ruff check & format (clean); mypy app (clean); bandit (clean); git push origin dev (e40b210); GitHub Actions run 42988926311 (all 8 jobs green).
+Findings closed: Frontend CI lint failure resolved with CaptureOrderResponse interface; Node 22 engine aligned; Gemini provider adapter fully tested across all error and success states.
+Next: Human review and merge.
