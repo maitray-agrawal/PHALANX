@@ -1,7 +1,18 @@
 # STATE (update after every task)
-Date: 11 Nov 2026 | Branch: dev | Last pushed commit on dev: 6c0e7ea | CI: PASSING (Run ID 43039692929)
-Working tree: clean on dev (main untouched)
-CI Green across all 8 jobs (Run 43039692929); Full local battery verified:
+Date: 11 Nov 2026 | Branch: dev & main synchronized | Release Commit: b8a44b2 | CI: PASSING (Run ID 43048019305)
+Working tree: clean on dev (synced with main)
+CI Green across all 8 jobs + Deploy Hook (Run 43048019305 on main):
+- Backend Lint, Types & Tests: success
+- Bandit Security AST Analysis: success
+- Red Team Adversarial Suite: success
+- Dependency Vulnerability Audit: success
+- Docker Build & Vulnerability Scan: success
+- Frontend Lint, Types & Tests: success
+- Secret Leak Detection (Gitleaks): success
+- Container Compose Integration & Smoke: success
+- Trigger Render Deployment: success (hook evaluated cleanly)
+Pull Request: #33 ("fix: harden Alembic startup and migration diagnostics") merged into main.
+Full release verification battery verified locally: 665 backend passed, 105 redteam passed, 30 vitest passed, ruff clean, mypy clean, bandit clean.
 - Backend: 665 passed, 0 skipped, 0 failed in pytest (test_boot_and_migration_hardening.py 8/8 pass)
 - Red team: 105 passed, 560 deselected in 6.03s
 - Frontend: Vitest passed (30/30 passed), ESLint clean, TypeScript clean, Vite build clean

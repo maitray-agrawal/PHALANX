@@ -54,3 +54,8 @@ Changed: alembic/env.py, scripts/boot.py, tests/integration/test_migration_upgra
 Commands: uv run pytest tests/integration/test_boot_and_migration_hardening.py (8 passed in 3.08s); uv run pytest -q (665 passed, 0 skipped in 267.90s); uv run pytest -q -m redteam (105 passed in 6.03s); uv run ruff check . (clean); uv run ruff format --check . (113 files clean); uv run mypy app (42 files clean); cd web && npm run lint && npx tsc --noEmit && npm test -- --run (30 passed in 4.09s).
 Findings closed: M1 (Alembic fileConfig logger silencing and silent boot exits resolved with disable_existing_loggers=False, stderr flush, and traceback emission).
 Next: Git commit and push dev to origin; monitor GitHub Actions CI.
+2026-11-11 | Release Gate: Branch reconciliation, PR #33 merged to main, full CI pass on main (Run 43048019305).
+Changed: Merged dev into main (PR #33); updated dev and main to b8a44b2; STATE.md, LOG.md.
+Commands: PR #33 created and merged to main; GitHub Actions CI run 43048019305 on main passed all 9 jobs (Backend, Frontend, Docker, Red Team, Bandit, Gitleaks, Audit, Compose, Deploy Hook); git pull origin main fast-forward on dev.
+Findings closed: Release gate cleared; Alembic and boot hardening active on main release commit.
+Next: Render redeployment and live health verification.
