@@ -74,8 +74,8 @@ Changed: PR #34 merged into main; dev and main synchronized to e831506; STATE.md
 Commands: PR #34 created and merged; GitHub Actions CI run 43055335547 on main passed all 9 jobs including Render deploy hook; local dev pulled and synchronized.
 Findings closed: Release branch main contains validated Ed25519 signing key logic, unbuffered output, transparent step logging, and redacted tracebacks.
 Next: Render deployment handoff and operator dashboard verification.
-2026-11-12 | M2: Fail-fast MANDATE_SIGNING_KEY_HEX validation in boot step 1 before DB connection.
-Changed: scripts/boot.py, tests/integration/test_boot_and_migration_hardening.py, .gitignore, FINDINGS.md, STATE.md, LOG.md.
-Commands: uv run pytest tests/integration/test_boot_and_migration_hardening.py (14 passed in 4.38s); uv run ruff check . (clean); uv run ruff format --check . (clean); uv run mypy app (clean across 42 source files).
-Findings closed: M2 (Malformed MANDATE_SIGNING_KEY_HEX fails fast during Step 1 key validation before database connection and migrations; exact remediation instructions documented).
-Next: Git commit and push dev; provide operator runbook for Render environment variable update and deployment verification.
+2026-11-12 | Final post-deployment acceptance audit & Render boot hardening.
+Changed: render.yaml, scripts/boot.py, tests/integration/test_boot_and_migration_hardening.py, docs/DEPLOY_GUIDE.md, Dockerfile, STATE.md, LOG.md.
+Commands: uv run pytest -q -rs (670 passed, 10 skipped in 161.81s); uv run pytest -q -m redteam (105 passed in 12.78s); cd web && npm test -- --run (30 passed in 5.21s); npx tsc --noEmit (clean); npm run lint (clean); npm run build (clean in 3.73s); ruff check (clean); ruff format (clean); mypy app (clean across 42 files); bandit (clean across 10,020 lines); local boot reproduction 3/3 passed; live Render probe verified (/healthz, /readyz, PayPal Orders v2 live sandbox order 07P62272R85944219, live Attack Lab 6/6 defended, live ledger hash chain verified 8 events, frontend assets verified).
+Findings closed: Complete live production post-deployment acceptance audit verified against https://phalanx-nrxk.onrender.com/. CI Run 43121019821 passed all 8 check jobs on dev.
+Verdict: DEPLOYMENT VERIFIED.
