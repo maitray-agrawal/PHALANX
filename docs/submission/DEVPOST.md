@@ -51,7 +51,7 @@ PHALANX sits between autonomous AI agents and financial rails (such as PayPal Sa
 
 ## Accomplishments That We're Proud Of
 
-- **$0.00 Unauthorized Leakage**: In our 25-case adversarial evaluation suite using a simulated compromised LLM stub, PHALANX achieved a 100% block rate (0.0% guardrail bypass). *Note: this 0% bypass is a deterministic PHALANX policy guardrail result, proving that the authorization layer prevents unauthorized fund disbursement even when the model is completely compromised.*
+- **$0.00 Unauthorized Leakage**: In our 25-case adversarial evaluation suite using a simulated compromised LLM stub, PHALANX achieved a 100% block rate (0.0% guardrail bypass; stub-LLM guardrail result). *Note: this 0% bypass is a deterministic PHALANX policy guardrail result, proving that the authorization layer prevents unauthorized fund disbursement even when the model is completely compromised.*
 - **0ms Policy Core I/O**: The pure domain engine evaluates mandates and limits completely in-memory in microseconds.
 - **Full Test Suite & Purity**: Over 620 automated tests, 105 red-team adversarial tests, 30 Vitest UI tests, and AST domain purity validation.
 

@@ -76,7 +76,7 @@
 > Second, intent digests use RFC 8785 canonical JSON formatting. This guarantees that whitespace or key ordering changes cannot alter the transaction fingerprint.  
 > 
 > **[2:15 – 2:25]**  
-> Finally, every state transition is recorded in an immutable SHA-256 hash-chained ledger, protected by PostgreSQL database triggers that strictly reject any UPDATE or DELETE statement. Every single action leaves verifiable mathematical proof."  
+> Finally, every state transition is recorded in a tamper-evident SHA-256 hash-chained ledger, protected by PostgreSQL database triggers that strictly reject any UPDATE or DELETE statement. Every single action leaves verifiable mathematical proof."  
 
 ---
 
@@ -129,7 +129,7 @@
 > **[4:19 – 4:30]**  
 > PHALANX immediately connects to the PayPal Sandbox rail. An Orders v2 order is created and tracked as ‘awaiting buyer approval’. Notice that PHALANX never marks an order settled upon creation—only upon verified provider capture."  
 
-#### Part E: Immutable Hash-Chained Audit Ledger [4:30 – 4:50]
+#### Part E: Tamper-Evident Hash-Chained Audit Ledger [4:30 – 4:50]
 **Visual Screen:** `09-activity-ledger-desktop-local.png`  
 **Focus:** Visual block chain strip, cryptographic SHA-256 hash receipts, verify chain trigger.  
 

@@ -80,7 +80,8 @@ PHALANX integrates with PayPal Sandbox APIs via `app/infrastructure/paypal.py`:
 
 ## How AI Is Used
 
-PHALANX uses Google Gemini (`gemini-2.5-flash`) via `app/infrastructure/gemini.py` strictly as an advisory proposal agent:
+PHALANX uses Google Gemini via `app/infrastructure/gemini.py` strictly as an advisory proposal agent:
+- **Gemini 2.5 Flash Integration**: Live when the API key is configured; a labelled recorded baseline otherwise.
 - **Supplier Invoice Parser:** Converts raw invoice text into structured transaction parameters (`payee`, `amount_minor`, `currency`, `invoice_reference`).
 - **Outside Authorization Path:** The model generates proposals, but cannot approve transactions. Decisions are rendered by deterministic Python policies.
 - **Defensive Safeguards:** Server-side API key handling, temperature 0, strict JSON schema output, per-request token caps, and daily quota limits.
@@ -107,7 +108,7 @@ All metrics verified on branch `dev` (Commit `c196c82`):
 | **Code Coverage** | 81% full suite (CI floor: 75%) | `pytest -v --cov=app --cov-fail-under=75` |
 | **API Route Surface** | 49 registered routes | `uv run python -c "from app.main import app; print(len(app.routes))"` |
 | **Policy Reason Codes** | 15 strict enum codes | `uv run python -c "from app.domain.policy import PolicyReasonCode; print(len(PolicyReasonCode))"` |
-| **Invoice Agent Benchmark**| 25/25 safe (0.0% injection bypass)| `uv run python docs/evidence/evaluate_invoices.py` |
+| **Invoice Agent Benchmark**| 25/25 safe (0.0% injection bypass; stub-LLM guardrail result)| `uv run python docs/evidence/evaluate_invoices.py` |
 | **CI Automation** | 8 of 8 jobs successful | GitHub Actions Run `43005262915` |
 
 Detailed execution logs and terminal outputs are recorded in [docs/evidence/metrics.md](docs/evidence/metrics.md).

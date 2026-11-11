@@ -98,7 +98,7 @@ Four distinct technical capability cards animate into view in a 2×2 grid:
 
 3. **Card 3: SHA-256 Hash-Chained Audit Ledger**
    - Three connected blocks showing `prev_hash` -> `event_hash`.
-   - Text: *"Every proposal, policy decision, approval, and capture forms an immutable cryptographic chain."*
+   - Text: *"Every proposal, policy decision, approval, and capture forms a tamper-evident cryptographic chain."*
 
 4. **Card 4: PostgreSQL Append-Only Immutability Triggers**
    - Shows live SQL trigger definition:
@@ -155,7 +155,7 @@ Four distinct technical capability cards animate into view in a 2×2 grid:
   4. Screen transitions to PayPal Sandbox Orders v2 card showing state `Awaiting Buyer Approval`.
   5. Narration highlights two-phase settlement honesty: order creation does not equal settlement.
 
-### Section 5E: Immutable Hash-Chained Audit Ledger (4:30 – 4:50)
+### Section 5E: Tamper-Evident Hash-Chained Audit Ledger (4:30 – 4:50)
 - **Source Asset:** [docs/gallery/09-activity-ledger-desktop-local.png](file:///d:/PHALANX/docs/gallery/09-activity-ledger-desktop-local.png)
 - **Camera Movement:** Horizontal track across the chronological block chain strip.
 - **Highlights:**

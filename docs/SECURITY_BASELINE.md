@@ -15,7 +15,7 @@ PHALANX implements a multi-tiered defense-in-depth architecture adhering to stri
 1. **Domain Purity**: The decision engine in `app/domain` is purely deterministic (no network I/O, no system clock, no random generation, and no outer imports).
 2. **LLM Out of Authorization Path**: The Language Model is never permitted to authorize, loosen, or approve financial transactions. Heuristic and auxiliary signals may only elevate risk and tighten decisions (`ALLOW` $\to$ `STEP_UP` $\to$ `DENY`). Untrusted text is strictly isolated inside structured delimiters.
 3. **Cryptographically Signed Mandates**: Financial limits (single transaction limits, instant thresholds, velocity caps, allowed payees, and temporal validity) are bounded by Ed25519 digital signatures. Verification occurs over RFC 8785 canonical JSON bytes.
-4. **Tamper-Evident Hash-Chained Audit Ledger**: Every policy evaluation and reconciliation step emits an immutable event chained to its predecessor (`prev_hash` $\to$ `event_hash`). PostgreSQL triggers prohibit `UPDATE`, `DELETE`, and `TRUNCATE` operations on `ledger_events`.
+4. **Tamper-Evident Hash-Chained Audit Ledger**: Every policy evaluation and reconciliation step emits a tamper-evident event chained to its predecessor (`prev_hash` $\to$ `event_hash`). PostgreSQL triggers prohibit `UPDATE`, `DELETE`, and `TRUNCATE` operations on `ledger_events`.
 5. **Fail-Closed Principle**: If database connectivity, PayPal credentials, or cryptographic keys are unavailable or unconfigured, the system fails closed with HTTP 503 Problem+JSON before reserving any funds. No financial decisions or reservations occur during outage states.
 
 ### 1.2 Authentication & Cryptographic Keys

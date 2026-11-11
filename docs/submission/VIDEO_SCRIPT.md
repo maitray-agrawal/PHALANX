@@ -54,9 +54,9 @@ Show the PayPal Sandbox checkout box: open buyer approval in sandbox, then click
 ---
 
 ### [2:20 - 2:45] Scene 5: Cryptographic Audit Ledger & Tamper Resistance
-**Visual Cue**: Navigate to the Ledger screen. Show the immutable SHA-256 hash-chained event timeline. Click "Simulate Row Tamper". The verification badge immediately flips from green "VALID" to red "CHAIN BROKEN" with the exact tampered sequence number highlighted. Click "Restore & Re-verify" to demonstrate recovery.  
+**Visual Cue**: Navigate to the Ledger screen. Show the tamper-evident SHA-256 hash-chained event timeline. Click "Simulate Row Tamper". The verification badge immediately flips from green "VALID" to red "CHAIN BROKEN" with the exact tampered sequence number highlighted. Click "Restore & Re-verify" to demonstrate recovery.  
 **Voiceover**:
-> "Every single action—intent proposals, policy evaluations, supervisor approvals, and payment captures—leaves immutable evidence in our hash-chained audit ledger.
+> "Every single action—intent proposals, policy evaluations, supervisor approvals, and payment captures—leaves tamper-evident evidence in our hash-chained audit ledger.
 > 
 > If a malicious insider or compromised process alters a single byte in PostgreSQL, the SHA-256 hash chain instantly breaks, pinpointing the exact corrupted block. Integrity is verifiable in real-time."
 

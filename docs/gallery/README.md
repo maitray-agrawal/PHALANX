@@ -32,7 +32,7 @@ Environment variables accepted:
 | `06-approvals-queue-desktop-local.png` | Human-in-the-loop approvals console displaying pending step-up escalations, request provenance, and decision controls. |
 | `07-approvals-refusal-desktop-local.png` | Human approvals console highlighting tamper refusal and reason codes when attempting to alter payee or amount parameters. |
 | `08-attack-lab-desktop-local.png` | Attack Lab testing environment executing prompt injections, budget drain bursts, replay attacks, and mandate tampering against policy defenses. |
-| `09-activity-ledger-desktop-local.png` | Immutable hash-chained audit ledger showing chronological transaction events, previous event hashes, and cryptographic receipt verification. |
+| `09-activity-ledger-desktop-local.png` | Tamper-evident hash-chained audit ledger showing chronological transaction events, previous event hashes, and cryptographic receipt verification. |
 | `10-mandates-desktop-local.png` | Agent mandate management interface showing per-agent spending limits, allowed merchant categories, single-transaction caps, and cryptographic signature status. |
 | `11-paypal-sandbox-awaiting-desktop-local.png` | Direct payment console showing PayPal Sandbox order creation and link awaiting payer approval before capture. |
 

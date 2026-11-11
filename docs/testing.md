@@ -121,4 +121,4 @@ To verify that the test harness actively catches real regressions rather than pr
 - **Deterministic Separation**: Natural language prompts cannot penetrate the pure evaluator.
 - **One-Way Severity Escalation**: Heuristics can only tighten constraints, never relax them.
 - **Atomic Resource Locking**: High concurrency races against budgets are serialized at the DB boundary.
-- **Immutable Audit Trail**: Triggers and hash chains make unauthorized modifications detectable.
+- **Tamper-Evident Audit Trail**: Triggers and hash chains make unauthorized modifications detectable.

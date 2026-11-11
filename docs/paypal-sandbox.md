@@ -339,7 +339,7 @@ PHALANX strictly differentiates between deterministic business rejections and tr
    - When PayPal encounters transient infrastructure errors (HTTP 500/502/503/504), network timeouts, connection resets, or unparseable responses, the financial state is indeterminate (the payment may or may not have reached PayPal's internal processing pipeline).
    - In accordance with fail-safe principles, PHALANX maps these outcomes to `status="RECONCILE"` with `business_rejection=False`.
    - The reservation is **strictly held** (never released): `repo.release_reservation(reservation_id, confirmed_failure=False)` leaves the budget locked against double-spending until manual human reconciliation or authoritative webhook settlement.
-   - The transaction state transitions to `RequestState.RECONCILE` with an immutable ledger event documenting the ambiguity.
+   - The transaction state transitions to `RequestState.RECONCILE` with a tamper-evident ledger event documenting the ambiguity.
 
 
 
