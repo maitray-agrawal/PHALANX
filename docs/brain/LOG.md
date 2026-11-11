@@ -34,3 +34,8 @@ Changed: services.py, routes.py, database.py, alembic/env.py, render.yaml, READM
 Commands: uv run pytest -q -rs (410 passed, 10 skipped in 199s); uv run pytest -q -m redteam (105 passed); ruff check (clean); ruff format (clean); mypy app (clean across 41 files); cd web && npm test && npm run lint && npx tsc --noEmit (all clean, 30 tests pass); python scripts/gen_keys.py (verified output format).
 Findings closed: D1 deployment gaps resolved; PostgreSQL test suite 100% passing (0 skipped); client IP and proxy peering analyzed.
 Next: Push dev and verify CI.
+2026-11-11 | PHASES A-I: Money outcome chokepoint, Gemini invoice agent, sandbox flow, deploy readiness, submission drafts, full test suites.
+Changed: money_outcome.py, gemini.py, invoice_agent.py, alembic/versions/004, routes.py, PayScreen.tsx, InvoiceAgentScreen.tsx, render.yaml, scheduled.yml, verify_live.py, e1_sandbox_check.py, evaluate_invoices.py, docs/submission/*.
+Commands: uv run pytest -q -rs (614 passed, 10 skipped in 171s); uv run pytest -q -m redteam (105 passed); cd web && npm test -- --run (30 passed); npm run build (clean); ruff check, ruff format, mypy app, bandit (all 0 errors); git push origin dev (f7c435b).
+Findings closed: L1, P1, C1, R2, R3, D1 closed with verified artifacts and command runs.
+Next: Human actions: approve sandbox order (docs/HUMAN_STEPS.md), run Neon setup, open draft PR on GitHub, record video.

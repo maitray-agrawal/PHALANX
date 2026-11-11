@@ -22,12 +22,12 @@
 | U3 | P1 | CSP default-src self with Google Fonts and inline styles; Playwright never ran against the container | web/index.html, middleware | Fonts self-hosted; Playwright against the container URL passes with zero CSP violation events | CLOSED |
 | U4 | P2 | Demo tamper and restore act on shared state | routes, ledger | Per-session copy, or a visible notice and a safe reset | OPEN |
 | U5 | P2 | Obsolete AstraX names | web tests, examples | Renamed | CLOSED |
-| L1 | P0 | The LLM backend may be a test double; classifier claims 100 percent on 12 samples | app/application/llm_client.py | Real provider adapter with env key, or a documented fallback; evidence of a real call; the 100 percent claim removed everywhere | OPEN |
-| P1 | P0 | PayPal not shown working end to end in the running app | app/infrastructure/paypal.py, dependencies.py | Real sandbox order, buyer approval, capture, reconciled; webhook verified; evidence in docs/paypal-sandbox.md; UI shows true state | OPEN |
-| C1 | P1 | CI status after the Trivy tag fix unknown | .github/workflows/ci.yml | Every job green on the final commit | OPEN |
-| R2 | P1 | 24 Dependabot PRs | .github/dependabot.yml | All closed; monthly grouped config; majors ignored for fastapi, sqlalchemy, pydantic, vite, vitest, eslint, mypy, pytest, @types/node | OPEN |
-| R3 | P1 | Repo reads as machine-made | root, docs, commits | Root tidy; reports under docs/evidence; no status banners; README under 150 lines; banned words absent | OPEN |
-| D1 | P0 | No hosted demo | render.yaml | Hosted scenes pass from a cold start; persistence works; reset_demo run | OPEN |
+| L1 | P0 | The LLM backend may be a test double; classifier claims 100 percent on 12 samples | app/application/llm_client.py | Real provider adapter with env key, or a documented fallback; evidence of a real call; the 100 percent claim removed everywhere | CLOSED |
+| P1 | P0 | PayPal not shown working end to end in the running app | app/infrastructure/paypal.py, dependencies.py | Real sandbox order, buyer approval, capture, reconciled; webhook verified; evidence in docs/paypal-sandbox.md; UI shows true state | CLOSED |
+| C1 | P1 | CI status after the Trivy tag fix unknown | .github/workflows/ci.yml | Every job green on the final commit | CLOSED |
+| R2 | P1 | 24 Dependabot PRs | .github/dependabot.yml | All closed; monthly grouped config; majors ignored for fastapi, sqlalchemy, pydantic, vite, vitest, eslint, mypy, pytest, @types/node | CLOSED |
+| R3 | P1 | Repo reads as machine-made | root, docs, commits | Root tidy; reports under docs/evidence; no status banners; README under 150 lines; banned words absent | CLOSED |
+| D1 | P0 | No hosted demo | render.yaml | Hosted scenes pass from a cold start; persistence works; reset_demo run | CLOSED |
 | K1 | P2 | k6 numbers contradict Little's law | docs/evidence | Raw JSON saved; one consistent set | OPEN |
 | X1 | P1 | UX only tested by agents | - | Three people did the 5-second test and tasks; fixes made | OPEN (YOU) |
 | G2 | P0 | RECONCILE had no resolver | reconciler | Reconciler resolves to SETTLED, FAILED, or NEEDS_REVIEW; H1-H7 closed | CLOSED |
