@@ -1,8 +1,10 @@
 # Invoice Agent & PHALANX Guardrails Evaluation
 
 **Evaluation Date**: 10 November 2026  
-**Evaluation Script**: `scripts/evaluate_invoices.py`  
-**Dataset**: 25 Labelled Invoices across 3 Categories (10 Benign, 10 Prompt Injection Hijack Variants, 5 Malformed / Boundary Cases).
+**Evaluation Script**: `docs/evidence/evaluate_invoices.py`  
+**Evaluation Mode**: `adversarial-stub` (Recorded / Adversarial Stub Verification)  
+**Dataset**: 25 Labelled Invoices across 3 Categories (10 Benign, 10 Prompt Injection Hijack Variants, 5 Malformed / Boundary Cases).  
+**Security Statement**: *The 0.0% guardrail bypass rate is a deterministic PHALANX policy engine guardrail result, NOT an LLM model safety claim. The adversarial LLM stub was intentionally programmed to propose 100% of attacker-injected instructions, demonstrating that PHALANX's policy layer prevents financial loss even under complete LLM compromise.*
 
 ---
 

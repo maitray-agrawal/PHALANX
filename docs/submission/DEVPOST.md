@@ -34,7 +34,7 @@ PHALANX sits between autonomous AI agents and financial rails (such as PayPal Sa
 
 - **Backend**: Python 3.12, FastAPI, Pydantic v2 (strict `extra="forbid"` models), SQLAlchemy 2.0 with PostgreSQL.
 - **Pure Domain Architecture**: `app/domain` imports nothing outward and performs zero I/O—guaranteed by an AST-level purity test.
-- **Frontend**: React 18, Vite, TypeScript, Tailwind CSS, Lucide icons. Designed with a PayPal-inspired fintech aesthetic featuring an interactive Attack Lab, Step-Up Queue, Receipt Inspector, and Live Invoice Agent playground.
+- **Frontend**: React 19, Vite, TypeScript, Tailwind CSS, Lucide icons. Designed with a PayPal-inspired fintech aesthetic featuring an interactive Attack Lab, Step-Up Queue, Receipt Inspector, and Live Invoice Agent playground.
 - **Payment Rail**: PayPal Sandbox Orders v2 API with idempotent `PayPal-Request-Id` headers, webhook signature verification, and automated reconciliation.
 - **AI Backend**: Google Gemini 2.5 Flash with temperature 0.0, strict JSON schema output, timeouts, token caps, daily quota persistence, and certified recorded run fallback.
 - **Tooling**: Built using **Google Antigravity** and **Gemini models**.
@@ -51,9 +51,9 @@ PHALANX sits between autonomous AI agents and financial rails (such as PayPal Sa
 
 ## Accomplishments That We're Proud Of
 
-- **$0.00 Unauthorized Leakage**: In our 25-case adversarial evaluation suite, including completely compromised LLM stubs, PHALANX achieved a 100% block rate (0.0% guardrail bypass).
+- **$0.00 Unauthorized Leakage**: In our 25-case adversarial evaluation suite using a simulated compromised LLM stub, PHALANX achieved a 100% block rate (0.0% guardrail bypass). *Note: this 0% bypass is a deterministic PHALANX policy guardrail result, proving that the authorization layer prevents unauthorized fund disbursement even when the model is completely compromised.*
 - **0ms Policy Core I/O**: The pure domain engine evaluates mandates and limits completely in-memory in microseconds.
-- **Full Test Suite & Purity**: Over 410 automated tests, 105 red-team adversarial tests, 30 Vitest UI tests, and AST domain purity validation.
+- **Full Test Suite & Purity**: Over 620 automated tests, 105 red-team adversarial tests, 30 Vitest UI tests, and AST domain purity validation.
 
 ---
 
