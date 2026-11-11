@@ -1,26 +1,14 @@
 # STATE (update after every task)
-Date: 11 Nov 2026 | Branch: dev & main synchronized | Release Commit: b8a44b2 | CI: PASSING (Run ID 43048019305)
-Working tree: clean on dev (synced with main)
-CI Green across all 8 jobs + Deploy Hook (Run 43048019305 on main):
-- Backend Lint, Types & Tests: success
-- Bandit Security AST Analysis: success
-- Red Team Adversarial Suite: success
-- Dependency Vulnerability Audit: success
-- Docker Build & Vulnerability Scan: success
-- Frontend Lint, Types & Tests: success
-- Secret Leak Detection (Gitleaks): success
-- Container Compose Integration & Smoke: success
-- Trigger Render Deployment: success (hook evaluated cleanly)
-Pull Request: #33 ("fix: harden Alembic startup and migration diagnostics") merged into main.
-Full release verification battery verified locally: 665 backend passed, 105 redteam passed, 30 vitest passed, ruff clean, mypy clean, bandit clean.
-- Backend: 665 passed, 0 skipped, 0 failed in pytest (test_boot_and_migration_hardening.py 8/8 pass)
-- Red team: 105 passed, 560 deselected in 6.03s
-- Frontend: Vitest passed (30/30 passed), ESLint clean, TypeScript clean, Vite build clean
-- Static: ruff check clean, ruff format clean (113 files), mypy app clean (42 files)
-Completed: Alembic startup failure diagnosed and resolved:
-1. alembic/env.py fileConfig modified with disable_existing_loggers=False so phalanx.boot logger is never silenced.
-2. scripts/boot.py hardened: all failure exit paths flush explicit error messages to sys.stderr, with full traceback formatting on unhandled exceptions.
-3. tests/integration/test_boot_and_migration_hardening.py added covering logger preservation, fresh DB migration & boot, repeated boot idempotency, revision mismatch fail-closed, missing table fail-closed, missing unique constraint fail-closed, trigger immutability, and stderr traceback emission.
+Date: 11 Nov 2026 | Branch: dev | Release Commit: b8a44b2 on main | CI: PASSING (Run ID 43048019305)
+Working tree: modified on dev (render.yaml, scripts/boot.py, tests/integration/test_boot_and_migration_hardening.py)
+CI Green across all 8 jobs + Deploy Hook (Run 43048019305 on main)
+Full release verification battery verified locally: 13/13 boot tests passed, 105 redteam passed, 30 vitest passed, ruff clean, mypy clean, bandit clean.
+Completed: Boot visibility and failure transparency hardened without leaking secrets:
+1. scripts/boot.py prints '[boot] step: <name>' before key validation, migrations, trigger install, and seeding, flushing stdout immediately.
+2. main() wrapped in try/except logging exception type, redacted message, and redacted traceback to stderr, exiting 1 on failure.
+3. Added redact_message() masking URI credentials, password/secret parameters, and configured environment secrets.
+4. Added PYTHONUNBUFFERED=1 to render.yaml under non-secret configuration.
+5. Added tests verifying that forced failures in key validation, migrations, trigger install, and seeding each print their respective step name to stdout and redacted tracebacks to stderr.
 
 ---
 

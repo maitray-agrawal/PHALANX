@@ -320,7 +320,110 @@ def test_traceback_visibility_on_unexpected_error(monkeypatch):
     success = run_boot()
     assert success is False
     err_output = captured_stderr.getvalue()
-    assert "Boot migration/schema error: Simulated unhandled trigger failure" in err_output
+    assert "Boot trigger install error: Simulated unhandled trigger failure" in err_output
     assert "Traceback (most recent call last):" in err_output
     assert "RuntimeError: Simulated unhandled trigger failure" in err_output
     reset_database()
+
+
+@pytest.mark.parametrize(
+    "step_name,patch_target,patch_factory,expected_err",
+    [
+        (
+            "key validation",
+            "app.infrastructure.tokens.validate_secret_key",
+            lambda: (lambda: (False, "Simulated bad key format")),
+            "Key validation failed: Simulated bad key format",
+        ),
+        (
+            "migrations",
+            "alembic.command.upgrade",
+            lambda: (
+                lambda *_a, **_kw: (_ for _ in ()).throw(
+                    RuntimeError("Simulated migration failure")
+                )
+            ),
+            "Migration error: Simulated migration failure",
+        ),
+        (
+            "trigger install",
+            "app.infrastructure.db_schema.install_ledger_triggers",
+            lambda: (
+                lambda *_a, **_kw: (_ for _ in ()).throw(
+                    RuntimeError("Simulated trigger install failure")
+                )
+            ),
+            "Trigger install error: Simulated trigger install failure",
+        ),
+        (
+            "seeding",
+            "app.infrastructure.crypto.load_or_generate_keypair",
+            lambda: (
+                lambda *_a, **_kw: (_ for _ in ()).throw(
+                    RuntimeError("Simulated mandate crypto failure")
+                )
+            ),
+            "Mandate seeding error: Simulated mandate crypto failure",
+        ),
+    ],
+)
+def test_forced_failure_in_each_step_prints_step_name_and_traceback(
+    monkeypatch, step_name, patch_target, patch_factory, expected_err
+):
+    """Test that a forced failure in each boot step prints its step name and redacted traceback."""
+    from app.infrastructure.config import settings
+    from app.infrastructure.database import reset_database
+    from scripts.boot import main
+
+    _reset_test_schema(test_db_url)
+    monkeypatch.setattr(settings, "database_url", test_db_url)
+    monkeypatch.setenv("DATABASE_URL", test_db_url)
+    monkeypatch.setattr(settings, "secret_key", TEST_SECRET_KEY)
+    monkeypatch.setenv("SECRET_KEY", TEST_SECRET_KEY)
+    reset_database()
+
+    monkeypatch.setattr(patch_target, patch_factory())
+
+    captured_stdout = io.StringIO()
+    captured_stderr = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", captured_stdout)
+    monkeypatch.setattr(sys, "stderr", captured_stderr)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+
+    assert exc_info.value.code == 1, "main() must exit with status 1 on boot failure"
+
+    out = captured_stdout.getvalue()
+    err = captured_stderr.getvalue()
+
+    # Step name must be printed to stdout
+    assert f"[boot] step: {step_name}" in out, (
+        f"Expected '[boot] step: {step_name}' in stdout, got:\n{out}"
+    )
+
+    # Redacted error and traceback must be printed to stderr
+    assert "[boot] ERROR:" in err, f"Expected '[boot] ERROR:' in stderr, got:\n{err}"
+    assert "[boot] Traceback:" in err, f"Expected '[boot] Traceback:' in stderr, got:\n{err}"
+    assert expected_err in err, f"Expected '{expected_err}' in stderr, got:\n{err}"
+
+    reset_database()
+
+
+def test_redact_message_masks_secrets_and_passwords():
+    """Verify that redact_message strips credentials and configured environment secrets."""
+    from scripts.boot import redact_message
+
+    # Test URL credentials
+    raw_url = "postgresql+psycopg://owner_user:SuperSecretPassword123@ep-test.neon.tech/neondb"
+    redacted_url = redact_message(raw_url)
+    assert "SuperSecretPassword123" not in redacted_url
+    assert "owner_user:[REDACTED]@ep-test.neon.tech" in redacted_url
+
+    # Test key/secret parameters
+    raw_param = "Connection failed with password='super_secret_token_abc' and api_key=xyz987654321"
+    redacted_param = redact_message(raw_param)
+    assert "super_secret_token_abc" not in redacted_param
+    assert "xyz987654321" not in redacted_param
+    assert "password=[REDACTED]" in redacted_param
+    assert "api_key=[REDACTED]" in redacted_param

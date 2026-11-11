@@ -59,3 +59,8 @@ Changed: Merged dev into main (PR #33); updated dev and main to b8a44b2; STATE.m
 Commands: PR #33 created and merged to main; GitHub Actions CI run 43048019305 on main passed all 9 jobs (Backend, Frontend, Docker, Red Team, Bandit, Gitleaks, Audit, Compose, Deploy Hook); git pull origin main fast-forward on dev.
 Findings closed: Release gate cleared; Alembic and boot hardening active on main release commit.
 Next: Render redeployment and live health verification.
+2026-11-11 | Boot step logging, secret redaction, main try/except traceback, and PYTHONUNBUFFERED=1.
+Changed: scripts/boot.py, render.yaml, tests/integration/test_boot_and_migration_hardening.py, STATE.md, LOG.md.
+Commands: pytest test_boot_and_migration_hardening.py (13 passed in 8.52s); pytest test_approval_seeding test_database_failure_modes test_deployment_config test_migration_upgrade (11 passed); pytest -m redteam (105 passed); npm test (30 passed); ruff check (clean); ruff format (clean); mypy app (clean); bandit (clean).
+Findings closed: Boot step visibility ([boot] step: <name>), traceback formatting on main try/except, secret redaction helper, and PYTHONUNBUFFERED=1 on Render.
+Next: Git commit and push dev to origin; monitor GitHub Actions CI.
