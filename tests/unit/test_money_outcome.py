@@ -86,15 +86,38 @@ def test_ambiguous_and_transient_statuses_return_hold(source: str, status: str |
     assert money_outcome(source, status) == MoneyOutcome.HOLD
 
 
-def test_business_rejection_overrides_non_transient() -> None:
-    """Explicit business rejection flag releases unless status is transient error."""
-    assert (
-        money_outcome("reconcile", "CUSTOM_DENIAL", business_rejection=True) == MoneyOutcome.RELEASE
-    )
+@pytest.mark.parametrize(
+    "status",
+    [
+        "RECONCILE",
+        "LOOKUP_FAILED",
+        "PENDING",
+        "UNKNOWN",
+        "unknown",
+        "CUSTOM_DENIAL",
+        "SOME_ARBITRARY_STATUS",
+    ],
+)
+def test_non_terminal_status_with_business_rejection_true_never_releases(status: str) -> None:
+    """A non-terminal status with business_rejection=True must strictly return HOLD, never RELEASE.
+
+    Release requires an explicit terminal failure status (FAILED, DENIED, REJECTED, etc.).
+    """
+    assert money_outcome("reconcile", status, business_rejection=True) == MoneyOutcome.HOLD
+
+
+def test_business_rejection_requires_explicit_terminal_status() -> None:
+    """Terminal failures release with business_rejection=True or None,
+    but hold if business_rejection=False.
+    """
+    assert money_outcome("reconcile", "FAILED", business_rejection=True) == MoneyOutcome.RELEASE
+    assert money_outcome("reconcile", "DENIED", business_rejection=True) == MoneyOutcome.RELEASE
+    assert money_outcome("reconcile", "FAILED", business_rejection=False) == MoneyOutcome.HOLD
     # Even with business_rejection=True, transient lookup errors MUST remain HOLD
     assert money_outcome("reconcile", "LOOKUP_FAILED", business_rejection=True) == MoneyOutcome.HOLD
     assert money_outcome("reconcile", "RECONCILE", business_rejection=True) == MoneyOutcome.HOLD
     assert money_outcome("reconcile", "TIMEOUT", business_rejection=True) == MoneyOutcome.HOLD
+    assert money_outcome("reconcile", "PENDING", business_rejection=True) == MoneyOutcome.HOLD
 
 
 @given(

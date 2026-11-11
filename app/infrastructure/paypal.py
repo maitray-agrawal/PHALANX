@@ -102,7 +102,7 @@ class FakePaymentRail(PaymentRail):
     def set_lookup_result(self, transaction_id: str, result: PaymentResult) -> None:
         if (
             not getattr(result, "business_rejection", False)
-            and result.status in ("FAILED", "DENIED", "REJECTED", "VOIDED")
+            and result.status in ("FAILED", "DENIED", "REJECTED", "VOIDED", "NOT_FOUND")
             and result.details.get("business_rejection") is not False
         ):
             # Default business_rejection to True for explicit failure statuses
@@ -387,8 +387,8 @@ class PayPalPaymentRailAdapter(PaymentRail):
             if resp.status_code == 403:
                 return self._orders_v2_fallback(intent, token, request_id)
 
-            if resp.status_code in (408, 429):
-                # Rate limit (429) or request timeout (408) is not a final business rejection
+            if resp.status_code in (401, 403, 408, 429) or resp.status_code >= 500:
+                # 401, 403, 408, 429 and 5xx must hold; never a business rejection
                 return PaymentResult(
                     success=False,
                     transaction_id="",
@@ -398,9 +398,10 @@ class PayPalPaymentRailAdapter(PaymentRail):
                         "http_status": resp.status_code,
                         "business_rejection": False,
                     },
+                    business_rejection=False,
                 )
             if 400 <= resp.status_code < 500:
-                # 4xx is a definite provider business rejection
+                # Definite provider business rejection
                 return PaymentResult(
                     success=False,
                     transaction_id="",
@@ -410,6 +411,7 @@ class PayPalPaymentRailAdapter(PaymentRail):
                         "http_status": resp.status_code,
                         "business_rejection": True,
                     },
+                    business_rejection=True,
                 )
 
             # 5xx, timeouts or server errors must route to RECONCILE
@@ -437,6 +439,14 @@ class PayPalPaymentRailAdapter(PaymentRail):
         """Fallback to Orders v2 checkout when Payouts capability is unavailable."""
         orders_url = f"{self._base_url}/v2/checkout/orders"
         amount_dollars = f"{intent.money.amount_minor / 100:.2f}"
+        from app.infrastructure.config import settings
+
+        base_url = (
+            getattr(settings, "public_base_url", "").rstrip("/")
+            or "https://phalanx-demo.onrender.com"
+        )
+        return_url = f"{base_url}/v1/paypal/return"
+        cancel_url = f"{base_url}/v1/paypal/cancel"
         payload = {
             "intent": "CAPTURE",
             "purchase_units": [
@@ -446,6 +456,10 @@ class PayPalPaymentRailAdapter(PaymentRail):
                     "description": intent.purpose[:120],
                 }
             ],
+            "application_context": {
+                "return_url": return_url,
+                "cancel_url": cancel_url,
+            },
         }
         headers = {
             "Authorization": f"Bearer {token}",
@@ -470,8 +484,8 @@ class PayPalPaymentRailAdapter(PaymentRail):
                     status=provider_state,
                     details=data,
                 )
-            if resp.status_code in (408, 429):
-                # Rate limit (429) or request timeout (408) is not a final business rejection
+            if resp.status_code in (401, 403, 408, 429) or resp.status_code >= 500:
+                # 401, 403, 408, 429 and 5xx must hold; never a business rejection
                 return PaymentResult(
                     success=False,
                     transaction_id="",
@@ -481,9 +495,10 @@ class PayPalPaymentRailAdapter(PaymentRail):
                         "http_status": resp.status_code,
                         "business_rejection": False,
                     },
+                    business_rejection=False,
                 )
             if 400 <= resp.status_code < 500:
-                # 4xx is a definite provider business rejection
+                # Definite provider business rejection
                 return PaymentResult(
                     success=False,
                     transaction_id="",
@@ -493,6 +508,7 @@ class PayPalPaymentRailAdapter(PaymentRail):
                         "http_status": resp.status_code,
                         "business_rejection": True,
                     },
+                    business_rejection=True,
                 )
             # 5xx, timeouts or server errors must route to RECONCILE
             return PaymentResult(

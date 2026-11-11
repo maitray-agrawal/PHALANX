@@ -32,6 +32,7 @@ EXPLICIT_TERMINAL_FAILURE_STATUSES: frozenset[str] = frozenset(
         "CANCELLED",
         "EXPIRED",
         "DECLINED",
+        "NOT_FOUND",
     }
 )
 
@@ -44,6 +45,7 @@ TRANSIENT_OR_AMBIGUOUS_STATUSES: frozenset[str] = frozenset(
         "CONNECTION_ERROR",
         "ERROR",
         "UNKNOWN",
+        "PENDING",
     }
 )
 
@@ -87,7 +89,9 @@ def money_outcome(
     if business_rejection is False:
         return MoneyOutcome.HOLD
 
-    if business_rejection is True or status_norm in EXPLICIT_TERMINAL_FAILURE_STATUSES:
+    # Require an explicit terminal failure status; non-terminal statuses
+    # (RECONCILE, LOOKUP_FAILED, PENDING, unknown) never produce RELEASE.
+    if status_norm in EXPLICIT_TERMINAL_FAILURE_STATUSES:
         return MoneyOutcome.RELEASE
 
     return MoneyOutcome.HOLD

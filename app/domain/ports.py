@@ -70,12 +70,20 @@ def may_release(result: PaymentResult | None) -> bool:
         or details.get("name") in ("RESOURCE_NOT_FOUND", "INVALID_RESOURCE_ID")
         or "not found" in details_str
     )
+    status_to_evaluate = result.status
     if is_not_found:
-        biz_rej = True
+        age_sec = details.get("age_seconds")
+        if age_sec is not None and age_sec < 600:
+            return False
+        if getattr(result, "business_rejection", False) is True:
+            biz_rej = True
+            status_to_evaluate = "NOT_FOUND"
+        else:
+            return False
 
     outcome = money_outcome(
         source="payment_rail",
-        provider_status=result.status,
+        provider_status=status_to_evaluate,
         business_rejection=biz_rej,
     )
     return outcome == MoneyOutcome.RELEASE

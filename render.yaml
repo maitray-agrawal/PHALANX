@@ -75,5 +75,7 @@ services:
         value: "*"
       - key: GEMINI_MODEL
         value: gemini-2.5-flash
+      - key: PUBLIC_BASE_URL
+        value: "https://phalanx-demo.onrender.com"
       - key: ALLOWED_HOSTS
         value: "*"

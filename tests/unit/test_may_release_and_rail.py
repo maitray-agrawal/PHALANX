@@ -1,11 +1,14 @@
 """Unit tests for may_release helper and release sites across services and paypal.py."""
 
+from datetime import UTC, datetime, timedelta
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.application.dtos import AuthorizeTransactionCommand
 from app.application.services import AuthorizationService, MandateService
+from app.domain.models import Money, TransactionIntent
 from app.domain.ports import ClockPort, PaymentResult, may_release
 from app.domain.state_machine import RequestState
 from app.infrastructure.ledger import InMemoryLedgerAdapter
@@ -404,3 +407,145 @@ def test_unknown_id_lookup_holds() -> None:
             business_rejection=lookup_res.business_rejection,
         )
         assert outcome == MoneyOutcome.HOLD
+
+
+@pytest.mark.parametrize("status_code", [401, 403, 408, 429, 500, 502, 503, 504])
+def test_pay_http_codes_401_403_408_429_5xx_hold(status_code: int) -> None:
+    """In pay(), HTTP status codes 401, 403, 408, 429, and 5xx must hold
+    and never set business_rejection=True.
+    """
+    adapter = PayPalPaymentRailAdapter(client_id="test_id", client_secret="test_secret")
+    intent = TransactionIntent(
+        agent_id="agent-auto-1",
+        recipient_id="vendor-paypal-sandbox-1",
+        money=Money(amount_minor=5000, currency="USD"),
+        purpose="Test transient error holding",
+        idempotency_key="idemp_transient_hold_1",
+        occurred_at_utc=datetime.now(UTC),
+    )
+
+    with (
+        patch.object(adapter, "_get_access_token", return_value="mock_valid_token"),
+        patch("httpx.post") as mock_post,
+    ):
+        mock_resp = MagicMock()
+        mock_resp.status_code = status_code
+        mock_resp.text = f'{{"error": "HTTP {status_code} Error"}}'
+        mock_post.return_value = mock_resp
+
+        # For 403, pay() falls back to Orders v2; mock_post will be called on Orders v2
+        res = adapter.pay(intent)
+        assert res.status == "RECONCILE"
+        assert res.business_rejection is False
+        assert may_release(res) is False
+
+
+def test_orders_v2_return_and_cancel_urls_use_public_base_url() -> None:
+    """PayPal return_url and cancel_url must come from PUBLIC_BASE_URL setting, never localhost."""
+    from app.infrastructure.config import settings
+
+    adapter = PayPalPaymentRailAdapter(client_id="test_id", client_secret="test_secret")
+    intent = TransactionIntent(
+        agent_id="agent-auto-1",
+        recipient_id="vendor-paypal-sandbox-1",
+        money=Money(amount_minor=5000, currency="USD"),
+        purpose="Test return_url configuration",
+        idempotency_key="idemp_url_check_1",
+        occurred_at_utc=datetime.now(UTC),
+    )
+
+    captured_payload: dict[str, Any] = {}
+
+    def capture_post(_url: str, **kwargs: Any) -> MagicMock:
+        nonlocal captured_payload
+        captured_payload = kwargs.get("json", {})
+        resp = MagicMock()
+        resp.status_code = 201
+        resp.json.return_value = {
+            "id": "ORD-TEST-URL",
+            "status": "CREATED",
+            "links": [{"rel": "approve", "href": "https://sandbox.paypal.com/checkout"}],
+        }
+        return resp
+
+    with (
+        patch.object(adapter, "_get_access_token", return_value="mock_valid_token"),
+        patch.object(settings, "public_base_url", "https://phalanx-demo.onrender.com"),
+        patch("httpx.post", side_effect=capture_post),
+    ):
+        adapter._orders_v2_fallback(intent, "mock_valid_token", "req_test_urls")
+
+        app_ctx = captured_payload.get("application_context", {})
+        return_url = app_ctx.get("return_url", "")
+        cancel_url = app_ctx.get("cancel_url", "")
+
+        assert "https://phalanx-demo.onrender.com" in return_url
+        assert "https://phalanx-demo.onrender.com" in cancel_url
+        assert "localhost" not in return_url
+        assert "localhost" not in cancel_url
+        assert "127.0.0.1" not in return_url
+        assert "127.0.0.1" not in cancel_url
+
+
+def test_404_lookup_before_10_minutes_holds_and_after_releases() -> None:
+    """A 404 from lookup holds if age < 10m (600s), but counts as confirmed failure after 10m."""
+    from app.application.services import AuthorizationService, MandateService
+    from app.domain.state_machine import RequestState
+    from app.infrastructure.ledger import InMemoryLedgerAdapter
+
+    class SimpleClock(ClockPort):
+        def __init__(self, t: datetime):
+            self._t = t
+
+        def now_utc(self) -> datetime:
+            return self._t
+
+        def advance(self, seconds: int) -> None:
+            self._t += timedelta(seconds=seconds)
+
+    clock = SimpleClock(datetime(2026, 11, 1, 12, 0, 0, tzinfo=UTC))
+    rail = FakePaymentRail(should_succeed=True, status="RECONCILE")
+    auth_svc = AuthorizationService(
+        clock=clock,
+        ledger=InMemoryLedgerAdapter(),
+        mandate_service=MandateService(clock=clock),
+        payment_rail=rail,
+    )
+
+    req_id = "req_404_age_test"
+    auth_svc._request_states[req_id] = RequestState.RECONCILE
+    auth_svc._held_reservations[req_id] = {
+        "state": RequestState.RECONCILE.value,
+        "payout_id": "tx_404_not_found",
+        "agent_id": "agent-auto-1",
+        "amount_minor": 5000,
+        "created_at_utc": clock.now_utc(),
+    }
+
+    # Configure rail lookup to return 404 Not Found
+    rail.set_lookup_result(
+        "tx_404_not_found",
+        PaymentResult(
+            success=False,
+            transaction_id="tx_404_not_found",
+            status="LOOKUP_FAILED",
+            details={
+                "http_status": 404,
+                "name": "RESOURCE_NOT_FOUND",
+                "message": "Resource not found",
+            },
+            business_rejection=False,
+        ),
+    )
+
+    # 1. Under 10 minutes (age = 60s): 404 must hold in RECONCILE
+    clock.advance(seconds=60)
+    st_under = auth_svc.reconcile(req_id)
+    assert st_under == RequestState.RECONCILE
+    assert auth_svc.get_request_state(req_id) == RequestState.RECONCILE
+
+    # 2. Over 10 minutes (age = 660s): 404 counts as FAILED and releases
+    clock.advance(seconds=600)
+    st_over = auth_svc.reconcile(req_id)
+    assert st_over == RequestState.FAILED
+    assert auth_svc.get_request_state(req_id) == RequestState.FAILED

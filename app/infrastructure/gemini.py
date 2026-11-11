@@ -68,7 +68,13 @@ class GeminiLLMClient:
         self.timeout_seconds = timeout_seconds
         self.max_retries = max_retries
         self.max_output_tokens = max_output_tokens
-        self.daily_call_cap = daily_call_cap
+        cap_env = os.getenv("GEMINI_DAILY_CALL_CAP")
+        if cap_env:
+            self.daily_call_cap = int(cap_env)
+        elif daily_call_cap is not None:
+            self.daily_call_cap = daily_call_cap
+        else:
+            self.daily_call_cap = getattr(settings, "gemini_daily_call_cap", 100)
 
         # In-memory daily quota tracker
         self._call_count = 0
