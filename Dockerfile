@@ -2,7 +2,7 @@
 # Non-root user, slim base, container healthcheck
 
 # Stage 1: Build Frontend SPA
-FROM node:20-alpine AS frontend-builder
+FROM node:22-alpine AS frontend-builder
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci

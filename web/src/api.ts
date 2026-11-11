@@ -219,6 +219,13 @@ export interface MandateResponse {
   signature: string;
 }
 
+export interface CaptureOrderResponse {
+  order_id: string;
+  success: boolean;
+  status: string;
+  details: Record<string, unknown>;
+}
+
 export class ApiError extends Error {
   public status: number;
   public detail: string;
@@ -337,7 +344,7 @@ export const api = {
     ),
 
   captureOrder: (orderId: string, token?: string) =>
-    request<{ order_id: string; success: boolean; status: string; details: any }>(
+    request<CaptureOrderResponse>(
       `/v1/orders/${orderId}/capture`,
       { method: "POST" },
       token
