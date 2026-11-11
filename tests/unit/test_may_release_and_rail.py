@@ -283,3 +283,119 @@ def test_paypal_lookup_and_capture_error_classification() -> None:
         res_cap_503 = adapter.capture_order("order_503")
         assert res_cap_503.status == "RECONCILE"
         assert res_cap_503.business_rejection is False
+
+
+def test_wrong_oauth_secret_returns_503_before_reservation(
+    test_clock: ClockPort,
+    test_ledger: InMemoryLedgerAdapter,
+    test_mandate_service: MandateService,
+) -> None:
+    """Wrong OAuth secret or 401 response aborts with 503 before any reservation."""
+    from fastapi import HTTPException
+    from app.domain.models import DecisionOutcome
+
+    adapter = PayPalPaymentRailAdapter(client_id="bad_client", client_secret="bad_secret")
+
+    with patch("httpx.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 401
+        mock_resp.text = '{"error": "invalid_client", "error_description": "Client Authentication failed"}'
+        mock_post.return_value = mock_resp
+
+        auth_svc = AuthorizationService(
+            clock=test_clock,
+            ledger=test_ledger,
+            mandate_service=test_mandate_service,
+            payment_rail=adapter,
+        )
+
+        cmd = AuthorizeTransactionCommand(
+            agent_id="agent-auto-1",
+            recipient_id="vendor-paypal-sandbox-1",
+            amount_minor=2500,
+            currency="USD",
+            purpose="Compute hosting",
+            idempotency_key="idem_auth_cfg_err_1",
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            auth_svc.authorize(cmd)
+
+        assert exc_info.value.status_code == 503
+        assert "invalid credentials" in exc_info.value.detail.lower()
+        # Verify no budget or rolling spent was reserved
+        assert auth_svc._rolling_spent.get("agent-auto-1", 0) == 0
+        assert auth_svc._lifetime_spent.get("agent-auto-1", 0) == 0
+
+
+def test_duplicate_order_replay_does_not_create_duplicate_order(
+    test_clock: ClockPort,
+    test_ledger: InMemoryLedgerAdapter,
+    test_mandate_service: MandateService,
+) -> None:
+    """Duplicate order replay returns cached decision without creating a duplicate payment."""
+    from app.domain.policy import PolicyReasonCode
+
+    fake_rail = FakePaymentRail(should_succeed=True, status="COMPLETED")
+    auth_svc = AuthorizationService(
+        clock=test_clock,
+        ledger=test_ledger,
+        mandate_service=test_mandate_service,
+        payment_rail=fake_rail,
+    )
+
+    cmd = AuthorizeTransactionCommand(
+        agent_id="agent-auto-1",
+        recipient_id="vendor-paypal-sandbox-1",
+        amount_minor=2500,
+        currency="USD",
+        purpose="Cloud GPU instance",
+        idempotency_key="idem_replay_test_99",
+    )
+
+    # First call: executes payment
+    resp1 = auth_svc.authorize(cmd)
+    assert resp1.decision.value == "ALLOW"
+    assert len(fake_rail.dispatched_payments) == 1
+    spent_after_call1 = auth_svc._rolling_spent.get("agent-auto-1", 0)
+    assert spent_after_call1 == 2500
+
+    # Second call (replay with exact same idempotency_key): cached decision, no dual payment
+    resp2 = auth_svc.authorize(cmd)
+    assert resp2.decision.value == "ALLOW"
+    assert PolicyReasonCode.IDEMPOTENCY_REPLAY in resp2.reason_codes
+    assert len(fake_rail.dispatched_payments) == 1  # No duplicate payment dispatched
+    assert auth_svc._rolling_spent.get("agent-auto-1", 0) == spent_after_call1  # No double reservation
+
+
+def test_unknown_id_lookup_holds() -> None:
+    """Lookup of unknown order ID (404/not found) strictly holds and never releases."""
+    from app.domain.money_outcome import MoneyOutcome, money_outcome
+
+    adapter = PayPalPaymentRailAdapter(client_id="test_id", client_secret="test_secret")
+
+    with (
+        patch.object(adapter, "_get_access_token", return_value="valid_mock_token"),
+        patch("httpx.get") as mock_get,
+    ):
+        mock_404 = MagicMock()
+        mock_404.status_code = 404
+        mock_404.text = '{"name": "RESOURCE_NOT_FOUND", "message": "The specified resource does not exist."}'
+        mock_get.return_value = mock_404
+
+        lookup_res = adapter.lookup("unknown_order_resource_id_404")
+
+        # Unknown ID must classify as LOOKUP_FAILED with business_rejection=False
+        assert lookup_res.status in ("LOOKUP_FAILED", "RECONCILE")
+        assert lookup_res.business_rejection is False
+
+        # may_release helper must reject release
+        assert may_release(lookup_res) is False
+
+        # money_outcome must strictly HOLD
+        outcome = money_outcome(
+            source="reconcile",
+            provider_status=lookup_res.status,
+            business_rejection=lookup_res.business_rejection,
+        )
+        assert outcome == MoneyOutcome.HOLD

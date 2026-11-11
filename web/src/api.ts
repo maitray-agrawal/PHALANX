@@ -336,6 +336,13 @@ export const api = {
       token
     ),
 
+  captureOrder: (orderId: string, token?: string) =>
+    request<{ order_id: string; success: boolean; status: string; details: any }>(
+      `/v1/orders/${orderId}/capture`,
+      { method: "POST" },
+      token
+    ),
+
   getLedgerEvents: (token?: string, limit: number = 50) =>
     request<LedgerEventItem[]>(`/v1/ledger?limit=${limit}`, { method: "GET" }, token),
 
