@@ -1,4 +1,4 @@
- """Idempotent boot script for PHALANX.
+"""Idempotent boot script for PHALANX.
 
 Actions:
 1. Verifies/creates database tables and append-only ledger triggers.
