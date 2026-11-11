@@ -49,3 +49,8 @@ Changed: ci.yml, scheduled.yml, keepalive.yml, test_keys.py, test_reconciliation
 Commands: uv run pytest -q -rs (639 passed in 225.95s); uv run pytest -q -m redteam (105 passed); npm test (30 passed); tsc & lint clean; ruff check & format clean (112 files); mypy app clean (42 files); bandit clean (0 issues, 9869 lines); npm run build (clean); Playwright smoke across Chromium, iPad, iPhone SE (5 passed each, multi-viewport screenshots verified).
 Findings closed: Tasks 1-9 complete; all CI workflows and security matrix verified.
 Next: Push dev and monitor GitHub Actions CI.
+2026-11-11 | M1/T11b: Fix Render/Alembic startup failure, restore logging, harden boot diagnostics.
+Changed: alembic/env.py, scripts/boot.py, tests/integration/test_migration_upgrade.py, tests/integration/test_boot_and_migration_hardening.py, STATE.md, FINDINGS.md, FACTS.md, PLAN.md, LOG.md.
+Commands: uv run pytest tests/integration/test_boot_and_migration_hardening.py (8 passed in 3.08s); uv run pytest -q (665 passed, 0 skipped in 267.90s); uv run pytest -q -m redteam (105 passed in 6.03s); uv run ruff check . (clean); uv run ruff format --check . (113 files clean); uv run mypy app (42 files clean); cd web && npm run lint && npx tsc --noEmit && npm test -- --run (30 passed in 4.09s).
+Findings closed: M1 (Alembic fileConfig logger silencing and silent boot exits resolved with disable_existing_loggers=False, stderr flush, and traceback emission).
+Next: Git commit and push dev to origin; monitor GitHub Actions CI.

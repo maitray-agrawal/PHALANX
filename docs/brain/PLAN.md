@@ -12,6 +12,7 @@
 | T9 | Hosted deploy configuration: render.yaml + Neon setup + verify script | MED | T7 | D1 | DONE |
 | T10 | Real PayPal sandbox flow: Orders v2 flow, e1_sandbox_check.py, UI capture. STOP: YOU approve as the buyer | HIGH | T8,T9 | P1 | DONE |
 | T11 | Sponsor polish (Gemini, Render, PayPal, AG Grid) | MED | T9 | S1 | DONE |
+| T11b | Render/Alembic startup failure fix & migration diagnostics hardening | HIGH | T9 | M1 | DONE |
 | T12 | Repo cleanup (hygiene, metrics, dependabot script) | MED | T10 | R3 | DONE |
 | T13 | YOU: judge simulation J1 and a three-person UX test | - | T12 | X1 | TODO |
 | T14 | YOU: truth audit V11 with a different model | HIGH | T13 | - | TODO |
