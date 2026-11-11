@@ -117,3 +117,28 @@ PHALANX implements a multi-tiered defense-in-depth architecture adhering to stri
 | **BLK-05** | `middleware.py` | Configuration/credential errors raised during authorization were not guaranteed to map to RFC 7807 503 Problem+JSON. | **MEDIUM** | Remediated in Phase 7. |
 | **BLK-06** | `render.yaml` | Render Blueprint lacked documented credential rotation procedures. | **LOW** | Addressed in Phase 5 & `docs/CREDENTIAL_ROTATION.md`. |
 
+---
+
+## 7. Dependency Security Audit & Supply Chain Baseline (11 Nov 2026)
+
+### 7.1 Frontend Node.js Dependencies (`web/`)
+
+- **Production Dependencies (`npm audit --omit=dev`)**: **0 vulnerabilities**.
+- **Development Tooling Dependencies (`npm audit`)**: 10 vulnerabilities (8 moderate, 2 critical):
+  - **`tinypool` (Critical, via `vitest` v3.2.7)**: Prototype pollution gadget in test worker options (GHSA-5gmw-xhrv-c9v3, GHSA-85c8-ppgw-ccpr). Remediation requires Vitest 5.1.0 (major SemVer breaking upgrade).
+  - **`minimatch` (Moderate, via `typescript-eslint` -> `@typescript-eslint/typescript-estree`)**: ReDoS / glob amplification (GHSA-g3hv-75wg-m249).
+- **Runtime Docker Isolation (Verified)**:
+  - In `Dockerfile`, Stage 1 (`frontend-builder`) builds the SPA assets using Node 22 Alpine.
+  - Stage 3 (`runner`) copies **only** the compiled static files (`/web/dist`) to `/app/static`.
+  - The entire `node_modules` directory, `vitest`, `tinypool`, and `minimatch` are **completely discarded** and **do not exist** in the runtime container image or production bundle.
+
+### 7.2 Backend Python Dependencies
+
+- **Audit Tool**: `pip-audit`
+- **Findings**: 36 advisory hits across 4 packages (`cryptography 44.0.1`, `mcp 1.3.0`, `pytest 8.3.4`, `starlette 0.45.3` via `fastapi`):
+  - `pytest 8.3.4`: Dev-only test dependency, excluded from runtime container builds.
+  - `cryptography 44.0.1`: Pinned version; major upgrade to 46+ requires dependency tree alignment.
+  - `starlette 0.45.3`: Pinned transitively by `fastapi==0.115.8`.
+- **CI Gating**: Tracked in `.github/workflows/ci.yml` `pip-audit` step with explicit `--ignore-vuln` entries for monitored upstream advisories.
+- **Truthfulness Statement**: PHALANX does not claim zero vulnerabilities across its dependency graph. The production web bundle contains 0 vulnerabilities, dev-only tools are quarantined from runtime containers, and backend Python packages are strictly tracked.
+
