@@ -1,6 +1,6 @@
 # STATE (update after every task)
-Date: 11 Nov 2026 | Branch: dev & main synchronized | Release Commit: e831506 | CI: PASSING (Run ID 43055335547)
-Working tree: clean on dev (synced with main at e831506)
+Date: 12 Nov 2026 | Branch: dev | Commit: 5d4a55d | Master Presentation Package: COMPLETED
+Working tree: clean on dev (synced with main + presentation deliverables)
 CI Green across all 8 check jobs + Trigger Render Deployment (Run 43055335547 on main):
 - Secret Leak Detection (Gitleaks): success
 - Backend Lint, Types & Tests: success
@@ -11,6 +11,16 @@ CI Green across all 8 check jobs + Trigger Render Deployment (Run 43055335547 on
 - Red Team Adversarial Suite: success
 - Bandit Security AST Analysis: success
 - Trigger Render Deployment: success
+
+Presentation & Video Deliverables Package (Committed to dev):
+1. PHALANX_DEMO/index.html — 8-scene cinematic 16:9 interactive presentation engine with Web Speech API narration (en-IN voice discovery), live telemetry & verified engine fallback, animated SVG architecture flows, and screenshot modal viewer.
+2. PHALANX_DEMO/launch.ps1 — one-click PowerShell launcher with background local web server.
+3. PHALANX_DEMO/output/PHALANX_Demo_FullHD.webm — 1920x1080 30FPS full walkthrough recording (3.8 MB).
+4. PHALANX_DEMO/output/PHALANX_Demo_4K.webm — 3840x2160 30FPS 4K UHD video walkthrough (2.95 MB).
+5. PHALANX_DEMO/output/PHALANX_Short_Pitch_60s.webm — 1920x1080 30FPS 60-second social pitch video (4.45 MB).
+6. PHALANX_DEMO/output/PHALANX_Thumbnail.png (1920x1080) & PHALANX_Thumbnail.svg (4K).
+7. Publication PDFs: PHALANX_Narration_Script.pdf, PHALANX_Storyboard.pdf, PHALANX_Short_Pitch_60s.pdf.
+
 Pull Request: #34 ("fix: validate Ed25519 signing key and improve boot diagnostics") merged into main.
 Full release verification battery verified locally: 12/12 unit key tests, 13/13 boot tests passed, 105 redteam passed, 30 vitest passed, ruff clean, mypy clean, bandit clean.
 Completed: Ed25519 signing key strict validation & identity preservation:
