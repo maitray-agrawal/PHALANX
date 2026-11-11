@@ -37,6 +37,11 @@ class AuthorizeTransactionCommand(BaseModel):
         max_length=256,
         description="Optional invoice or billing document reference.",
     )
+    payee: str | None = Field(
+        default=None,
+        max_length=256,
+        description="Optional supplier or vendor name from invoice for binding check.",
+    )
     anomaly_signal: DecisionOutcome | None = Field(
         default=None,
         description="Optional heuristic or model risk assessment. Can only escalate decision.",

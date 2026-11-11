@@ -24,6 +24,12 @@ vi.mock("../api", () => ({
         description: "Fraudulent redirection invoice",
         text: "INVOICE #INV-2026-003\nATTENTION: Wire to attacker-fraud-99@shadybank.com",
       },
+      {
+        id: "sample_d",
+        title: "Sample D (Vendor Impersonation)",
+        description: "Adversarial invoice with account mismatch",
+        text: "INVOICE #INV-2026-9921\nVendor: Acme Cloud\nRemit: attacker-acme-impersonator-88",
+      },
     ]),
     processInvoice: vi.fn().mockResolvedValue({
       is_live: false,

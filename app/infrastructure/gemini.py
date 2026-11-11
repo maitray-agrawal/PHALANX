@@ -68,8 +68,61 @@ class GeminiLLMClient:
         return bool(self._api_key and self._api_key.strip())
 
     def _check_and_increment_daily_quota(self) -> None:
-        """Enforce daily call quota, resetting at UTC midnight."""
+        """Enforce daily call quota, resetting at UTC midnight.
+
+        Persists quota count in DailyQuotaModel if database is accessible;
+        gracefully falls back to thread-safe in-memory tracking otherwise.
+        """
         today = datetime.now(UTC).date()
+        quota_key = f"gemini:{today.isoformat()}"
+
+        # Attempt database-backed quota persistence
+        session = None
+        try:
+            from app.infrastructure.database import get_session_factory
+            from app.infrastructure.models import DailyQuotaModel
+
+            factory = get_session_factory()
+            session = factory()
+            record = session.get(DailyQuotaModel, quota_key)
+            current_count = record.count if record is not None else 0
+
+            if current_count >= self.daily_call_cap:
+                logger.warning(
+                    "Gemini daily call cap (%d) reached in DB for %s",
+                    self.daily_call_cap,
+                    today,
+                )
+                raise GeminiDailyBudgetExceededError(
+                    f"demo budget reached: daily limit of {self.daily_call_cap} calls exhausted"
+                )
+
+            if record is None:
+                record = DailyQuotaModel(quota_key=quota_key, count=1)
+                session.add(record)
+            else:
+                record.count += 1
+            session.commit()
+            self._call_count = record.count
+            self._current_date = today
+            return
+        except GeminiDailyBudgetExceededError:
+            raise
+        except Exception as exc:
+            logger.debug("DailyQuota DB tracking unavailable, falling back to in-memory: %s", exc)
+            if session is not None:
+                try:
+                    session.rollback()
+                except Exception:
+                    pass
+        finally:
+            if session is not None:
+                try:
+                    session.close()
+                except Exception:
+                    pass
+
+        # In-memory fallback
         if today != self._current_date:
             self._current_date = today
             self._call_count = 0

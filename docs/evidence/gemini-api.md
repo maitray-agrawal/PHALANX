@@ -1,25 +1,26 @@
-# Gemini API Specification & Model Verification
+# Gemini API Documentation & Verification Record
 
-**Documentation Reference & Verification Date**:
-- **Date Verified**: 10 November 2026
-- **Official Documentation URLs**:
-  - Models Overview: https://ai.google.dev/gemini-api/docs/models/gemini
-  - Generate Content API Reference: https://ai.google.dev/api/generate-content
-  - Structured Outputs / JSON Mode: https://ai.google.dev/gemini-api/docs/json-mode
+**Date:** 2026-11-11  
+**URL:** https://ai.google.dev/gemini-api/docs/models/gemini  
+**API Specification:** Gemini API (Developer API v1beta / generateContent)  
+**Endpoint:** `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`  
+**Supported Models:**
+- `gemini-1.5-flash`: Fast, high-throughput model suitable for real-time document extraction and structured JSON output.
+- `gemini-1.5-pro`: Complex reasoning model for multi-document synthesis.
 
-## Model Configuration & Endpoints
-- **Endpoint**: `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`
-- **Default Verified Model**: `gemini-2.5-flash` (high-speed multimodal reasoning model)
-- **Environment Variable Overrides**:
-  - `GEMINI_API_KEY`: API key for Google Generative AI (stored strictly server-side in environment, never exposed to client/browser or logs).
-  - `GEMINI_MODEL`: Model identifier (defaults to `gemini-2.5-flash`).
-- **Generation Parameters**:
-  - `temperature`: `0.0` (deterministic extraction)
-  - `maxOutputTokens`: `1024` (token ceiling)
-  - `responseMimeType`: `"application/json"` (strict JSON mode)
-  - `timeout`: 10.0 seconds
-  - `retries`: 1 retry on network/5xx server errors
-- **Daily Rate Limiting**:
-  - 100 calls/day demo cap enforced in-memory to prevent unexpected quota exhaustion.
-  - When cap is reached, returns HTTP 429 / `"demo budget reached"`.
+---
 
+## Configuration & Guardrail Rules in PHALANX
+1. **API Key Handling:** Key is read exclusively from the server-side environment variable `GEMINI_API_KEY`. It is NEVER exposed to the frontend, browser, network payloads, or server logs.
+2. **Output Formatting:** `response_mime_type: "application/json"` with strict response schema enforcing `InvoiceExtraction` properties (`payee`, `account`, `amount_minor`, `currency`, `due_date`, `invoice_number`, `purpose`).
+3. **Deterministic Sampling:** `temperature: 0.0`.
+4. **Resilience:** Single retry, 10.0s request timeout, 1024 token cap.
+5. **Daily Quota & Budget Enforcement:** Persisted daily call count; when quota is exceeded, returns clear error: `demo budget reached: daily limit of {daily_call_cap} calls exhausted`.
+6. **Untrusted Prompt Isolation:** Raw invoice text is fenced between structural delimiters `<<<UNTRUSTED_INVOICE_TEXT>>>` and `<<</UNTRUSTED_INVOICE_TEXT>>>` with escaped internal brackets.
+
+---
+
+## Live Call Status
+- **Environment Status:** `GEMINI_API_KEY` is not currently set in the environment.
+- **Evidence Label:** **`PENDING-HUMAN`** (awaiting user setting `GEMINI_API_KEY` in environment).
+- **Fallback Verification:** All four sample invoices fall back cleanly to certified baseline recorded runs (`is_live: false`, `status_label: "RECORDED RUN"`).

@@ -104,7 +104,7 @@ export const InvoiceAgentScreen: React.FC<InvoiceAgentScreenProps> = ({
           {loadingSamples && <Skeleton className="h-4 w-24" />}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           {samples.map((s) => {
             const isSelected = s.id === selectedSampleId;
             return (
@@ -122,6 +122,11 @@ export const InvoiceAgentScreen: React.FC<InvoiceAgentScreenProps> = ({
                   <span className="font-medium text-xs uppercase tracking-wider text-blue-600 dark:text-blue-400">
                     {s.title}
                   </span>
+                  {s.id === "sample_d" && (
+                    <span className="text-[10px] bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 px-1.5 py-0.5 rounded">
+                      Impersonation
+                    </span>
+                  )}
                   {s.id === "sample_c" && (
                     <span className="text-[10px] bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 px-1.5 py-0.5 rounded">
                       Injection

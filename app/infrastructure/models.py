@@ -243,3 +243,18 @@ class MandateModel(Base):
             key_id=self.key_id,
             signature=self.signature,
         )
+
+
+class DailyQuotaModel(Base):
+    """Persisted daily quota usage counters for API limits (e.g. Gemini daily call cap)."""
+
+    __tablename__ = "daily_quotas"
+
+    quota_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    count: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    updated_at_utc: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )

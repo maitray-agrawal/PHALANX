@@ -413,3 +413,55 @@ def test_demo_environment_reset_requires_admin_token_not_principal_token(
         headers={"X-Reconcile-Secret": valid_reconcile_secret},
     )
     assert resp_daily.status_code == status.HTTP_200_OK
+
+
+def test_all_mutating_routes_reject_auditor(client: TestClient, auditor_token: str) -> None:
+    """Route-table test: Every mutating route across the app rejects Role.AUDITOR.
+
+    Scans app.routes for all POST, PUT, DELETE, PATCH endpoints and verifies that
+    an auditor cannot invoke any mutating operation (returns 403 Forbidden, 401, or error,
+    never 2xx).
+    """
+    from app.main import app
+
+    headers = {"Authorization": f"Bearer {auditor_token}"}
+    checked_count = 0
+
+    for route in app.routes:
+        if not hasattr(route, "methods"):
+            continue
+        for method in route.methods:
+            if method not in ("POST", "PUT", "DELETE", "PATCH"):
+                continue
+            path = route.path
+            # Exclude unauthenticated token issuance and external webhook ingress
+            if path in ("/v1/auth/demo-token", "/v1/webhooks/paypal"):
+                continue
+
+            test_path = (
+                path.replace("{approval_id}", "appr_dummy")
+                .replace("{request_id}", "req_dummy")
+                .replace("{order_id}", "ord_dummy")
+                .replace("{mandate_id}", "man_dummy")
+                .replace("{sample_id}", "smp_dummy")
+            )
+            resp = client.request(method, test_path, headers=headers, json={})
+            # Auditor must NEVER receive a 2xx success on a mutating endpoint
+            assert resp.status_code not in (
+                status.HTTP_200_OK,
+                status.HTTP_201_CREATED,
+                status.HTTP_202_ACCEPTED,
+                status.HTTP_204_NO_CONTENT,
+            ), f"{method} {path} returned 2xx for AUDITOR"
+            assert resp.status_code in (
+                status.HTTP_403_FORBIDDEN,
+                status.HTTP_401_UNAUTHORIZED,
+                status.HTTP_404_NOT_FOUND,
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status.HTTP_400_BAD_REQUEST,
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+            ), f"{method} {path} returned unexpected status {resp.status_code}"
+            checked_count += 1
+
+    assert checked_count >= 10, f"Expected to check at least 10 mutating routes, checked {checked_count}"
+

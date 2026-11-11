@@ -861,6 +861,7 @@ class AuthorizationService:
             idempotency_key=command.idempotency_key,
             occurred_at_utc=now_utc,
             invoice_reference=command.invoice_reference,
+            payee=getattr(command, "payee", None),
         )
 
         intent_digest = compute_intent_digest(

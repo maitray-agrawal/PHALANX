@@ -1050,6 +1050,7 @@ def admin_reset(
     service.reset_state()
     ledger_service.restore_chain()
     _demo_token_rate_limits.clear()
+    _invoice_agent_rate_limits.clear()
     return {"status": "reset_completed", "message": "Demo state reset successfully."}
 
 
@@ -1577,16 +1578,31 @@ def run_attack_lab(
 # Invoice Agent Endpoints (TASK T8)
 # ---------------------------------------------------------------------------
 
+_invoice_agent_rate_limits: dict[str, list[float]] = {}
+
+
+def _check_invoice_agent_rate_limit(client_ip: str) -> None:
+    now = time.time()
+    history = _invoice_agent_rate_limits.setdefault(client_ip, [])
+    _invoice_agent_rate_limits[client_ip] = [t for t in history if now - t < 60.0]
+    max_requests = int(os.getenv("INVOICE_AGENT_RATE_LIMIT", "15"))
+    if len(_invoice_agent_rate_limits[client_ip]) >= max_requests:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Rate limit exceeded: invoice agent processing is limited to {max_requests} requests per minute.",
+        )
+    _invoice_agent_rate_limits[client_ip].append(now)
+
 
 class ProcessInvoiceRequestDTO(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    invoice_text: str = Field(..., max_length=10000, description="Raw invoice text to parse")
+    invoice_text: str = Field(..., max_length=4000, description="Raw invoice text to parse")
     force_fallback: bool = Field(default=False, description="Force recorded run fallback")
 
 
 @router.get("/v1/invoice-agent/samples", status_code=status.HTTP_200_OK)
 def get_invoice_samples() -> list[dict[str, Any]]:
-    """Return the three built-in sample invoices (legitimate, step-up, injection)."""
+    """Return the built-in sample invoices."""
     from app.application.invoice_agent import BUILTIN_SAMPLES
 
     return BUILTIN_SAMPLES
@@ -1598,11 +1614,15 @@ def get_invoice_samples() -> list[dict[str, Any]]:
 )
 def process_invoice(
     payload: ProcessInvoiceRequestDTO,
+    request: Request,
     identity: Annotated[Identity, Depends(get_current_identity)],
     service: Annotated[AuthorizationService, Depends(get_authorization_service)],
 ) -> dict[str, Any]:
     """Invoice Agent parses supplier invoice text, proposes intent, requests authorization."""
     from app.application.invoice_agent import InvoiceAgent
+
+    client_ip = extract_client_ip(request)
+    _check_invoice_agent_rate_limit(client_ip)
 
     agent_id = identity.agent_id or "agent-auto-1"
     agent = InvoiceAgent(authorization_service=service, agent_id=agent_id)
