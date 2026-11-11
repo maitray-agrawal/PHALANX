@@ -58,3 +58,10 @@ Thumbs.db
 # Agent skills and lockfiles
 .agents/skills/
 skills-lock.json
+
+# Demo media and render artifacts
+*.mp4
+*.wav
+*.aac
+PHALANX_DEMO/assets/audio/
+PHALANX_Full_Product_Demo_YouTube.mp4
