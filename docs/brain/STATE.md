@@ -1,6 +1,6 @@
 # STATE (update after every task)
-Date: 11 Nov 2026 | Branch: dev | Last pushed commit on dev: 4aa958c | CI: passing (run 42839047363)
-Working tree: clean | M0 complete, hardened; T8 Real LLM Invoice Agent complete; D1 & D1b Render/Neon hosted configuration ready
+Date: 11 Nov 2026 | Branch: dev | Last pushed commit on dev: 754efac | CI: passing (run 42976911686)
+Working tree: clean | M0 complete, hardened; T8 Real LLM Invoice Agent complete; D1 & D1b Render/Neon hosted configuration ready (CI Green)
 Completed: T1, T2 (H1-H7), T3/T4 (N1, U1), M0 Hardening (H8-H10 closed), M0 Invariants (reconcile, auditor role, idempotent replay, may_release, exact webhooks), T8 Real LLM Invoice Agent, D1/D1b Free Hosted Demo Config (render.yaml, Neon setup, healthz DB-isolation, reconcile-scheduled & daily-reset endpoints, demo env model, proxy-aware rate limits, client-ip diagnostic, engine Neon tuning, scripts/gen_keys.py) | Doing: D1b completed | Next: T5 | Blocked on me: nothing
 Database password rotated 7 Nov; verified live 9 Nov (active connection ok, old passwords rejected). Hosting: Render + Neon manifests ready; awaiting user dashboard action.
 
