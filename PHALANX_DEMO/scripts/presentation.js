@@ -410,3 +410,4 @@ function selectScenario(scenarioKey) {
 window.addEventListener("DOMContentLoaded", () => {
   window.presentationApp = new PhalanxPresentation();
 });
+

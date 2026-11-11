@@ -108,3 +108,4 @@ PHALANX_DEMO/
 - **No Direct FFmpeg MP4 Encoding:** FFmpeg is not installed on this system. In accordance with project truthfulness rules, no fake binary `.mp4` is claimed. The interactive presentation provides full real-time rendering, Web Speech API narration, and synchronized visual cues.
 - **Deterministic Pure Core:** The policy engine performs 0 network I/O and 0 clock operations during evaluation.
 - **PayPal Sandbox:** All transactions execute on PayPal Sandbox Orders v2; no real money is transferred.
+
