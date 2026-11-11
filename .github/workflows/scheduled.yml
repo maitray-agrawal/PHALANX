@@ -1,4 +1,6 @@
 name: Scheduled Automation & Keepalive
+# NOTE: GitHub Actions scheduled workflows (cron) run only from the default branch (main).
+# On feature/dev branches, workflow_dispatch can be used for manual verification.
 
 on:
   schedule:

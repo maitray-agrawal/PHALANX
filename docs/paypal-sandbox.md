@@ -151,7 +151,7 @@ Manual section references: 36, 37, 56.25.
   - **Rule**: Free Web Services spin down (sleep) after **15 minutes of HTTP inactivity**.
   - **Cold Start Latency**: The first incoming request takes 30-50 seconds to wake the service.
   - **Instance Limit**: 750 free instance hours per calendar month across all free services.
-  - **Mitigation**: Scheduled keepalive pinger (`scripts/pinger.py` invoked every 10 minutes via `.github/workflows/keepalive.yml`) sends `GET /healthz` to prevent sleep cycles during the evaluation window.
+  - **Mitigation**: Scheduled keepalive pinger (invoked every 10 minutes via `.github/workflows/scheduled.yml`) sends `GET /healthz` to prevent sleep cycles during the evaluation window. Note: GitHub Actions scheduled cron workflows run exclusively on the default branch (`main`).
 - **PostgreSQL Database Expiry Rule**:
   - **Rule**: Free PostgreSQL instances **expire and are automatically deleted 30 days after creation**.
   - **Data Retention**: Render provides a 14-day grace period to upgrade to a paid plan ($7/mo Starter). If not upgraded, all data is permanently destroyed.

@@ -324,5 +324,5 @@ jobs:
             curl -f -X POST "$RENDER_DEPLOY_HOOK"
             echo "Render deploy hook triggered successfully."
           else
-            echo "RENDER_DEPLOY_HOOK secret not configured; skipping automatic deploy trigger."
+            echo "RENDER_DEPLOY_HOOK secret is absent; skipping Render deployment cleanly."
           fi
