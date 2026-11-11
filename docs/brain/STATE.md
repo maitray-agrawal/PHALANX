@@ -1,7 +1,17 @@
 # STATE (update after every task)
-Date: 11 Nov 2026 | Branch: dev | Release Commit: b8a44b2 on main | CI: PASSING (Run ID 43051830870)
-Working tree: modified on dev (app/infrastructure/crypto.py, tests/unit/test_keys.py)
-CI Green across all 8 jobs (Run 43051830870 on dev)
+Date: 11 Nov 2026 | Branch: dev & main synchronized | Release Commit: e831506 | CI: PASSING (Run ID 43055335547)
+Working tree: clean on dev (synced with main at e831506)
+CI Green across all 8 check jobs + Trigger Render Deployment (Run 43055335547 on main):
+- Secret Leak Detection (Gitleaks): success
+- Backend Lint, Types & Tests: success
+- Frontend Lint, Types & Tests: success
+- Container Compose Integration & Smoke: success
+- Docker Build & Vulnerability Scan: success
+- Dependency Vulnerability Audit: success
+- Red Team Adversarial Suite: success
+- Bandit Security AST Analysis: success
+- Trigger Render Deployment: success
+Pull Request: #34 ("fix: validate Ed25519 signing key and improve boot diagnostics") merged into main.
 Full release verification battery verified locally: 12/12 unit key tests, 13/13 boot tests passed, 105 redteam passed, 30 vitest passed, ruff clean, mypy clean, bandit clean.
 Completed: Ed25519 signing key strict validation & identity preservation:
 1. Added validate_mandate_signing_key_hex() in app/infrastructure/crypto.py enforcing exactly 64 hex characters (32-byte seed) with no 0x prefix, quotes, whitespace, or newlines.
