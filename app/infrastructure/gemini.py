@@ -52,8 +52,19 @@ class GeminiLLMClient:
         max_output_tokens: int = 1024,
         daily_call_cap: int = 100,
     ) -> None:
-        self._api_key = api_key if api_key is not None else (os.getenv("GEMINI_API_KEY") or "")
-        self.model_name = model_name or os.getenv("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL
+        from app.infrastructure.config import settings
+
+        self._api_key = (
+            api_key
+            if api_key is not None
+            else (os.getenv("GEMINI_API_KEY") or getattr(settings, "gemini_api_key", "") or "")
+        )
+        self.model_name = (
+            model_name
+            or os.getenv("GEMINI_MODEL")
+            or getattr(settings, "gemini_model", DEFAULT_GEMINI_MODEL)
+            or DEFAULT_GEMINI_MODEL
+        )
         self.timeout_seconds = timeout_seconds
         self.max_retries = max_retries
         self.max_output_tokens = max_output_tokens
@@ -210,6 +221,8 @@ class GeminiLLMClient:
                 )
                 last_error = exc
 
+        if isinstance(last_error, GeminiTimeoutError | GeminiConfigurationError):
+            raise last_error
         raise GeminiError(f"Gemini API call failed after retries: {last_error}") from last_error
 
     def extract_invoice(self, invoice_text: str) -> tuple[Any, bool, str]:

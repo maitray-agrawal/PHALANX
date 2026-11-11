@@ -5,8 +5,8 @@
 **API Specification:** Gemini API (Developer API v1beta / generateContent)  
 **Endpoint:** `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`  
 **Supported Models:**
-- `gemini-1.5-flash`: Fast, high-throughput model suitable for real-time document extraction and structured JSON output.
-- `gemini-1.5-pro`: Complex reasoning model for multi-document synthesis.
+- `gemini-2.5-flash`: Production default in PHALANX. Fast, high-throughput model optimized for structured JSON document extraction and multimodal processing.
+- *(Historical / Legacy: `gemini-1.5-flash`, `gemini-1.5-pro`)*
 
 ---
 

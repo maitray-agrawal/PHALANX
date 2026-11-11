@@ -93,6 +93,14 @@ class Settings(BaseSettings):
         description="Secret for POST /v1/admin/reconcile-scheduled; min 24 chars when set",
     )
 
+    # Gemini AI Integration (server-side only)
+    gemini_api_key: str = Field(
+        default="", description="Google Gemini API key (server-side secret)"
+    )
+    gemini_model: str = Field(
+        default="gemini-2.5-flash", description="Google Gemini model identifier"
+    )
+
     # LLM & AI Guardrails (Manual 41-44)
     llm_model_name: str = Field(default="gpt-4o-mini")
     llm_timeout_seconds: float = Field(default=5.0)
