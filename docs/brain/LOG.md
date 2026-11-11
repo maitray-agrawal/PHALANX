@@ -64,3 +64,8 @@ Changed: scripts/boot.py, render.yaml, tests/integration/test_boot_and_migration
 Commands: pytest test_boot_and_migration_hardening.py (13 passed in 8.52s); pytest test_approval_seeding test_database_failure_modes test_deployment_config test_migration_upgrade (11 passed); pytest -m redteam (105 passed); npm test (30 passed); ruff check (clean); ruff format (clean); mypy app (clean); bandit (clean).
 Findings closed: Boot step visibility ([boot] step: <name>), traceback formatting on main try/except, secret redaction helper, and PYTHONUNBUFFERED=1 on Render.
 Next: Git commit and push dev to origin; monitor GitHub Actions CI.
+2026-11-11 | Strict Ed25519 signing key validation, safe diagnostic, and regression test suite.
+Changed: app/infrastructure/crypto.py, tests/unit/test_keys.py, STATE.md, LOG.md.
+Commands: uv run pytest tests/unit/test_keys.py (12 passed); uv run pytest tests/integration/test_boot_and_migration_hardening.py (13 passed); uv run pytest -q -m redteam (105 passed); ruff check & format clean; mypy app clean; bandit clean (10,020 lines).
+Findings closed: Strict 64-hex-char Ed25519 seed validation implemented; position 65 fromhex error resolved with safe diagnostic without leaking secret material; 8 regression tests passing.
+Next: Git commit and push dev to origin; reconcile with main via PR.

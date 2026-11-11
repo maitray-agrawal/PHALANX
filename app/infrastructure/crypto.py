@@ -50,6 +50,28 @@ def get_key_id(public_bytes: bytes) -> str:
     return f"key_{hashlib.sha256(public_bytes).hexdigest()[:12]}"
 
 
+HEX_CHARACTERS = frozenset("0123456789abcdefABCDEF")
+
+
+def validate_mandate_signing_key_hex(key_hex: str) -> None:
+    """Strictly validate Ed25519 private signing key hex string.
+
+    Requirements:
+    - Exactly 64 hexadecimal characters (representing a 32-byte raw seed).
+    - No 0x prefix.
+    - No quotes or delimiters.
+    - No whitespace or newline characters.
+
+    Never prints or logs the key material or partial values.
+    """
+    if (
+        not isinstance(key_hex, str)
+        or len(key_hex) != 64
+        or not all(c in HEX_CHARACTERS for c in key_hex)
+    ):
+        raise ValueError("MANDATE_SIGNING_KEY_HEX must contain exactly 64 hexadecimal characters.")
+
+
 def load_or_generate_keypair(
     key_hex: str | None = None,
     key_file_path: str | None = None,
@@ -59,16 +81,12 @@ def load_or_generate_keypair(
     Private key material is never printed, logged, or included in error traces.
     Returns (private_raw_bytes, public_raw_bytes, key_id).
     """
-    if key_hex and key_hex.strip():
-        try:
-            priv_bytes = bytes.fromhex(key_hex.strip())
-            if len(priv_bytes) != 32:
-                raise ValueError("Ed25519 private seed must be exactly 32 bytes")
-            priv_key = Ed25519PrivateKey.from_private_bytes(priv_bytes)
-            pub_bytes = priv_key.public_key().public_bytes_raw()
-            return priv_bytes, pub_bytes, get_key_id(pub_bytes)
-        except Exception as e:
-            raise ValueError("Failed to load Ed25519 private key from environment variable") from e
+    if key_hex is not None and key_hex != "":
+        validate_mandate_signing_key_hex(key_hex)
+        priv_bytes = bytes.fromhex(key_hex)
+        priv_key = Ed25519PrivateKey.from_private_bytes(priv_bytes)
+        pub_bytes = priv_key.public_key().public_bytes_raw()
+        return priv_bytes, pub_bytes, get_key_id(pub_bytes)
 
     if key_file_path and key_file_path.strip():
         path = Path(key_file_path.strip())
