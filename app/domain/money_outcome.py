@@ -5,7 +5,8 @@ Enforces that:
 1. SETTLE is returned ONLY for explicit provider completed status (e.g. COMPLETED, SUCCESS).
 2. RELEASE is returned ONLY for explicit provider terminal failure status
    (e.g. FAILED, DENIED, REJECTED, VOIDED, CANCELED, CANCELLED, EXPIRED, DECLINED).
-3. Everything else (unknown strings, lookup errors, timeouts, 408, 429, 5xx, network errors, empty values) returns HOLD.
+3. Everything else (unknown strings, lookup errors, timeouts, 408, 429, 5xx,
+   network errors, empty values) returns HOLD.
 """
 
 from enum import Enum
@@ -64,7 +65,8 @@ def money_outcome(
 
     Returns:
         MoneyOutcome.SETTLE: Confirmed settlement; budget confirmed spent.
-        MoneyOutcome.RELEASE: Confirmed terminal business rejection; reserved funds returned to budget.
+        MoneyOutcome.RELEASE: Confirmed terminal business rejection;
+                              reserved funds returned to budget.
         MoneyOutcome.HOLD: Ambiguous, timeout, transient error, network failure, or unknown;
                            funds remain strictly held.
     """

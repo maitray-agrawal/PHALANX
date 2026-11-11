@@ -2,13 +2,15 @@
 
 Verifies:
 1. SETTLE returned only for explicit completed statuses (COMPLETED, SUCCESS).
-2. RELEASE returned only for explicit terminal failure statuses (FAILED, DENIED, REJECTED, VOIDED, CANCELED, CANCELLED, EXPIRED, DECLINED).
+2. RELEASE returned only for explicit terminal failure statuses
+   (FAILED, DENIED, REJECTED, VOIDED, CANCELED, CANCELLED, EXPIRED, DECLINED).
 3. HOLD returned for all ambiguous, transient, network, timeout, or unknown statuses.
 4. Hypothesis property: Any arbitrary string outside the explicit sets returns HOLD.
 """
 
 import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
 
 from app.domain.money_outcome import (
     EXPLICIT_COMPLETED_STATUSES,
@@ -86,7 +88,9 @@ def test_ambiguous_and_transient_statuses_return_hold(source: str, status: str |
 
 def test_business_rejection_overrides_non_transient() -> None:
     """Explicit business rejection flag releases unless status is transient error."""
-    assert money_outcome("reconcile", "CUSTOM_DENIAL", business_rejection=True) == MoneyOutcome.RELEASE
+    assert (
+        money_outcome("reconcile", "CUSTOM_DENIAL", business_rejection=True) == MoneyOutcome.RELEASE
+    )
     # Even with business_rejection=True, transient lookup errors MUST remain HOLD
     assert money_outcome("reconcile", "LOOKUP_FAILED", business_rejection=True) == MoneyOutcome.HOLD
     assert money_outcome("reconcile", "RECONCILE", business_rejection=True) == MoneyOutcome.HOLD

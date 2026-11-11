@@ -8,6 +8,7 @@ Invariants:
 - Fails closed to recorded fallback when unconfigured or on outage.
 """
 
+import contextlib
 import json
 import logging
 import os
@@ -111,16 +112,12 @@ class GeminiLLMClient:
         except Exception as exc:
             logger.debug("DailyQuota DB tracking unavailable, falling back to in-memory: %s", exc)
             if session is not None:
-                try:
+                with contextlib.suppress(Exception):
                     session.rollback()
-                except Exception:
-                    pass
         finally:
             if session is not None:
-                try:
+                with contextlib.suppress(Exception):
                     session.close()
-                except Exception:
-                    pass
 
         # In-memory fallback
         if today != self._current_date:

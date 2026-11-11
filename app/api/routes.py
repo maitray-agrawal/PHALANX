@@ -1589,7 +1589,10 @@ def _check_invoice_agent_rate_limit(client_ip: str) -> None:
     if len(_invoice_agent_rate_limits[client_ip]) >= max_requests:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Rate limit exceeded: invoice agent processing is limited to {max_requests} requests per minute.",
+            detail=(
+                f"Rate limit exceeded: invoice agent processing is limited to "
+                f"{max_requests} requests per minute."
+            ),
         )
     _invoice_agent_rate_limits[client_ip].append(now)
 

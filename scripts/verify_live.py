@@ -11,6 +11,7 @@ import argparse
 import sys
 import time
 from typing import Any
+
 import httpx
 
 
@@ -120,7 +121,9 @@ def run_verification(
     with httpx.Client() as client:
         for path, method, headers, expected_statuses, desc in endpoints_to_probe:
             url = f"{base}{path}"
-            res = probe_endpoint(client, method, url, headers=headers, expected_status=expected_statuses)
+            res = probe_endpoint(
+                client, method, url, headers=headers, expected_status=expected_statuses
+            )
             res["path"] = path
             res["description"] = desc
             results.append(res)
@@ -128,15 +131,27 @@ def run_verification(
                 failures += 1
 
     # Print Table
-    print(f"\n| {'Path':<30} | {'Method':<6} | {'Status':<8} | {'Latency':<10} | {'Result':<6} | {'Description':<22} |")
-    print(f"|{'-'*32}|{'-'*8}|{'-'*10}|{'-'*12}|{'-'*8}|{'-'*24}|")
+    th = (
+        f"\n| {'Path':<30} | {'Method':<6} | {'Status':<8} | "
+        f"{'Latency':<10} | {'Result':<6} | {'Description':<22} |"
+    )
+    print(th)
+    print(f"|{'-' * 32}|{'-' * 8}|{'-' * 10}|{'-' * 12}|{'-' * 8}|{'-' * 24}|")
     for r in results:
         lat = f"{r['latency_ms']:.1f} ms"
-        status_disp = str(r['status_code']) if r['status_code'] > 0 else "ERR"
-        print(f"| {r['path']:<30} | {r['method']:<6} | {status_disp:<8} | {lat:<10} | {r['result']:<6} | {r['description']:<22} |")
-    print(f"|{'-'*32}|{'-'*8}|{'-'*10}|{'-'*12}|{'-'*8}|{'-'*24}|\n")
+        status_disp = str(r["status_code"]) if r["status_code"] > 0 else "ERR"
+        row = (
+            f"| {r['path']:<30} | {r['method']:<6} | {status_disp:<8} | "
+            f"{lat:<10} | {r['result']:<6} | {r['description']:<22} |"
+        )
+        print(row)
+    print(f"|{'-' * 32}|{'-' * 8}|{'-' * 10}|{'-' * 12}|{'-' * 8}|{'-' * 24}|\n")
 
-    print(f"Verification Summary: {len(results) - failures}/{len(results)} Passed ({failures} Failures)")
+    summary_str = (
+        f"Verification Summary: {len(results) - failures}/{len(results)} "
+        f"Passed ({failures} Failures)"
+    )
+    print(summary_str)
     if failures == 0:
         print("[SUCCESS] All surveyed endpoints verified operational.\n")
         return 0
@@ -147,10 +162,16 @@ def run_verification(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Verify PHALANX Live Deployment Endpoints")
-    parser.add_argument("base_url", help="Base URL of deployed service (e.g. https://phalanx.onrender.com)")
-    parser.add_argument("--admin-token", default=None, help="X-Admin-Token secret for diagnostic endpoint")
+    parser.add_argument(
+        "base_url", help="Base URL of deployed service (e.g. https://phalanx.onrender.com)"
+    )
+    parser.add_argument(
+        "--admin-token", default=None, help="X-Admin-Token secret for diagnostic endpoint"
+    )
     parser.add_argument("--agent-token", default=None, help="Bearer token for protected endpoints")
     args = parser.parse_args()
 
-    exit_code = run_verification(args.base_url, admin_token=args.admin_token, agent_token=args.agent_token)
+    exit_code = run_verification(
+        args.base_url, admin_token=args.admin_token, agent_token=args.agent_token
+    )
     sys.exit(exit_code)

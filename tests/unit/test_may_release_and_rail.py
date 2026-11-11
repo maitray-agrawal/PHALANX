@@ -292,14 +292,15 @@ def test_wrong_oauth_secret_returns_503_before_reservation(
 ) -> None:
     """Wrong OAuth secret or 401 response aborts with 503 before any reservation."""
     from fastapi import HTTPException
-    from app.domain.models import DecisionOutcome
 
     adapter = PayPalPaymentRailAdapter(client_id="bad_client", client_secret="bad_secret")
 
     with patch("httpx.post") as mock_post:
         mock_resp = MagicMock()
         mock_resp.status_code = 401
-        mock_resp.text = '{"error": "invalid_client", "error_description": "Client Authentication failed"}'
+        mock_resp.text = (
+            '{"error": "invalid_client", "error_description": "Client Authentication failed"}'
+        )
         mock_post.return_value = mock_resp
 
         auth_svc = AuthorizationService(
@@ -365,7 +366,9 @@ def test_duplicate_order_replay_does_not_create_duplicate_order(
     assert resp2.decision.value == "ALLOW"
     assert PolicyReasonCode.IDEMPOTENCY_REPLAY in resp2.reason_codes
     assert len(fake_rail.dispatched_payments) == 1  # No duplicate payment dispatched
-    assert auth_svc._rolling_spent.get("agent-auto-1", 0) == spent_after_call1  # No double reservation
+    assert (
+        auth_svc._rolling_spent.get("agent-auto-1", 0) == spent_after_call1
+    )  # No double reservation
 
 
 def test_unknown_id_lookup_holds() -> None:
@@ -380,7 +383,9 @@ def test_unknown_id_lookup_holds() -> None:
     ):
         mock_404 = MagicMock()
         mock_404.status_code = 404
-        mock_404.text = '{"name": "RESOURCE_NOT_FOUND", "message": "The specified resource does not exist."}'
+        mock_404.text = (
+            '{"name": "RESOURCE_NOT_FOUND", "message": "The specified resource does not exist."}'
+        )
         mock_get.return_value = mock_404
 
         lookup_res = adapter.lookup("unknown_order_resource_id_404")

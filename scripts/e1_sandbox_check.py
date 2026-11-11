@@ -11,12 +11,13 @@ Executes full sandbox order checkout cycle:
 """
 
 import argparse
+import contextlib
 import os
 import sys
 import time
 from typing import Any
-import httpx
 
+import httpx
 
 SANDBOX_BASE_URL = "https://api-m.sandbox.paypal.com"
 
@@ -27,6 +28,7 @@ def get_credentials() -> tuple[str, str]:
     if not client_id or not client_secret:
         # Check .env file
         from pathlib import Path
+
         env_p = Path(".env")
         if env_p.exists():
             for line in env_p.read_text(encoding="utf-8").splitlines():
@@ -147,10 +149,8 @@ def run_e1_check(poll_only: bool = False) -> None:
     print("*" * 65 + "\n")
 
     if not poll_only:
-        try:
+        with contextlib.suppress(EOFError):
             input("Press [ENTER] once you have approved the payment in PayPal Sandbox...")
-        except EOFError:
-            pass
 
     print("\n[Step 3/5] Polling order status to confirm buyer approval...")
     approved = False
@@ -176,7 +176,7 @@ def run_e1_check(poll_only: bool = False) -> None:
     capture_status = str(capture_data.get("status", "")).upper()
     print(f" -> SUCCESS: Capture executed! Status: {capture_status}")
 
-    print(f"\n[Step 5/5] Polling final order lookup to verify settlement...")
+    print("\n[Step 5/5] Polling final order lookup to verify settlement...")
     final_info = lookup_order(token, order_id)
     final_status = str(final_info.get("status", "")).upper()
     print(f" -> Final Order Status: {final_status}")
@@ -195,6 +195,8 @@ def run_e1_check(poll_only: bool = False) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PayPal Sandbox E1 Checkout Verification")
-    parser.add_argument("--poll-only", action="store_true", help="Poll automatically without waiting for ENTER")
+    parser.add_argument(
+        "--poll-only", action="store_true", help="Poll automatically without waiting for ENTER"
+    )
     args = parser.parse_args()
     run_e1_check(poll_only=args.poll_only)

@@ -422,7 +422,16 @@ def test_all_mutating_routes_reject_auditor(client: TestClient, auditor_token: s
     an auditor cannot invoke any mutating operation (returns 403 Forbidden, 401, or error,
     never 2xx).
     """
+    from app.api.routes import (
+        _demo_token_rate_limits,
+        _invoice_agent_rate_limits,
+        _reconcile_scheduled_rate_limits,
+    )
     from app.main import app
+
+    _reconcile_scheduled_rate_limits.clear()
+    _invoice_agent_rate_limits.clear()
+    _demo_token_rate_limits.clear()
 
     headers = {"Authorization": f"Bearer {auditor_token}"}
     checked_count = 0
@@ -460,8 +469,10 @@ def test_all_mutating_routes_reject_auditor(client: TestClient, auditor_token: s
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 status.HTTP_400_BAD_REQUEST,
                 status.HTTP_503_SERVICE_UNAVAILABLE,
+                status.HTTP_429_TOO_MANY_REQUESTS,
             ), f"{method} {path} returned unexpected status {resp.status_code}"
             checked_count += 1
 
-    assert checked_count >= 10, f"Expected to check at least 10 mutating routes, checked {checked_count}"
-
+    assert checked_count >= 10, (
+        f"Expected to check at least 10 mutating routes, checked {checked_count}"
+    )
