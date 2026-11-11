@@ -2,7 +2,9 @@ import { test, expect } from "@playwright/test";
 import path from "node:path";
 import fs from "node:fs";
 
-const ARTIFACT_DIR = "C:/Users/agraw/.gemini/antigravity/brain/4e726a7c-0329-46ca-a4e5-63b031a277d0";
+const ARTIFACT_DIR =
+  process.env.ARTIFACT_DIR ||
+  "C:/Users/agraw/.gemini/antigravity/brain/f1ca06ca-d35a-4ed1-9c8e-bb69af944b40";
 const LOCAL_SCREENSHOTS_DIR = path.resolve(process.cwd(), "screenshots");
 
 test.describe("PHALANX PayPal-Inspired Shell & Operational Screens", () => {
@@ -62,14 +64,20 @@ test.describe("PHALANX PayPal-Inspired Shell & Operational Screens", () => {
 
   async function resetDemoViaApi(request: import("@playwright/test").APIRequestContext) {
     try {
-      const tokenRes = await request.post("/v1/auth/demo-token", {
-        data: { role: "principal", principal_id: "principal_treasury" },
+      const adminToken = process.env.ADMIN_TOKEN || "phx_admin_nxZgx2ok5QX0T_i5bW6i9A";
+      const resetRes = await request.post("/v1/admin/reset", {
+        headers: { "X-Admin-Token": adminToken },
       });
-      if (tokenRes.ok()) {
-        const data = await tokenRes.json();
-        await request.post("/v1/admin/reset", {
-          headers: { Authorization: `Bearer ${data.access_token}` },
+      if (!resetRes.ok()) {
+        const tokenRes = await request.post("/v1/auth/demo-token", {
+          data: { role: "principal", principal_id: "principal_treasury" },
         });
+        if (tokenRes.ok()) {
+          const data = await tokenRes.json();
+          await request.post("/v1/admin/reset", {
+            headers: { Authorization: `Bearer ${data.access_token}` },
+          });
+        }
       }
     } catch {
       // Ignored if unreachable
@@ -198,8 +206,21 @@ test.describe("PHALANX PayPal-Inspired Shell & Operational Screens", () => {
     await expect(page.locator(".integrity-status-bar")).toBeVisible({ timeout: 20000 });
   });
 
-  test("Multi-Viewport Screenshots: 1280px Desktop, 768px Tablet, 375px Mobile", async ({ page }) => {
+  test("Multi-Viewport Screenshots: 1920px Full HD, 1280px Desktop, 768px Tablet, 375px Mobile", async ({ page }) => {
     test.slow();
+    // 0. Full HD Desktop Viewport (1920 x 1080)
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page.goto("/#home");
+    await page.waitForLoadState("networkidle");
+    const fhdPath = path.join(LOCAL_SCREENSHOTS_DIR, "screenshot-1920-desktop.png");
+    const artifactFhd = path.join(ARTIFACT_DIR, "screenshot-1920-desktop.png");
+    await page.screenshot({ path: fhdPath, fullPage: true });
+    try {
+      fs.copyFileSync(fhdPath, artifactFhd);
+    } catch {
+      // Artifact dir copy fallback
+    }
+
     // 1. Desktop Viewport (1280 x 800)
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/#home");
