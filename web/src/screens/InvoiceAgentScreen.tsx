@@ -244,6 +244,26 @@ export const InvoiceAgentScreen: React.FC<InvoiceAgentScreenProps> = ({
                 <span className="font-mono text-xs">{result.reasons.join(", ") || "No reason"}</span>
               </div>
 
+              {/* Payment Rail & Execution State */}
+              <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 text-blue-950 dark:text-blue-200">
+                <div className="flex items-center space-x-2">
+                  <span className="font-semibold text-[11px] uppercase tracking-wider text-blue-700 dark:text-blue-300">
+                    Execution Rail:
+                  </span>
+                  <span className="font-mono text-[11px]">{result.payment_rail || "Configured Payment Rail"}</span>
+                </div>
+                {result.payout_id && (
+                  <span className="font-mono text-[10px] bg-blue-100 dark:bg-blue-900/60 px-2 py-0.5 rounded text-blue-800 dark:text-blue-200">
+                    Order Ref: {result.payout_id}
+                  </span>
+                )}
+                {result.request_state === "AWAITING_BUYER_APPROVAL" && (
+                  <span className="text-[10px] text-amber-700 dark:text-amber-300 font-medium">
+                    Order Created (Awaiting Buyer Approval)
+                  </span>
+                )}
+              </div>
+
               {/* Extraction Block */}
               <div>
                 <span className="text-[11px] font-semibold uppercase text-neutral-500 block mb-1">

@@ -190,6 +190,8 @@ export interface InvoiceProcessingResultDTO {
   decision: "ALLOW" | "STEP_UP" | "DENY";
   reasons: string[];
   request_state: string;
+  payout_id?: string | null;
+  payment_rail?: string | null;
   ledger_event: {
     event_id: string;
     event_type: string;

@@ -381,3 +381,59 @@ def test_gemini_client_fallback_status_accuracy_on_error(
         assert "RECORDED RUN" in label
         assert "Connection reset" in label or "Provider Error" in label
         assert extraction.amount_minor == 2500
+
+
+def test_invoice_agent_allow_with_paypal_rail_labels_awaiting_approval(
+    test_clock: ClockPort, test_ledger: InMemoryLedgerAdapter
+) -> None:
+    """When an order is created on PayPal rail, state is clearly marked AWAITING_BUYER_APPROVAL."""
+    from app.infrastructure.paypal import PayPalPaymentRailAdapter
+
+    mandate_service = MandateService(clock=test_clock)
+    mandate_service.create_mandate(
+        CreateMandateCommand(
+            mandate_id="mandate-inv-agent-paypal-flow",
+            principal_id="principal-corp-1",
+            agent_id="agent-invoice-1",
+            single_limit_minor=100_000,
+            instant_threshold_minor=50_000,
+            lifetime_budget_minor=500_000,
+            allowed_payees=["vendor-paypal-sandbox-1"],
+            allow_unregistered_payees=False,
+            valid_days=30,
+        )
+    )
+
+    rail = PayPalPaymentRailAdapter(client_id="mock_id", client_secret="mock_secret")
+    with (
+        patch.object(rail, "validate_configuration", return_value=(True, None)),
+        patch.object(
+            rail,
+            "pay",
+            return_value=MagicMock(
+                success=True,
+                status="RECONCILE",
+                transaction_id="ORDER-SANDBOX-7788",
+                details={
+                    "order_id": "ORDER-SANDBOX-7788",
+                    "approval_url": "https://sandbox.paypal.com/checkout",
+                },
+            ),
+        ),
+    ):
+        auth_service = AuthorizationService(
+            clock=test_clock,
+            ledger=test_ledger,
+            mandate_service=mandate_service,
+            payment_rail=rail,
+        )
+        agent = InvoiceAgent(
+            authorization_service=auth_service,
+            agent_id="agent-invoice-1",
+        )
+        res = agent.process_invoice(SAMPLE_INVOICE_A["text"], force_fallback=True)
+
+        assert res.decision == "ALLOW"
+        assert res.request_state == "AWAITING_BUYER_APPROVAL"
+        assert res.payout_id == "ORDER-SANDBOX-7788"
+        assert res.payment_rail == "PayPal Sandbox (Orders v2)"

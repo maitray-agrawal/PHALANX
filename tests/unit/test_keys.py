@@ -60,7 +60,9 @@ def test_ephemeral_fallback_prohibited_outside_test():
 
 
 def test_mandate_signing_key_optional_with_secret_key():
-    """Verify that when MANDATE_SIGNING_KEY_HEX is unset, keypair derives deterministically from SECRET_KEY."""
+    """Verify that when MANDATE_SIGNING_KEY_HEX is unset,
+    keypair derives deterministically from SECRET_KEY.
+    """
     test_settings = Settings(
         secret_key="master-secret-key-at-least-32-chars-long!",
         mandate_signing_key_hex="",

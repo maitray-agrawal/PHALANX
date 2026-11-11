@@ -54,6 +54,8 @@ class InvoiceProcessingResult(BaseModel):
     is_live: bool
     status_label: str
     model_used: str
+    payout_id: str | None = None
+    payment_rail: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -352,6 +354,17 @@ class InvoiceAgent:
             if auth_response.request_state
             else auth_response.decision.value
         )
+        if auth_response.decision.value == "ALLOW" and request_state_str == "RECONCILE":
+            request_state_str = "AWAITING_BUYER_APPROVAL"
+
+        rail = getattr(self.authorization_service, "_payment_rail", None)
+        from app.infrastructure.paypal import PayPalPaymentRailAdapter
+
+        payment_rail_label = (
+            "PayPal Sandbox (Orders v2)"
+            if isinstance(rail, PayPalPaymentRailAdapter)
+            else "Simulated Rail"
+        )
 
         return InvoiceProcessingResult(
             invoice_text=truncated_invoice,
@@ -364,4 +377,6 @@ class InvoiceAgent:
             is_live=is_live,
             status_label=status_label,
             model_used=model_used,
+            payout_id=auth_response.payout_id,
+            payment_rail=payment_rail_label,
         )

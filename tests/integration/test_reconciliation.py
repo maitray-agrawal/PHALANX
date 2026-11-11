@@ -919,6 +919,7 @@ def test_webhook_always_looks_up_before_release_or_settle(session_factory):
 def test_webhook_unconfigured_id_fails_closed_with_503(monkeypatch):
     """When PAYPAL_WEBHOOK_ID is empty/unset, webhook endpoint fails closed with 503."""
     from fastapi import status
+
     from app.infrastructure.config import settings
 
     client = TestClient(app)
