@@ -1,0 +1,88 @@
+# PHALANX — OFFICIAL SPOKEN NARRATION SCRIPT
+# Language & Tone: Indian English, clear, authoritative, conversational technical founder
+# Duration: ~5-6 minutes
+
+=== SCENE 1: THE URGENT DILEMMA (0:00 - 0:45) ===
+Artificial intelligence is moving far beyond simple chat boxes and answering questions. Today, autonomous AI agents can analyze data, negotiate with vendors, execute workflows, and make decisions in real time. But what happens when an autonomous AI agent is given the authority to spend real money?
+Giving an autonomous agent unrestricted access to a corporate credit card or bank API is a financial disaster waiting to happen. A single prompt injection attack, a hallucinated supplier invoice, or a runaway autonomous loop can drain a corporate treasury in minutes.
+Until now, the industry has relied on weak prompt engineering or vague model alignment. But when real money is on the line, words in a system prompt are simply not enough.
+Intelligence without control creates catastrophic risk.
+Meet PHALANX — the deterministic authorization and governance layer designed specifically for autonomous financial agents.
+Our principle is clear: Let agents act. Keep humans and policy in control.
+
+=== SCENE 2: ARCHITECTURAL INTEGRITY (0:45 - 1:30) ===
+To make autonomous payments safe, we have to change the architecture completely.
+In PHALANX, the core design principle is absolute domain isolation.
+Look at how a transaction moves through our system.
+An autonomous agent receives an invoice and uses an LLM, like Google Gemini 2.5 Flash, to interpret messy unstructured text and extract key fields.
+However, notice the strict security boundary: the language model is strictly barred from the authorization boundary. The LLM cannot authorize, sign, or execute a single payment.
+Instead, the extracted transaction parameters are converted into an immutable payment request and passed into the PHALANX Domain Core.
+This domain core is completely pure. It performs zero network I/O, makes zero clock lookups, and runs zero probabilistic code. It evaluates the transaction against strict mathematical policies in under half a millisecond.
+The policy engine produces exactly one of three deterministic outcomes:
+First, ALLOW: the payment is completely within pre-authorized mandate limits and is immediately scheduled for settlement.
+Second, STEP_UP: the transaction exceeds routine thresholds, triggering mandatory human supervisor approval.
+And third, DENY: the request violates spending bounds, targets an unapproved vendor, or exhibits signs of tampering, and is rejected immediately.
+Every single decision leaves an accountable cryptographic record.
+
+=== SCENE 3: CRYPTOGRAPHIC MANDATES (1:30 - 2:15) ===
+How does PHALANX know what an agent is actually authorized to do?
+Through Ed25519-signed agent mandates.
+Before any financial agent can initiate a transaction, the organization issues a cryptographic mandate signed with an Ed25519 private key.
+This mandate defines strict boundaries: the agent's unique ID, authorized vendor categories, maximum single-transaction amounts, daily and lifetime velocity caps, and allowed payment rails.
+When an agent submits a payment request, PHALANX computes an RFC 8785 canonical JSON digest of the intent. This ensures that field order, whitespace, and formatting cannot be manipulated to alter the signature.
+If even a single character, decimal place, or vendor account number is tampered with in transit, the signature check fails immediately, and the transaction is aborted.
+No agent can spend outside its signed mandate. Period.
+
+=== SCENE 4: LIVE APPLICATION WALKTHROUGH (2:15 - 3:45) ===
+Now, let us inspect the real PHALANX application running live in our production environment.
+On our primary dashboard, operations teams have real-time visibility into all agent activity. You can see our headline metrics: zero financial leakage, sub-millisecond policy evaluation latency, and one hundred percent cryptographic ledger auditability.
+Let us see how the system handles real-world scenarios.
+First, Case One: Routine cloud infrastructure payment.
+Our agent parses an invoice from Acme Cloud Hosting for twenty-five dollars. The pure policy engine checks the active mandate. The vendor is approved, and the amount is well below the five-hundred-dollar autonomous threshold.
+The result is an instant ALLOW. The budget is reserved, and the order is prepared for PayPal settlement.
+Next, Case Two: High-value enterprise license.
+The agent receives an annual server security invoice for twelve hundred dollars. While the vendor is legitimate, the amount exceeds the agent's autonomous limit.
+PHALANX immediately triggers a STEP_UP.
+The transaction is safely halted and escalated to the Human Approvals Queue.
+As a supervisor, I can review the complete invoice, inspect the cryptographic intent digest, and make an informed decision. I click 'Authorize Payment', and the transaction proceeds securely.
+Now, look at Case Three: An adversarial prompt injection attack.
+An attacker sends a malicious invoice claiming to be a routine supply order, but includes hidden text instructing the agent to bypass limits and wire ninety-nine hundred dollars to an offshore account.
+Even if an LLM is confused by the injection, PHALANX stands firm.
+The destination account is unauthorized, the amount violates the mandate, and the pure policy engine issues an immediate DENY.
+The attack is killed on the spot, and zero dollars leave the organization.
+
+=== SCENE 5: ADVERSARIAL ROBUSTNESS & ATTACK LAB (3:45 - 4:30) ===
+Financial systems must be proven under attack.
+PHALANX includes a dedicated Attack Lab where red-team engineers can test the authorization boundaries against sophisticated threats.
+We continuously evaluate six distinct attack vectors:
+Direct prompt injection attempting to override spending limits.
+Vendor account hijacking and bank detail spoofing.
+Replay attacks attempting to submit duplicate invoices.
+Velocity attacks attempting to drain funds through micro-transactions.
+Budget exhaustion exploits.
+And in-memory tampering.
+Across all six attack vectors, PHALANX maintains a zero percent bypass rate.
+Because our policy evaluation is mathematical and deterministic, probabilistic LLM jailbreaks cannot influence the final authorization decision.
+
+=== SCENE 6: IMMUTABLE AUDIT LEDGER & PAYPAL SETTLEMENT (4:30 - 5:15) ===
+Every single action taken inside PHALANX is written to an immutable, append-only audit ledger.
+Each ledger event is cryptographically linked to the previous event using a SHA-256 hash chain, exactly like a high-performance private blockchain.
+At the database layer, PostgreSQL triggers physically block any UPDATE or DELETE operations on ledger rows. Even a database administrator with raw SQL access cannot alter historical audit records without raising a cryptographic alert.
+Anyone can click 'Verify Ledger Integrity' at any time to re-compute the hash chain across all events and prove that the records have never been tampered with.
+When transactions are approved, PHALANX executes real settlement through PayPal Sandbox using PayPal Orders v2.
+We enforce a two-phase commit: the funds are first authorized against the merchant order, and only captured once the goods receipt and policy checks are finalized.
+Every PayPal capture ID, timestamp, and signature is immutably anchored to the ledger.
+
+=== SCENE 7: SUMMARY & CLOSING (5:15 - 6:00) ===
+As autonomous agents reshape global commerce, financial security cannot be an afterthought.
+Conventional agentic payment systems give bots raw API keys and hope for the best.
+PHALANX provides verifiable governance:
+Pure deterministic policy evaluation.
+Cryptographic Ed25519 mandates.
+Human oversight for high-risk exceptions.
+Tamper-evident SHA-256 hash chains.
+And production-ready PayPal settlement.
+The future of AI will not be measured only by how intelligent our agents are.
+It will be measured by how safely we allow them to act.
+Let agents act. Keep humans and policy in control.
+Thank you. That is PHALANX.

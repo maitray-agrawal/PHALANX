@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PHALANX — Autonomous Financial Agent Security Layer | Product Demo</title>
+  <link rel="stylesheet" href="styles/presentation.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Top Global Header -->
+    <header class="presentation-header">
+      <div class="brand-lockup">
+        <img src="assets/logo/logo.svg" alt="PHALANX Logo" class="brand-logo-img">
+        <div class="brand-text-block">
+          <div class="brand-title">
+            PHALANX
+            <span class="badge-hackathon">PayPal AI Hackathon 2026</span>
+          </div>
+          <span class="brand-subtitle">Autonomous Financial Agent Security Layer</span>
+        </div>
+      </div>
+
+      <!-- Scene Progress Bar -->
+      <nav class="scene-progress-container">
+        <div class="scene-step-pill active" data-scene-index="0"><span class="step-dot"></span>01 Hero</div>
+        <div class="scene-step-pill" data-scene-index="1"><span class="step-dot"></span>02 Problem</div>
+        <div class="scene-step-pill" data-scene-index="2"><span class="step-dot"></span>03 Architecture</div>
+        <div class="scene-step-pill" data-scene-index="3"><span class="step-dot"></span>04 Cryptography</div>
+        <div class="scene-step-pill" data-scene-index="4"><span class="step-dot"></span>05 Live Demo</div>
+        <div class="scene-step-pill" data-scene-index="5"><span class="step-dot"></span>06 Attack Lab</div>
+        <div class="scene-step-pill" data-scene-index="6"><span class="step-dot"></span>07 Settlement</div>
+        <div class="scene-step-pill" data-scene-index="7"><span class="step-dot"></span>08 Pitch</div>
+      </nav>
+
+      <!-- Action Controls -->
+      <div class="header-actions">
+        <div id="backend-status-pill" class="scene-step-pill" style="font-size:0.72rem; border-color:#334155;">
+          <span>●</span> Connecting...
+        </div>
+        <button id="btn-fullscreen" class="btn-icon" title="Toggle Fullscreen (F)">⛶</button>
+      </div>
+    </header>
+
+    <!-- Main Viewport -->
+    <main id="viewport">
+
+      <!-- SCENE 1: HERO / OPENING -->
+      <section class="slide active" id="slide-0">
+        <div class="hero-wrapper">
+          <img src="assets/logo/logo.svg" alt="PHALANX Geometric Shield" class="hero-seal">
+          <h1 class="hero-title">PHALANX</h1>
+          <p class="hero-tagline">Let agents act. Keep humans and policy in control.</p>
+
+          <div class="hero-badges-strip">
+            <div class="hero-badge"><span class="dot" style="background:#00f2fe;"></span> 0ms I/O Pure Policy Core</div>
+            <div class="hero-badge"><span class="dot" style="background:#8b5cf6;"></span> Ed25519 Signed Mandates</div>
+            <div class="hero-badge"><span class="dot" style="background:#10b981;"></span> Immutable PostgreSQL Ledger</div>
+            <div class="hero-badge"><span class="dot" style="background:#0079c1;"></span> PayPal Sandbox Orders v2</div>
+          </div>
+
+          <div style="margin-top: 40px; display: flex; gap: 32px;">
+            <div class="panel-card" style="padding: 16px 32px; text-align: center;">
+              <span style="font-size: 2rem; font-weight: 800; color: #10b981; font-family: var(--font-mono);">$0.00</span>
+              <span style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Financial Leakage</span>
+            </div>
+            <div class="panel-card" style="padding: 16px 32px; text-align: center;">
+              <span style="font-size: 2rem; font-weight: 800; color: #00f2fe; font-family: var(--font-mono);">&lt; 0.5ms</span>
+              <span style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Policy Evaluation</span>
+            </div>
+            <div class="panel-card" style="padding: 16px 32px; text-align: center;">
+              <span style="font-size: 2rem; font-weight: 800; color: #a5b4fc; font-family: var(--font-mono);">100%</span>
+              <span style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Cryptographic Audit</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCENE 2: THE PROBLEM -->
+      <section class="slide" id="slide-1">
+        <div class="slide-category">Scene 02 // The Urgent Dilemma</div>
+        <h2 class="slide-title">Why Giving AI Agents Payment Authority Fails</h2>
+        <p class="slide-subtitle">Unrestricted autonomous execution without deterministic guardrails exposes corporate treasuries to catastrophic financial loss.</p>
+
+        <div class="slide-grid-2">
+          <!-- Vulnerability Card -->
+          <div class="panel-card" style="border-color: rgba(239, 68, 68, 0.4);">
+            <div class="panel-header">
+              <span class="panel-title" style="color: #ef4444;">⚠️ The Uncontrolled Agent Threat</span>
+              <span class="badge-decision deny">CRITICAL RISK</span>
+            </div>
+            <ul style="list-style: none; display: flex; flex-direction: column; gap: 14px; color: var(--text-secondary); font-size: 0.95rem;">
+              <li style="display:flex; gap:10px;">
+                <span style="color:#ef4444;">✖</span>
+                <div><strong style="color:#fff;">Prompt Injection Vulnerability:</strong> Hidden adversarial text in supplier invoices can trick LLMs into rerouting payments to attacker accounts.</div>
+              </li>
+              <li style="display:flex; gap:10px;">
+                <span style="color:#ef4444;">✖</span>
+                <div><strong style="color:#fff;">Runaway Autonomous Loops:</strong> An agent caught in an automated retry or negotiation loop can drain thousands of dollars in minutes.</div>
+              </li>
+              <li style="display:flex; gap:10px;">
+                <span style="color:#ef4444;">✖</span>
+                <div><strong style="color:#fff;">Hallucinated Line Items:</strong> Probabilistic language models lack mathematical guarantees; numbers and currencies shift unpredictably.</div>
+              </li>
+              <li style="display:flex; gap:10px;">
+                <span style="color:#ef4444;">✖</span>
+                <div><strong style="color:#fff;">Zero Traceability:</strong> Standard credit cards and API keys leave no cryptographically verifiable explanation of why an action was taken.</div>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Solution Comparison Card -->
+          <div class="panel-card" style="border-color: rgba(16, 185, 129, 0.4);">
+            <div class="panel-header">
+              <span class="panel-title" style="color: #10b981;">🛡️ The PHALANX Governance Layer</span>
+              <span class="badge-decision allow">SECURE BOUNDARY</span>
+            </div>
+            <ul style="list-style: none; display: flex; flex-direction: column; gap: 14px; color: var(--text-secondary); font-size: 0.95rem;">
+              <li style="display:flex; gap:10px;">
+                <span style="color:#10b981;">✔</span>
+                <div><strong style="color:#fff;">LLM Barred from Authorization:</strong> The AI extracts messy text, but a pure mathematical engine makes the final spending decision.</div>
+              </li>
+              <li style="display:flex; gap:10px;">
+                <span style="color:#10b981;">✔</span>
+                <div><strong style="color:#fff;">Cryptographic Ed25519 Mandates:</strong> Agents cannot exceed strictly signed budgets, allowed vendor lists, or velocity limits.</div>
+              </li>
+              <li style="display:flex; gap:10px;">
+                <span style="color:#10b981;">✔</span>
+                <div><strong style="color:#fff;">Human Step-Up Safeguards:</strong> High-value transactions or unusual spending patterns automatically escalate to a supervisor.</div>
+              </li>
+              <li style="display:flex; gap:10px;">
+                <span style="color:#10b981;">✔</span>
+                <div><strong style="color:#fff;">Immutable SHA-256 Ledger:</strong> Every event is hash-chained and locked against tampering with PostgreSQL database triggers.</div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCENE 3: ARCHITECTURE & FLOW -->
+      <section class="slide" id="slide-2">
+        <div class="slide-category">Scene 03 // System Architecture</div>
+        <h2 class="slide-title">Pure Domain Isolation: The 0ms I/O Boundary</h2>
+        <p class="slide-subtitle">Strict separation between unstructured AI extraction, pure deterministic policy evaluation, and real payment settlement.</p>
+
+        <div class="flow-diagram-container">
+          <!-- Animated SVG Architecture Flow Diagram -->
+          <svg class="flow-svg" viewBox="0 0 1100 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="flow-cyan" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#00f2fe"/>
+                <stop offset="100%" stop-color="#3b82f6"/>
+              </linearGradient>
+            </defs>
+
+            <!-- Node 1: AI Agent & Invoice -->
+            <rect x="20" y="80" width="180" height="180" rx="12" fill="#0f172a" stroke="#334155" stroke-width="2"/>
+            <text x="110" y="115" fill="#94a3b8" font-family="monospace" font-size="12" text-anchor="middle">UNTRUSTED INPUT</text>
+            <text x="110" y="150" fill="#fff" font-family="sans-serif" font-size="16" font-weight="700" text-anchor="middle">AI Agent</text>
+            <text x="110" y="175" fill="#38bdf8" font-family="monospace" font-size="12" text-anchor="middle">+ Gemini 2.5 Flash</text>
+            <text x="110" y="210" fill="#64748b" font-family="sans-serif" font-size="11" text-anchor="middle">Invoice Text Extraction</text>
+            <rect x="50" y="225" width="120" height="22" rx="4" fill="rgba(239,68,68,0.2)" stroke="#ef4444"/>
+            <text x="110" y="240" fill="#fca5a5" font-family="monospace" font-size="10" text-anchor="middle">No Auth Authority</text>
+
+            <!-- Arrow 1 -->
+            <path d="M 200 170 L 270 170" stroke="#00f2fe" stroke-width="2" stroke-dasharray="4 4"/>
+            <polygon points="275,170 265,165 265,175" fill="#00f2fe"/>
+            <text x="238" y="160" fill="#94a3b8" font-family="monospace" font-size="10" text-anchor="middle">Payload</text>
+
+            <!-- Isolation Barrier -->
+            <line x1="285" y1="40" x2="285" y2="320" stroke="#ef4444" stroke-width="2" stroke-dasharray="6 6"/>
+            <text x="285" y="30" fill="#ef4444" font-family="monospace" font-size="11" font-weight="700" text-anchor="middle">SECURITY BOUNDARY</text>
+
+            <!-- Node 2: PHALANX PURE CORE -->
+            <rect x="310" y="60" width="240" height="220" rx="16" fill="rgba(15, 23, 42, 0.9)" stroke="#00f2fe" stroke-width="2"/>
+            <rect x="330" y="80" width="200" height="28" rx="6" fill="rgba(0, 242, 254, 0.15)"/>
+            <text x="430" y="98" fill="#00f2fe" font-family="monospace" font-size="12" font-weight="700" text-anchor="middle">PHALANX PURE CORE</text>
+            <text x="430" y="135" fill="#fff" font-family="sans-serif" font-size="15" font-weight="700" text-anchor="middle">Deterministic Policy Engine</text>
+            <text x="430" y="160" fill="#10b981" font-family="monospace" font-size="12" text-anchor="middle">⚡ Latency: 0.4ms (0ms I/O)</text>
+            <text x="430" y="185" fill="#94a3b8" font-family="sans-serif" font-size="11" text-anchor="middle">• RFC 8785 Canonical Digest</text>
+            <text x="430" y="205" fill="#94a3b8" font-family="sans-serif" font-size="11" text-anchor="middle">• Ed25519 Signature Verification</text>
+            <text x="430" y="225" fill="#94a3b8" font-family="sans-serif" font-size="11" text-anchor="middle">• Mandate Velocity / Budget Bounds</text>
+            <text x="430" y="255" fill="#a5b4fc" font-family="monospace" font-size="11" font-weight="600" text-anchor="middle">Zero Clock • Zero Network</text>
+
+            <!-- Branch Arrows to 3 Decisions -->
+            <path d="M 550 120 L 630 85" stroke="#10b981" stroke-width="2"/>
+            <path d="M 550 170 L 630 170" stroke="#f59e0b" stroke-width="2"/>
+            <path d="M 550 220 L 630 255" stroke="#ef4444" stroke-width="2"/>
+
+            <!-- 3 Outcomes -->
+            <!-- ALLOW -->
+            <rect x="635" y="65" width="140" height="42" rx="8" fill="rgba(16,185,129,0.15)" stroke="#10b981" stroke-width="1.5"/>
+            <text x="705" y="91" fill="#10b981" font-family="monospace" font-size="13" font-weight="800" text-anchor="middle">ALLOW</text>
+
+            <!-- STEP_UP -->
+            <rect x="635" y="149" width="140" height="42" rx="8" fill="rgba(245,158,11,0.15)" stroke="#f59e0b" stroke-width="1.5"/>
+            <text x="705" y="175" fill="#f59e0b" font-family="monospace" font-size="13" font-weight="800" text-anchor="middle">STEP_UP</text>
+
+            <!-- DENY -->
+            <rect x="635" y="234" width="140" height="42" rx="8" fill="rgba(239,68,68,0.15)" stroke="#ef4444" stroke-width="1.5"/>
+            <text x="705" y="260" fill="#ef4444" font-family="monospace" font-size="13" font-weight="800" text-anchor="middle">DENY</text>
+
+            <!-- Step Up to Human Review -->
+            <path d="M 775 170 L 830 170" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="3 3"/>
+            <rect x="835" y="145" width="110" height="50" rx="8" fill="#1e293b" stroke="#f59e0b"/>
+            <text x="890" y="167" fill="#fde68a" font-family="sans-serif" font-size="11" font-weight="700" text-anchor="middle">Supervisor</text>
+            <text x="890" y="183" fill="#94a3b8" font-family="sans-serif" font-size="10" text-anchor="middle">Approval Queue</text>
+
+            <!-- Allow connects to PayPal -->
+            <path d="M 775 86 L 960 86 L 960 140" stroke="#10b981" stroke-width="1.5"/>
+            <path d="M 945 170 L 980 170" stroke="#10b981" stroke-width="1.5"/>
+
+            <!-- Node 3: PayPal Settlement & Ledger -->
+            <rect x="980" y="90" width="100" height="75" rx="10" fill="rgba(0, 121, 193, 0.2)" stroke="#0079c1" stroke-width="1.5"/>
+            <text x="1030" y="122" fill="#38bdf8" font-family="sans-serif" font-size="13" font-weight="700" text-anchor="middle">PayPal</text>
+            <text x="1030" y="142" fill="#94a3b8" font-family="monospace" font-size="10" text-anchor="middle">Orders v2</text>
+
+            <rect x="980" y="185" width="100" height="75" rx="10" fill="rgba(16, 185, 129, 0.15)" stroke="#10b981" stroke-width="1.5"/>
+            <text x="1030" y="217" fill="#10b981" font-family="sans-serif" font-size="13" font-weight="700" text-anchor="middle">Ledger</text>
+            <text x="1030" y="237" fill="#94a3b8" font-family="monospace" font-size="10" text-anchor="middle">SHA-256 Chain</text>
+          </svg>
+        </div>
+      </section>
+
+      <!-- SCENE 4: CRYPTOGRAPHIC GUARANTEES -->
+      <section class="slide" id="slide-3">
+        <div class="slide-category">Scene 04 // Cryptographic Integrity</div>
+        <h2 class="slide-title">Verifiable Identity, Mandates &amp; Immutability</h2>
+        <p class="slide-subtitle">Four mathematically provable layers protecting every cent against spoofing, tampering, and repudiation.</p>
+
+        <div class="slide-grid-2">
+          <!-- Left Column -->
+          <div style="display:flex; flex-direction:column; gap:20px;">
+            <div class="panel-card">
+              <div class="panel-header">
+                <span class="panel-title"><span style="color:#00f2fe;">01</span> Ed25519 Cryptographic Mandates</span>
+                <span class="badge-decision allow">32-BYTE SEED</span>
+              </div>
+              <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:8px;">
+                Before any agent operates, treasury signs an asymmetric Ed25519 keypair. The mandate establishes strict bounds: authorized vendor categories, maximum single transaction, daily limits, and valid time windows.
+              </p>
+              <div style="font-family:var(--font-mono); font-size:0.75rem; background:#020617; padding:8px 12px; border-radius:6px; color:#38bdf8;">
+                Key ID: key_a11878f59e66 // Alg: Ed25519 // Status: VALIDATED
+              </div>
+            </div>
+
+            <div class="panel-card">
+              <div class="panel-header">
+                <span class="panel-title"><span style="color:#8b5cf6;">02</span> RFC 8785 Canonical JSON Intent</span>
+                <span class="badge-decision stepup">TAMPER PROOF</span>
+              </div>
+              <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:8px;">
+                Prevents JSON serialization attacks. All fields are alphabetically sorted with zero arbitrary whitespace before hashing, ensuring bit-for-bit canonical reproduction across platforms.
+              </p>
+              <div style="font-family:var(--font-mono); font-size:0.75rem; background:#020617; padding:8px 12px; border-radius:6px; color:#c084fc;">
+                sha256(canonical_jcs(payment_intent)) -> 64-hex digest
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column -->
+          <div style="display:flex; flex-direction:column; gap:20px;">
+            <div class="panel-card">
+              <div class="panel-header">
+                <span class="panel-title"><span style="color:#10b981;">03</span> SHA-256 Merkle / Hash Chaining</span>
+                <span class="badge-decision allow">VERIFIABLE CHAIN</span>
+              </div>
+              <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:8px;">
+                Every ledger event cryptographically binds to the previous event hash: <code>current_hash = SHA256(prev_hash + sequence + event_data)</code>. Any historical record edit invalidates the entire chain.
+              </p>
+              <div style="font-family:var(--font-mono); font-size:0.75rem; background:#020617; padding:8px 12px; border-radius:6px; color:#4ade80;">
+                Chain integrity verified across 100% of recorded transactions
+              </div>
+            </div>
+
+            <div class="panel-card">
+              <div class="panel-header">
+                <span class="panel-title"><span style="color:#ef4444;">04</span> PostgreSQL Database Write Triggers</span>
+                <span class="badge-decision deny">FAIL CLOSED</span>
+              </div>
+              <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:8px;">
+                Database-level PL/pgSQL triggers explicitly reject any <code>UPDATE</code> or <code>DELETE</code> statements executed against ledger tables. Even an admin with direct SQL access cannot rewrite transaction history.
+              </p>
+              <div style="font-family:var(--font-mono); font-size:0.75rem; background:#020617; padding:8px 12px; border-radius:6px; color:#f87171;">
+                CREATE TRIGGER trg_deny_ledger_mutation BEFORE UPDATE OR DELETE
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCENE 5: LIVE APPLICATION DEMO & TESTER -->
+      <section class="slide" id="slide-4">
+        <div class="slide-category">Scene 05 // Live Application Walkthrough</div>
+        <h2 class="slide-title">Interactive Decision Engine &amp; Real Telemetry</h2>
+        <p class="slide-subtitle">Select an invoice below to observe the deterministic policy engine evaluate payment requests in real time.</p>
+
+        <div class="demo-tester-wrapper">
+          <!-- Left: Sample Selector -->
+          <div class="sample-selector-list">
+            <div class="sample-card active" data-key="sample_a" onclick="selectScenario('sample_a')">
+              <div class="sample-card-header">
+                <span class="sample-title">Sample A: Cloud Hosting</span>
+                <span class="badge-decision allow">ALLOW</span>
+              </div>
+              <p class="sample-desc">Routine AWS cluster charge ($25.00) well within the $500 autonomous threshold.</p>
+            </div>
+
+            <div class="sample-card" data-key="sample_b" onclick="selectScenario('sample_b')">
+              <div class="sample-card-header">
+                <span class="sample-title">Sample B: Annual License</span>
+                <span class="badge-decision stepup">STEP_UP</span>
+              </div>
+              <p class="sample-desc">High-value enterprise software ($1,200.00). Exceeds limit; escalates to human queue.</p>
+            </div>
+
+            <div class="sample-card" data-key="sample_c" onclick="selectScenario('sample_c')">
+              <div class="sample-card-header">
+                <span class="sample-title">Sample C: Prompt Injection</span>
+                <span class="badge-decision deny">DENY</span>
+              </div>
+              <p class="sample-desc">Adversarial system override instructing $9,999 wire to shady account. Killed instantly.</p>
+            </div>
+
+            <div style="margin-top:auto; padding:12px; background:rgba(0,242,254,0.06); border-radius:8px; border:1px solid rgba(0,242,254,0.2);">
+              <span style="font-size:0.75rem; color:var(--cyan); font-family:var(--font-mono);">UI SCREENSHOTS INSPECTOR:</span>
+              <p style="font-size:0.75rem; color:var(--text-secondary); margin-top:4px;">Click any screenshot on Scene 6 & 7 to zoom into high-res captures of the live production interface.</p>
+            </div>
+          </div>
+
+          <!-- Right: Real-time Telemetry Card -->
+          <div class="telemetry-view">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #1e293b; padding-bottom:12px;">
+              <div>
+                <span style="font-size:0.8rem; font-family:var(--font-mono); color:#94a3b8;">EVALUATION RESULT</span>
+                <h3 style="font-size:1.3rem; color:#fff;" id="scenario-title">Real-time Policy Outcome</h3>
+              </div>
+              <span id="scenario-decision-badge" class="badge-decision allow" style="font-size:1rem; padding:6px 16px;">ALLOW</span>
+            </div>
+
+            <div class="telemetry-row">
+              <span style="color:var(--text-muted); font-size:0.85rem;">Target Payee Vendor:</span>
+              <span id="scenario-vendor" style="font-weight:700; color:#fff;">Acme Cloud Hosting Services Inc.</span>
+            </div>
+
+            <div class="telemetry-row">
+              <span style="color:var(--text-muted); font-size:0.85rem;">PayPal Destination Account:</span>
+              <span id="scenario-account" style="font-family:var(--font-mono); color:#38bdf8;">vendor-paypal-sandbox-1</span>
+            </div>
+
+            <div class="telemetry-row">
+              <span style="color:var(--text-muted); font-size:0.85rem;">Requested Payment Amount:</span>
+              <span id="scenario-amount" style="font-family:var(--font-mono); font-size:1.1rem; font-weight:800; color:#10b981;">$25.00 USD</span>
+            </div>
+
+            <div class="telemetry-row">
+              <span style="color:var(--text-muted); font-size:0.85rem;">Engine Authorization Rationale:</span>
+              <span id="scenario-reason" style="color:#e2e8f0; font-size:0.9rem;">Pre-authorized vendor &amp; amount below autonomous $500.00 limit</span>
+            </div>
+
+            <div class="telemetry-row">
+              <span style="color:var(--text-muted); font-size:0.85rem;">Mandate Budget Impact:</span>
+              <span id="scenario-budget" style="font-family:var(--font-mono); color:#a5b4fc;">$25,000.00 (Reserved: -$25.00)</span>
+            </div>
+
+            <div class="telemetry-row">
+              <span style="color:var(--text-muted); font-size:0.85rem;">Downstream Settlement Action:</span>
+              <span id="scenario-settlement" style="color:#00f2fe; font-weight:600;">PayPal Sandbox Order Created &amp; Authorized</span>
+            </div>
+
+            <div class="telemetry-row">
+              <span style="color:var(--text-muted); font-size:0.85rem;">Cryptographic Ledger Hash:</span>
+              <span id="scenario-hash" style="font-family:var(--font-mono); font-size:0.8rem; color:#94a3b8;">sha256:4a81c..99e2</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCENE 6: ATTACK LAB & ADVERSARIAL ROBUSTNESS -->
+      <section class="slide" id="slide-5">
+        <div class="slide-category">Scene 06 // Adversarial Robustness</div>
+        <h2 class="slide-title">Attack Lab: 0% Bypass Across 6 Threat Vectors</h2>
+        <p class="slide-subtitle">Continuous automated penetration testing against adversarial invoices, prompt injections, and banking fraud.</p>
+
+        <div class="slide-grid-2">
+          <!-- 6 Attack Vectors Grid -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div class="panel-card" style="padding:16px;">
+              <span class="badge-decision deny" style="font-size:0.65rem;">BLOCKED</span>
+              <h4 style="color:#fff; font-size:0.95rem; margin-top:6px;">Prompt Injection</h4>
+              <p style="font-size:0.75rem; color:var(--text-secondary);">Direct system overrides instructing fund transfers.</p>
+            </div>
+
+            <div class="panel-card" style="padding:16px;">
+              <span class="badge-decision deny" style="font-size:0.65rem;">BLOCKED</span>
+              <h4 style="color:#fff; font-size:0.95rem; margin-top:6px;">Vendor Spoofing</h4>
+              <p style="font-size:0.75rem; color:var(--text-secondary);">Trusted name claiming spoofed routing account.</p>
+            </div>
+
+            <div class="panel-card" style="padding:16px;">
+              <span class="badge-decision deny" style="font-size:0.65rem;">BLOCKED</span>
+              <h4 style="color:#fff; font-size:0.95rem; margin-top:6px;">Replay Attack</h4>
+              <p style="font-size:0.75rem; color:var(--text-secondary);">Resubmission of already-settled invoice hashes.</p>
+            </div>
+
+            <div class="panel-card" style="padding:16px;">
+              <span class="badge-decision deny" style="font-size:0.65rem;">BLOCKED</span>
+              <h4 style="color:#fff; font-size:0.95rem; margin-top:6px;">Velocity Flooding</h4>
+              <p style="font-size:0.75rem; color:var(--text-secondary);">Micro-transaction spam attempting budget drainage.</p>
+            </div>
+
+            <div class="panel-card" style="padding:16px;">
+              <span class="badge-decision deny" style="font-size:0.65rem;">BLOCKED</span>
+              <h4 style="color:#fff; font-size:0.95rem; margin-top:6px;">Budget Exhaustion</h4>
+              <p style="font-size:0.75rem; color:var(--text-secondary);">Transactions exceeding lifetime mandate ceiling.</p>
+            </div>
+
+            <div class="panel-card" style="padding:16px;">
+              <span class="badge-decision deny" style="font-size:0.65rem;">BLOCKED</span>
+              <h4 style="color:#fff; font-size:0.95rem; margin-top:6px;">In-Memory Tamper</h4>
+              <p style="font-size:0.75rem; color:var(--text-secondary);">Payload alteration invalidating RFC 8785 digest.</p>
+            </div>
+          </div>
+
+          <!-- Real Screenshot Preview -->
+          <div class="screenshot-preview-container">
+            <img src="assets/screenshots/08-attack-lab-desktop-local.png" alt="Attack Lab Live Interface" class="screenshot-main-img" title="Click to zoom in">
+            <div class="screenshot-thumbnails-row">
+              <img src="assets/screenshots/08-attack-lab-desktop-local.png" class="thumb-item active" alt="Attack Lab">
+              <img src="assets/screenshots/04-invoice-agent-sample-c-desktop-local.png" class="thumb-item" alt="Sample C Injection">
+              <img src="assets/screenshots/05-invoice-agent-sample-d-desktop-local.png" class="thumb-item" alt="Sample D Spoofing">
+              <img src="assets/screenshots/07-approvals-refusal-desktop-local.png" class="thumb-item" alt="Refusal Screen">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCENE 7: AUDIT LEDGER & PAYPAL SANDBOX -->
+      <section class="slide" id="slide-6">
+        <div class="slide-category">Scene 07 // Settlement &amp; Traceability</div>
+        <h2 class="slide-title">Immutable Ledger &amp; PayPal Sandbox Orders v2</h2>
+        <p class="slide-subtitle">Two-phase cryptographic authorization and capture with continuous database append-only verification.</p>
+
+        <div class="slide-grid-2">
+          <!-- Real Screenshot Preview of Ledger -->
+          <div class="screenshot-preview-container">
+            <img src="assets/screenshots/09-activity-ledger-desktop-local.png" alt="Activity Ledger Live Interface" class="screenshot-main-img" title="Click to zoom in">
+            <div class="screenshot-thumbnails-row">
+              <img src="assets/screenshots/09-activity-ledger-desktop-local.png" class="thumb-item active" alt="Ledger Hash Chain">
+              <img src="assets/screenshots/11-paypal-sandbox-awaiting-desktop-local.png" class="thumb-item" alt="PayPal Sandbox">
+              <img src="assets/screenshots/10-mandates-desktop-local.png" class="thumb-item" alt="Mandate Manager">
+              <img src="assets/screenshots/01-overview-desktop-local.png" class="thumb-item" alt="Dashboard KPI">
+            </div>
+          </div>
+
+          <!-- Technical Explanations -->
+          <div style="display:flex; flex-direction:column; gap:16px;">
+            <div class="panel-card">
+              <div class="panel-header">
+                <span class="panel-title" style="color:#0079c1;">💳 PayPal Sandbox Integration</span>
+                <span class="badge-decision allow">ORDERS V2</span>
+              </div>
+              <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:10px;">
+                PHALANX connects to the live PayPal Sandbox Orders v2 API. Rather than executing raw charges, it executes a strict two-phase commit:
+              </p>
+              <ul style="list-style:none; font-size:0.85rem; color:#cbd5e1; display:flex; flex-direction:column; gap:6px;">
+                <li>1. <strong>Create &amp; Authorize:</strong> Order generated with unique idempotency key.</li>
+                <li>2. <strong>Policy Verification:</strong> Cryptographic mandate validation in 0.4ms.</li>
+                <li>3. <strong>Capture:</strong> Released only upon final receipt verification and signature match.</li>
+              </ul>
+            </div>
+
+            <div class="panel-card">
+              <div class="panel-header">
+                <span class="panel-title" style="color:#10b981;">⛓️ Cryptographic Ledger Verification</span>
+                <span class="badge-decision allow">ZERO TAMPER</span>
+              </div>
+              <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:10px;">
+                Auditors can trigger independent on-demand chain verification. Every record links to the previous event block:
+              </p>
+              <div style="font-family:var(--font-mono); font-size:0.75rem; background:#020617; padding:10px; border-radius:6px; color:#6ee7b7;">
+                [CHAIN VERIFY] 148 events checked.<br>
+                status: PASS (0 broken links, 0 orphaned hashes).<br>
+                Postgres trigger trg_deny_ledger_mutation: ACTIVE.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCENE 8: WINNING PITCH & CLOSING -->
+      <section class="slide" id="slide-7">
+        <div class="slide-category">Scene 08 // The Winning Pitch</div>
+        <h2 class="slide-title">The Foundation for Controlled Autonomous Finance</h2>
+        <p class="slide-subtitle">AI proposes. Policy decides. Humans oversee. The ledger remembers.</p>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:28px; flex:1; min-height:0;">
+          <!-- Comparison Table -->
+          <div class="panel-card" style="padding:20px;">
+            <div class="panel-header">
+              <span class="panel-title">Architectural Paradigm Shift</span>
+            </div>
+            <table style="width:100%; border-collapse:collapse; font-size:0.85rem; color:var(--text-secondary);">
+              <thead>
+                <tr style="border-bottom:1px solid #334155; text-align:left;">
+                  <th style="padding:8px 4px; color:#94a3b8;">Capability</th>
+                  <th style="padding:8px 4px; color:#ef4444;">Conventional Agents</th>
+                  <th style="padding:8px 4px; color:#10b981;">PHALANX Layer</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                  <td style="padding:10px 4px; font-weight:600; color:#fff;">Authorization Path</td>
+                  <td style="padding:10px 4px; color:#fca5a5;">LLM Decides</td>
+                  <td style="padding:10px 4px; color:#86efac; font-weight:700;">Deterministic Core</td>
+                </tr>
+                <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                  <td style="padding:10px 4px; font-weight:600; color:#fff;">Identity &amp; Bounds</td>
+                  <td style="padding:10px 4px; color:#fca5a5;">Raw API Keys</td>
+                  <td style="padding:10px 4px; color:#86efac; font-weight:700;">Ed25519 Mandates</td>
+                </tr>
+                <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                  <td style="padding:10px 4px; font-weight:600; color:#fff;">High-Value Spikes</td>
+                  <td style="padding:10px 4px; color:#fca5a5;">Unchecked Spend</td>
+                  <td style="padding:10px 4px; color:#86efac; font-weight:700;">Human Step-Up Queue</td>
+                </tr>
+                <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                  <td style="padding:10px 4px; font-weight:600; color:#fff;">Auditability</td>
+                  <td style="padding:10px 4px; color:#fca5a5;">Mutable DB Logs</td>
+                  <td style="padding:10px 4px; color:#86efac; font-weight:700;">SHA-256 Hash Chain</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 4px; font-weight:600; color:#fff;">Prompt Injections</td>
+                  <td style="padding:10px 4px; color:#fca5a5;">Vulnerable</td>
+                  <td style="padding:10px 4px; color:#86efac; font-weight:700;">0% Bypass Rate</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Closing Card -->
+          <div class="panel-card" style="text-align:center; justify-content:center; align-items:center; padding:32px; border-color:var(--cyan);">
+            <img src="assets/logo/logo.svg" alt="PHALANX Seal" style="width:72px; height:72px; margin-bottom:16px;">
+            <h3 style="font-size:1.8rem; color:#fff; font-weight:900;">PHALANX</h3>
+            <p style="font-size:1.05rem; color:var(--cyan); margin-bottom:20px; font-weight:600;">
+              Let agents act. Keep humans and policy in control.
+            </p>
+            <div style="display:flex; flex-direction:column; gap:8px; font-size:0.85rem; color:var(--text-secondary); margin-bottom:24px;">
+              <span>• PayPal AI Hackathon 2026 Entry</span>
+              <span>• Full Test Suite: 9/9 CI Workflows Passing</span>
+              <span>• Open Source: github.com/maitray-agrawal/PHALANX</span>
+            </div>
+            <a href="https://github.com/maitray-agrawal/PHALANX" target="_blank" class="btn-primary-control" style="text-decoration:none; display:inline-flex;">
+              Inspect GitHub Repository ↗
+            </a>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Bottom Audio & Narration Synchronized Footer -->
+    <footer class="presentation-footer">
+      <div class="playback-controls">
+        <button id="btn-prev" class="btn-icon" title="Previous Scene (Left Arrow)">◀</button>
+        <button id="btn-play-pause" class="btn-primary-control">
+          <span>▶</span> Play Narration
+        </button>
+        <button id="btn-next" class="btn-icon" title="Next Scene (Right Arrow)">▶</button>
+      </div>
+
+      <!-- Teleprompter Subtitle Box -->
+      <div class="subtitle-teleprompter-box">
+        <div class="subtitle-indicator">
+          <span id="scene-time-badge">0:00 - 0:45 | Scene 1 of 8</span>
+          <span style="margin-left:auto; color:var(--text-muted); font-size:0.65rem;">Press SPACE to toggle narration • F for fullscreen</span>
+        </div>
+        <div class="subtitle-text" id="subtitle-text">
+          Artificial intelligence is moving far beyond simple chat boxes...
+        </div>
+      </div>
+
+      <!-- Audio Settings -->
+      <div class="audio-settings-bar">
+        <select id="voice-select" class="voice-select" title="Voice Selection">
+          <option>Loading Voices...</option>
+        </select>
+        <select id="speed-select" class="voice-select" style="max-width:90px;" title="Speaking Rate">
+          <option value="0.9">0.9x</option>
+          <option value="1.0" selected>1.0x</option>
+          <option value="1.1">1.1x</option>
+          <option value="1.2">1.2x</option>
+        </select>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Fullscreen Modal for High-Res Screenshot Inspection -->
+  <div id="modal-viewer">
+    <button class="close-modal" title="Close (ESC)">×</button>
+    <img id="modal-img" src="" alt="High-Resolution Interface View">
+  </div>
+
+  <script src="scripts/presentation.js"></script>
+</body>
+</html>
