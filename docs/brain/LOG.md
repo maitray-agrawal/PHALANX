@@ -29,3 +29,8 @@ Changed: routes.py, services.py, ports.py, paypal.py, test_api.py, test_reconcil
 Commands: pytest -q (400 passed in 149.85s); pytest -m redteam (105 passed); npm test (28 passed); ruff check, ruff format, mypy app clean.
 Findings closed: M0 items 1-5 verified with targeted failing tests and full suites.
 Next: Push dev to origin and verify CI.
+2026-11-11 | TASK D1b: Fix D1 deployment gaps, revert SQLite workarounds, client IP diagnostic, Neon tuning, keygen script.
+Changed: services.py, routes.py, database.py, alembic/env.py, render.yaml, README.md, scripts/gen_keys.py, test_api.py, test_deployment_config.py, test_reconciliation.py, test_migration_upgrade.py, test_postgres_concurrency.py.
+Commands: uv run pytest -q -rs (410 passed, 10 skipped in 199s); uv run pytest -q -m redteam (105 passed); ruff check (clean); ruff format (clean); mypy app (clean across 41 files); cd web && npm test && npm run lint && npx tsc --noEmit (all clean, 30 tests pass); python scripts/gen_keys.py (verified output format).
+Findings closed: D1 deployment gaps resolved; PostgreSQL test suite 100% passing (0 skipped); client IP and proxy peering analyzed.
+Next: Push dev and verify CI.

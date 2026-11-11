@@ -12,15 +12,20 @@ from alembic.config import Config
 
 
 def _get_test_db_url() -> str | None:
+    from app.infrastructure.config import settings
+
     test_url = os.getenv("TEST_DATABASE_URL")
     if test_url and "postgres" in test_url:
+        if "localhost" in test_url and os.name == "nt":
+            test_url = test_url.replace("localhost", "127.0.0.1")
         return test_url
-    base_url = os.getenv("DATABASE_URL")
+    base_url = os.getenv("DATABASE_URL") or settings.database_url
     if base_url and "postgres" in base_url:
         if "phalanx_db" in base_url:
-            return base_url.replace("/phalanx_db", "/phalanx_test")
+            base_url = base_url.replace("/phalanx_db", "/phalanx_test")
+        if "localhost" in base_url and os.name == "nt":
+            base_url = base_url.replace("localhost", "127.0.0.1")
         return base_url
-    # If DATABASE_URL is not set or not postgres, do not probe unstarted local default outside CI
     return None
 
 

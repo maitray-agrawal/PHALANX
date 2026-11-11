@@ -18,6 +18,7 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
+    # Region: set to match Neon database region (oregon for AWS us-west-2, or ohio for AWS us-east-2)
     region: oregon
     plan: free
     branch: main
@@ -61,11 +62,15 @@ services:
         value: sandbox
       - key: RECONCILER_ENABLED
         value: "false"
-      # Render routes through two proxy hops (Cloudflare edge + Render LB).
-      # Set TRUSTED_PROXY_COUNT=2 so extract_client_ip correctly peels the two
-      # rightmost hops and returns the real client IP as the leftmost XFF entry.
+      # Proxy chain: Client -> Cloudflare -> Render proxy -> app container.
+      # Render proxy is the TCP peer (request.client.host).
+      # Render appends Cloudflare IP as the rightmost entry in XFF (ips[-1]).
+      # Cloudflare appends the real Client IP at ips[-2].
+      # With extract_client_ip selecting ips[-1 - TRUSTED_PROXY_COUNT],
+      # TRUSTED_PROXY_COUNT=1 selects ips[-2] (the real Client IP).
+      # Status: UNVERIFIED until confirmed live via GET /v1/admin/client-ip.
       - key: TRUSTED_PROXY_COUNT
-        value: "2"
+        value: "1"
       - key: FORWARDED_ALLOW_IPS
         value: "*"
       - key: GEMINI_MODEL

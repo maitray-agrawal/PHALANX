@@ -30,9 +30,15 @@ verify storage quota and project count on the live page before hardcoding)
 | Direct connections (at 0.25 CU) | ~112 max_connections (105 usable) |
 | Pooled connections (PgBouncer) | Up to 10,000 concurrent clients |
 
-**Recommendation for PHALANX:** Use Neon's **pooled connection string**
-(`-pooler` hostname in `DATABASE_URL`) to avoid exhausting direct connection
-limits, especially when SQLAlchemy's connection pool is cold.
+**Recommendation for PHALANX:** Use Neon's **direct connection string**
+(standard hostname without `-pooler`) in `DATABASE_URL`. PHALANX uses SQLAlchemy's
+built-in client-side connection pooling (`pool_size=10, max_overflow=20`), which is
+well within the ~112 direct connection limit. Direct connections fully support
+`SELECT ... FOR UPDATE` row locks, transactional DDL during Alembic migrations,
+and prepared statements without PgBouncer limitations.
+
+> If a pooled URL is used (`-pooler`), PHALANX automatically sets psycopg
+> `prepare_threshold=None` in engine `connect_args` to disable server-side prepared statements.
 
 ## SSL Requirement
 
@@ -78,7 +84,7 @@ to run the equivalent SQL manually in the Neon SQL console. See
 
 ## Notes for PHALANX
 
-- Use the **pooled** connection string (`<host>-pooler.neon.tech`) in production.
+- Use the **direct** connection string (`<host>.neon.tech` without `-pooler`) in hosted environments.
 - Alembic runs `alembic upgrade head` at boot via `scripts/boot.py` — this is
   the only schema migration path on Neon; `init_db.sh` is for local Docker only.
 - The immutability triggers (`trg_deny_ledger_mutation`) are installed by

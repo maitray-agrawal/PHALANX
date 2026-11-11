@@ -60,7 +60,8 @@ cd web && npm test -- --run && npm run build
 ## Run the Demo
 
 - **Hosted Demo**: `https://phalanx-demo.onrender.com` (placeholder; set after deployment).
-- **Cold Starts**: Render free instances spin down after 15 minutes of inactivity; first request takes 30–60s.
+- **Cold Starts**: Render free tier sleeps after 15 min inactivity; ping `GET /healthz` every 10 min to keep warm during live demos.
+- **Automation Schedule**: External cron pings `GET /healthz` every 10m; `POST /v1/admin/reconcile-scheduled` every 30–60m (`X-Reconcile-Secret`); `POST /v1/admin/daily-reset` daily.
 - **Local Path**: `docker compose up --build` (API on `http://localhost:8000`, UI on `http://localhost:5173`).
 - **Honest Limits**: Free-tier deployment, in-memory webhook deduplication (resets on container restart), PayPal sandbox only.
 

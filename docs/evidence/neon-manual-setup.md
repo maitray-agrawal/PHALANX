@@ -17,15 +17,20 @@ Neon does not provide a PostgreSQL `superuser` role; your admin account is `neon
 
 ## Setup Steps in Neon Web Console
 
-### Option A: Use the Default Neon Database & Owner (Recommended for Simple Free Deployments)
+### Option A: Use the Default Neon Database & Owner with Direct Connection (Recommended)
 
 Neon provisions a default database `neondb` and role `neondb_owner`.
-You can point PHALANX directly to this role with pooled connections.
+We **recommend using the DIRECT connection string** (the hostname without `-pooler`).
+PHALANX uses SQLAlchemy connection pooling with row-level locking (`SELECT ... FOR UPDATE`),
+Alembic migration DDL, and transaction-scoped sessions. Direct connections ensure full
+PostgreSQL feature compatibility without PgBouncer transaction-pooling limitations.
 
-Your connection string in Render environment variables:
+Your connection string in Render environment variables (Direct Connection):
 ```
-DATABASE_URL=postgresql+psycopg://neondb_owner:<YOUR_NEON_PASSWORD>@ep-example-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require
+DATABASE_URL=postgresql+psycopg://neondb_owner:<YOUR_NEON_PASSWORD>@ep-example.us-east-2.aws.neon.tech/neondb?sslmode=require
 ```
+
+> **Note on Pooled Connection String (`-pooler`):** If you choose to use Neon's connection pooler (`ep-example-pooler`), PHALANX automatically sets psycopg `prepare_threshold=None` in engine `connect_args` to disable server-side prepared statements, combined with `pool_pre_ping=True` and `pool_recycle=240` to avoid broken transaction pooler sessions. However, the Direct connection remains the primary recommendation.
 
 When PHALANX boots, `scripts/boot.py` runs `alembic upgrade head` and creates all required tables and immutability triggers automatically using this role.
 
@@ -86,8 +91,9 @@ FOR EACH ROW EXECUTE FUNCTION deny_ledger_mutation();
 
 ## Neon Verification Checklist
 
-- [ ] Pooled connection hostname (`-pooler`) is used in `DATABASE_URL`.
+- [ ] Direct connection hostname (`ep-...` without `-pooler`) is used in `DATABASE_URL` (recommended).
 - [ ] `?sslmode=require` is explicitly present in `DATABASE_URL`.
+- [ ] SQLAlchemy engine tuning verified: `pool_pre_ping=True`, `pool_recycle=240`, `connect_timeout=10` (and `prepare_threshold=None` if pooled).
 - [ ] `boot.py` completes cleanly (`Alembic migrations successfully applied to head`).
 - [ ] `trg_deny_ledger_mutation` trigger is active on `ledger_events`.
 

@@ -22,7 +22,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool, StaticPool
+from sqlalchemy.pool import NullPool
 
 from app.api.dependencies import (
     get_authorization_service,
@@ -70,6 +70,8 @@ def _get_test_engine():
             db_url = base_url
 
     if db_url and "postgres" in db_url:
+        if "localhost" in db_url and os.name == "nt":
+            db_url = db_url.replace("localhost", "127.0.0.1")
         try:
             engine = create_engine(
                 db_url,
@@ -84,11 +86,7 @@ def _get_test_engine():
             pass
 
     # Fallback to local SQLite if postgres test DB is not running
-    sqlite_engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
+    sqlite_engine = create_engine("sqlite:///:memory:", poolclass=NullPool)
     Base.metadata.create_all(sqlite_engine)
     return sqlite_engine
 
@@ -1681,8 +1679,6 @@ def test_resolve_needs_review_h9_lookup_errors_refuse_and_failures_release(db_en
 
 def test_concurrent_reconciler_instances_skip_locked_no_double_processing(db_engine):
     """Two concurrent reconciler instances use FOR UPDATE SKIP LOCKED and do not double-process."""
-    if "postgres" not in db_engine.url.drivername:
-        pytest.skip("SKIP LOCKED concurrency test requires PostgreSQL row locking")
     session_factory = sessionmaker(bind=db_engine, expire_on_commit=False)
     clock = SystemUtcClock()
     shared_rail = FakePaymentRail(should_succeed=True, status="COMPLETED")

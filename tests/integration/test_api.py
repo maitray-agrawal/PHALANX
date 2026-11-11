@@ -331,3 +331,85 @@ def test_admin_reset_allowed_in_demo_environment(
     )
     assert resp.status_code == status.HTTP_200_OK
     assert resp.json()["status"] == "reset_completed"
+
+
+def test_client_ip_endpoint_auth(client: TestClient) -> None:
+    """GET /v1/admin/client-ip requires X-Admin-Token with constant-time compare."""
+    # 1. Missing header -> 401
+    resp_no_token = client.get("/v1/admin/client-ip")
+    assert resp_no_token.status_code == status.HTTP_401_UNAUTHORIZED
+
+    # 2. Invalid header -> 401
+    resp_bad_token = client.get(
+        "/v1/admin/client-ip",
+        headers={"X-Admin-Token": "invalid-admin-token-1234567890"},
+    )
+    assert resp_bad_token.status_code == status.HTTP_401_UNAUTHORIZED
+
+    # 3. Valid token -> 200
+    resp_valid = client.get(
+        "/v1/admin/client-ip",
+        headers={"X-Admin-Token": settings.admin_token},
+    )
+    assert resp_valid.status_code == status.HTTP_200_OK
+    data = resp_valid.json()
+    assert "raw_x_forwarded_for" in data
+    assert "tcp_peer" in data
+    assert "resolved_client_ip" in data
+
+
+def test_client_ip_endpoint_forged_prefix(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GET /v1/admin/client-ip resolves client IP via trusted proxy count,
+    ignoring forged prefix.
+    """
+    monkeypatch.setenv("FORWARDED_ALLOW_IPS", "*")
+    monkeypatch.setenv("TRUSTED_PROXY_COUNT", "1")
+    monkeypatch.setattr(settings, "forwarded_allow_ips", "*")
+    monkeypatch.setattr(settings, "trusted_proxy_count", 1)
+
+    forged_xff = "203.0.113.195, 198.51.100.22, 172.70.100.5"
+    resp = client.get(
+        "/v1/admin/client-ip",
+        headers={
+            "X-Admin-Token": settings.admin_token,
+            "X-Forwarded-For": forged_xff,
+        },
+    )
+    assert resp.status_code == status.HTTP_200_OK
+    data = resp.json()
+    assert data["raw_x_forwarded_for"] == forged_xff
+    assert data["resolved_client_ip"] == "198.51.100.22"
+
+
+def test_demo_environment_reset_requires_admin_token_not_principal_token(
+    client: TestClient, principal_token: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """In ENVIRONMENT=demo, demo Principal token gets 403; only admin token or secret can reset."""
+    monkeypatch.setenv("ENVIRONMENT", "demo")
+    monkeypatch.setattr(settings, "environment", "demo")
+
+    # Principal token must get 403 Forbidden in demo environment
+    resp_principal = client.post(
+        "/v1/admin/reset",
+        headers={"Authorization": f"Bearer {principal_token}"},
+    )
+    assert resp_principal.status_code == status.HTTP_403_FORBIDDEN
+    assert "demo environment" in resp_principal.json()["detail"].lower()
+
+    # Admin token gets 200 OK
+    resp_admin = client.post(
+        "/v1/admin/reset",
+        headers={"X-Admin-Token": settings.admin_token},
+    )
+    assert resp_admin.status_code == status.HTTP_200_OK
+
+    # Reconcile secret allows daily-reset path
+    valid_reconcile_secret = "test-reconcile-secret-at-least-24-chars-long"
+    monkeypatch.setattr(settings, "reconcile_secret", valid_reconcile_secret)
+    resp_daily = client.post(
+        "/v1/admin/daily-reset",
+        headers={"X-Reconcile-Secret": valid_reconcile_secret},
+    )
+    assert resp_daily.status_code == status.HTTP_200_OK

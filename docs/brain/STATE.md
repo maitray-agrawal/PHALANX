@@ -1,18 +1,18 @@
 # STATE (update after every task)
-Date: 10 Nov 2026 | Branch: dev | Last pushed commit on dev: 4aa958c | CI: passing (run 42839047363)
-Working tree: clean | M0 complete, hardened; T8 Real LLM Invoice Agent complete; D1 Render & Neon deployment ready (CI Green)
-Completed: T1, T2 (H1-H7), T3/T4 (N1, U1), M0 Hardening (H8-H10 closed), M0 Invariants (reconcile, auditor role, idempotent replay, may_release, exact webhooks), T8 Real LLM Invoice Agent, D1 Free Hosted Demo Config (render.yaml, Neon setup, healthz DB-isolation, reconcile-scheduled endpoint, demo env model, proxy-aware rate limits) | Doing: D1 verification | Next: T5 | Blocked on me: nothing
+Date: 11 Nov 2026 | Branch: dev | Last pushed commit on dev: 4aa958c | CI: passing (run 42839047363)
+Working tree: clean | M0 complete, hardened; T8 Real LLM Invoice Agent complete; D1 & D1b Render/Neon hosted configuration ready
+Completed: T1, T2 (H1-H7), T3/T4 (N1, U1), M0 Hardening (H8-H10 closed), M0 Invariants (reconcile, auditor role, idempotent replay, may_release, exact webhooks), T8 Real LLM Invoice Agent, D1/D1b Free Hosted Demo Config (render.yaml, Neon setup, healthz DB-isolation, reconcile-scheduled & daily-reset endpoints, demo env model, proxy-aware rate limits, client-ip diagnostic, engine Neon tuning, scripts/gen_keys.py) | Doing: D1b completed | Next: T5 | Blocked on me: nothing
 Database password rotated 7 Nov; verified live 9 Nov (active connection ok, old passwords rejected). Hosting: Render + Neon manifests ready; awaiting user dashboard action.
 
 ---
 
 # context.md
-Phase: R13 Live PayPal Sandbox (Orders v2 Two-Phase Flow, Payouts 403 Restricted Proof, Webhook Verification) + T8 Invoice Agent   Branches: main, dev   Last green CI: https://github.com/maitray-agrawal/PHALANX/actions/runs/42816173523
+Phase: R13 Live PayPal Sandbox (Orders v2 Two-Phase Flow, Payouts 403 Restricted Proof, Webhook Verification) + T8 Invoice Agent + D1/D1b Render & Neon Deployment   Branches: main, dev   Last green CI: https://github.com/maitray-agrawal/PHALANX/actions/runs/42816173523
 Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
 - app/domain: Pure deterministic policy engine, Ed25519 mandate invariants, canonical RFC 8785 JSON, cryptographic hash-chained ledger. AST purity test enforced.
 - app/application: AuthorizationService, MandateService, LedgerService, InvoiceAgent (autonomous supplier invoice ingestion with strict prompt delimiter isolation and deterministic PHALANX policy boundary), ProviderAgnosticLLMClient (quotas, timeouts, retries), IntentExtractor, GroundedExplanationValidator, PrincipalSessionMemory, DeterministicKnowledgeBase, CompositeAdvisoryPipeline.
-- app/infrastructure: Multi-stage container packaging (Node 20 + Python 3.12 slim), single managed SQLAlchemy engine, dialect-specific connect args, request-scoped sessions, Ed25519 signing/verification (PEM & raw hex), HMAC-SHA256 role tokens (validated >= 32-byte secret key), DatabaseLedgerAdapter (re-entrant RLock to prevent deadlocks), GeminiLLMClient (official Gemini API adapter, temperature 0, strict JSON schema output, timeout 10s, 1 retry, token cap 1024, daily quota tracker with demo budget cap, server-side only key handling), PayPal Sandbox rail adapter, UTC clock. FOR UPDATE SKIP LOCKED row claiming for concurrent reconcilers.
-- app/api: Complete FastAPI REST suite with /v1/ and /api/v1/ contracts, strictly validated Bearer tokens, Invoice Agent endpoints (`GET /v1/invoice-agent/samples`, `POST /v1/invoice-agent/process`).
+- app/infrastructure: Multi-stage container packaging (Node 20 + Python 3.12 slim), single managed SQLAlchemy engine, dialect-specific connect args (connect_timeout 10s, pool_recycle 240s, pool_pre_ping True, prepare_threshold None for pooler), request-scoped sessions, Ed25519 signing/verification (PEM & raw hex), HMAC-SHA256 role tokens (validated >= 32-byte secret key), DatabaseLedgerAdapter (re-entrant RLock to prevent deadlocks), GeminiLLMClient (official Gemini API adapter, temperature 0, strict JSON schema output, timeout 10s, 1 retry, token cap 1024, daily quota tracker with demo budget cap, server-side only key handling), PayPal Sandbox rail adapter, UTC clock. FOR UPDATE SKIP LOCKED row claiming for concurrent reconcilers.
+- app/api: Complete FastAPI REST suite with /v1/ and /api/v1/ contracts, strictly validated Bearer tokens, Invoice Agent endpoints (`GET /v1/invoice-agent/samples`, `POST /v1/invoice-agent/process`), Admin diagnostics (`GET /v1/admin/client-ip`), External automation endpoints (`POST /v1/admin/reconcile-scheduled`, `POST /v1/admin/daily-reset`).
 - web: React + Vite + TypeScript security console with PayPal-inspired clarity, mobile-first design.
 - web screens:
   1. Home: Three numbers, primary Pay action, recent activity stream.
@@ -25,14 +25,17 @@ Architecture now: Pure Hexagonal Architecture (Ports and Adapters)
   8. Receipt & Verify: Cryptographic receipt card, public SHA-256 hash chain proof verifier.
 
 Test status (All Verified Live):
-- Backend: 400 passed, 0 skipped, 0 failed in 149.85s (400 total backend tests across full test suite)
-- Red Team: 105 passed, 0 failed, 295 deselected in 5.92s
-- Performance & Invariants: All accounting and ledger invariants tested across 13,345 events; budget invariants verified with payment in flight and under concurrent PostgreSQL transactions
-- Static Analysis: ruff check clean (0 errors), ruff format clean (100 files checked), mypy app clean (0 errors across 39 source files)
-- Frontend: Vitest passed (28/28 tests across 3 suites in 5.92s), ESLint clean (0 errors, 0 warnings), TypeScript clean (0 errors across web codebase)
-- E2E Smoke: Playwright smoke passed (30/30 tests across all 6 browsers/viewports: Chromium, WebKit, Firefox, iPhone SE, Pixel 7, iPad in 1.9m)
-- Web Build: Vite production build succeeded (index.html, CSS, JS chunks generated cleanly in 5.84s)
-- License: Apache-2.0 (OSI-approved)
+- Backend full suite: 410 passed, 10 skipped, 0 failed in 199.16s (0 skipped across PostgreSQL concurrency, migration upgrade, and reconciliation suites; 10 skipped in tests/load/ require live external HTTP server at http://localhost:8000)
+- Red Team: 105 passed, 0 failed, 315 deselected in 33.38s
+- Concurrency & DB: 9/9 passed in test_postgres_concurrency.py, 23/23 passed in test_reconciliation.py, 1/1 passed in test_migration_upgrade.py
+- Static Analysis: ruff check clean (0 errors), ruff format clean (106 files checked), mypy app clean (0 errors across 41 source files)
+- Frontend: Vitest passed (30/30 tests across 4 suites), ESLint clean (0 errors, 0 warnings), TypeScript clean (0 errors across web codebase via tsc --noEmit)
+- Deployment Diagnostics & Hardening:
+  - GET /v1/admin/client-ip verified with X-Admin-Token constant-time compare and forged XFF prefix rejection.
+  - Proxy peeling: Render + Cloudflare hop formula ips[-1 - TRUSTED_PROXY_COUNT] selects ips[-2] with TRUSTED_PROXY_COUNT=1. Status: UNVERIFIED until verified against hosted instance.
+  - Demo reset in ENVIRONMENT=demo requires admin token or reconcile secret only (Principal role token receives 403 Forbidden).
+  - SQLAlchemy engine configured with connect_timeout=10, pool_recycle=240, pool_pre_ping=True, prepare_threshold=None on pooler strings.
+  - scripts/gen_keys.py generates high-entropy SECRET_KEY, ADMIN_TOKEN, RECONCILE_SECRET and outputs directly to stdout without writing files.
 
 Credential Alignment & Hostile Review Resolutions:
 - H8 (Closed): `validate_paypal_cert_url` enforces HTTPS, allowed hostnames strictly in `{api.paypal.com, api.sandbox.paypal.com, api-m.paypal.com, api-m.sandbox.paypal.com}`, rejects userinfo (username/password), and rejects explicit ports. Verified by 8 unit test cases.

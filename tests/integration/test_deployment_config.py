@@ -112,3 +112,37 @@ def test_clean_database_boot_script() -> None:
                 os.remove(path)
         except PermissionError:
             pass
+
+
+def test_postgres_engine_neon_tuning_and_pooler() -> None:
+    """Verify engine applies pool_pre_ping=True, pool_recycle<=240, connect_timeout 10-15s."""
+    orig_engine = db_mod._engine
+    orig_session_factory = db_mod._session_factory
+    orig_url = db_mod.settings.database_url
+
+    try:
+        # 1. Standard / Direct PostgreSQL connection
+        db_mod._engine = None
+        direct_url = "postgresql+psycopg://user:pass@ep-direct-12345.us-east-2.aws.neon.tech/phalanx_db?sslmode=require"
+        db_mod.settings.database_url = direct_url
+        engine_direct = db_mod.get_engine()
+        assert engine_direct.pool._pre_ping is True
+        assert engine_direct.pool._recycle <= 240
+        connect_args_direct = db_mod.get_connection_args(direct_url)
+        assert connect_args_direct.get("connect_timeout") in (10, 11, 12, 13, 14, 15)
+        assert "prepare_threshold" not in connect_args_direct
+
+        # 2. Pooled connection string (PgBouncer / -pooler)
+        db_mod._engine = None
+        pooled_url = "postgresql+psycopg://user:pass@ep-direct-12345-pooler.us-east-2.aws.neon.tech/phalanx_db?sslmode=require"
+        db_mod.settings.database_url = pooled_url
+        engine_pooled = db_mod.get_engine()
+        assert engine_pooled.pool._pre_ping is True
+        assert engine_pooled.pool._recycle <= 240
+        connect_args_pooled = db_mod.get_connection_args(pooled_url)
+        assert connect_args_pooled.get("connect_timeout") in (10, 11, 12, 13, 14, 15)
+        assert connect_args_pooled.get("prepare_threshold") is None
+    finally:
+        db_mod._engine = orig_engine
+        db_mod._session_factory = orig_session_factory
+        db_mod.settings.database_url = orig_url

@@ -54,6 +54,8 @@ def _get_postgres_engine():
 
     if not db_url or "postgres" not in db_url:
         return None
+    if "localhost" in db_url and os.name == "nt":
+        db_url = db_url.replace("localhost", "127.0.0.1")
     try:
         engine = create_engine(
             db_url,

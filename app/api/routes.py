@@ -913,30 +913,103 @@ def capture_order(
     }
 
 
-# Demo Reset Endpoint (POST /v1/admin/reset)
+# Admin IP Diagnostic Endpoint (GET /v1/admin/client-ip)
 
 
-def verify_admin_reset_access(
+def verify_admin_token_only(
     x_admin_token: Annotated[str | None, Header(alias="X-Admin-Token")] = None,
-    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
 ) -> bool:
-    """Verify admin access via X-Admin-Token or Principal role."""
+    """Strictly verify X-Admin-Token header with constant-time comparison."""
     expected_token = settings.admin_token
     if not expected_token or len(expected_token) < 24:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Admin endpoint disabled: ADMIN_TOKEN unconfigured or insufficient length",
         )
+    if not x_admin_token or not hmac.compare_digest(
+        x_admin_token.encode("utf-8"), expected_token.encode("utf-8")
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized: Invalid or missing X-Admin-Token",
+        )
+    return True
 
+
+@router.get("/v1/admin/client-ip", status_code=status.HTTP_200_OK)
+def get_client_ip(
+    request: Request,
+    _authorized: Annotated[bool, Depends(verify_admin_token_only)],
+) -> dict[str, str | None]:
+    """Diagnostic endpoint to inspect proxy IP resolution in hosted environments."""
+    raw_xff = request.headers.get("x-forwarded-for")
+    tcp_peer = request.client.host if request.client else "unknown"
+    resolved_ip = extract_client_ip(request)
+    return {
+        "raw_x_forwarded_for": raw_xff,
+        "tcp_peer": tcp_peer,
+        "resolved_client_ip": resolved_ip,
+    }
+
+
+# Demo Reset Endpoint (POST /v1/admin/reset)
+
+
+def verify_admin_reset_access(
+    x_admin_token: Annotated[str | None, Header(alias="X-Admin-Token")] = None,
+    x_reconcile_secret: Annotated[str | None, Header(alias="X-Reconcile-Secret")] = None,
+    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+) -> bool:
+    """Verify admin access via X-Admin-Token, X-Reconcile-Secret, or Principal role.
+
+    In ENVIRONMENT=demo, resets require admin token or reconcile secret only
+    (Principal role gets 403).
+    """
+    env = os.getenv("ENVIRONMENT", settings.environment).strip().lower()
+
+    expected_admin = settings.admin_token
+    expected_reconcile = settings.reconcile_secret
+
+    # 1. Check X-Admin-Token
     if x_admin_token:
-        if hmac.compare_digest(x_admin_token.encode("utf-8"), expected_token.encode("utf-8")):
+        if not expected_admin or len(expected_admin) < 24:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Admin endpoint disabled: ADMIN_TOKEN unconfigured or insufficient length",
+            )
+        if hmac.compare_digest(x_admin_token.encode("utf-8"), expected_admin.encode("utf-8")):
             return True
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unauthorized: Invalid X-Admin-Token",
         )
 
+    # 2. Check X-Reconcile-Secret (allowed for daily reset automation)
+    if x_reconcile_secret:
+        if not expected_reconcile or len(expected_reconcile) < 24:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Reconcile secret disabled: RECONCILE_SECRET unconfigured or too short",
+            )
+        if hmac.compare_digest(
+            x_reconcile_secret.encode("utf-8"), expected_reconcile.encode("utf-8")
+        ):
+            return True
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized: Invalid X-Reconcile-Secret",
+        )
+
+    # 3. Check Principal role Bearer token
     if authorization and authorization.lower().startswith("bearer "):
+        if env == "demo":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Forbidden: In demo environment, admin reset requires admin token "
+                    "or reconcile secret (Principal role cannot reset demo state)."
+                ),
+            )
         creds = HTTPAuthorizationCredentials(
             scheme="Bearer", credentials=authorization.split(" ", 1)[1]
         )
@@ -950,7 +1023,10 @@ def verify_admin_reset_access(
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Unauthorized: Authentication required (X-Admin-Token or Principal Bearer token)",
+        detail=(
+            "Unauthorized: Authentication required "
+            "(X-Admin-Token, X-Reconcile-Secret, or Principal Bearer token)"
+        ),
     )
 
 
@@ -975,6 +1051,16 @@ def admin_reset(
     ledger_service.restore_chain()
     _demo_token_rate_limits.clear()
     return {"status": "reset_completed", "message": "Demo state reset successfully."}
+
+
+@router.post("/v1/admin/daily-reset", status_code=status.HTTP_200_OK)
+def admin_daily_reset(
+    _authorized: Annotated[bool, Depends(verify_admin_reset_access)],
+    service: Annotated[AuthorizationService, Depends(get_authorization_service)],
+    ledger_service: Annotated[LedgerService, Depends(get_ledger_service)],
+) -> dict[str, str]:
+    """Daily reset endpoint for external cron automation."""
+    return admin_reset(_authorized=_authorized, service=service, ledger_service=ledger_service)
 
 
 @router.post("/v1/admin/reconcile", status_code=status.HTTP_200_OK)
