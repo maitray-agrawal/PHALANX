@@ -40,6 +40,8 @@ def run_boot() -> bool:
 
     is_key_valid, key_error = validate_secret_key()
     if not is_key_valid:
+        sys.stderr.write(f"Boot aborted: {key_error}\n")
+        sys.stderr.flush()
         logger.error("Boot aborted: %s", key_error)
         return False
 
@@ -63,6 +65,8 @@ def run_boot() -> bool:
                 time.sleep(2)
 
     if not connected:
+        sys.stderr.write("Boot aborted: database connection failure (fail closed).\n")
+        sys.stderr.flush()
         logger.error("Boot aborted: database connection failure (fail closed).")
         return False
 
@@ -82,6 +86,8 @@ def run_boot() -> bool:
         ]
         ini_path = next((p for p in ini_candidates if p.exists()), None)
         if not ini_path:
+            sys.stderr.write("Boot aborted: alembic.ini configuration file not found\n")
+            sys.stderr.flush()
             logger.error("Boot aborted: alembic.ini configuration file not found")
             return False
 
@@ -103,11 +109,13 @@ def run_boot() -> bool:
             current_rev = m_context.get_current_revision()
 
         if current_rev != head_rev:
-            logger.error(
-                "Boot aborted: Alembic revision mismatch (current db: %s, head: %s)",
-                current_rev,
-                head_rev,
+            err_msg = (
+                f"Boot aborted: Alembic revision mismatch "
+                f"(current db: {current_rev}, head: {head_rev})\n"
             )
+            sys.stderr.write(err_msg)
+            sys.stderr.flush()
+            logger.error(err_msg.strip())
             return False
         logger.info("Verified database revision '%s' matches migration head.", current_rev)
 
@@ -126,23 +134,33 @@ def run_boot() -> bool:
         }
         missing_tables = required_tables - existing_tables
         if missing_tables:
-            logger.error("Boot aborted: missing required database tables: %s", missing_tables)
+            err_msg = f"Boot aborted: missing required database tables: {missing_tables}\n"
+            sys.stderr.write(err_msg)
+            sys.stderr.flush()
+            logger.error(err_msg.strip())
             return False
 
         ledger_constraints = inspector.get_unique_constraints("ledger_events")
         u_names = {c.get("name") for c in ledger_constraints}
         u_cols = [set(c.get("column_names") or []) for c in ledger_constraints]
         if "uq_ledger_events_event_seq" not in u_names and {"event_seq"} not in u_cols:
-            logger.error(
-                "Boot aborted: constraint 'uq_ledger_events_event_seq' missing on ledger_events"
+            err_msg = (
+                "Boot aborted: constraint 'uq_ledger_events_event_seq' missing on ledger_events\n"
             )
+            sys.stderr.write(err_msg)
+            sys.stderr.flush()
+            logger.error(err_msg.strip())
             return False
         logger.info("Verified schema tables and unique constraints exist.")
 
         install_ledger_triggers(engine)
         logger.info("Database schema and append-only triggers successfully verified/created.")
     except Exception as exc:
-        sys.stderr.write(f"Boot migration/schema error: {exc}\n")
+        import traceback
+
+        tb = traceback.format_exc()
+        sys.stderr.write(f"Boot migration/schema error: {exc}\n{tb}\n")
+        sys.stderr.flush()
         logger.error("Boot aborted: migration or schema initialization failure: %s", exc)
         return False
 
@@ -216,6 +234,11 @@ def run_boot() -> bool:
             else:
                 logger.info("Demo mandate already seeded (idempotent skip).")
     except Exception as exc:
+        import traceback
+
+        tb = traceback.format_exc()
+        sys.stderr.write(f"Boot mandate seeding error: {exc}\n{tb}\n")
+        sys.stderr.flush()
         logger.error("Boot aborted: error during mandate seeding: %s", exc)
         return False
 
@@ -333,7 +356,11 @@ def run_boot() -> bool:
                 logger.info("DEMO_SEED not enabled; skipping demo step-up request seeding.")
 
     except Exception as exc:
-        sys.stderr.write(f"Boot seeding error: {exc}\n")
+        import traceback
+
+        tb = traceback.format_exc()
+        sys.stderr.write(f"Boot seeding error: {exc}\n{tb}\n")
+        sys.stderr.flush()
         logger.error("Boot aborted: error during data seeding: %s", exc)
         return False
 

@@ -1,8 +1,15 @@
 # STATE (update after every task)
-Date: 11 Nov 2026 | Branch: dev | Last pushed commit on dev: d70ad82 | CI: PASSING (Run 191, ID 43029134603)
+Date: 11 Nov 2026 | Branch: dev | Last pushed commit on dev: 6c0e7ea | CI: PASSING (Run ID 43039692929)
 Working tree: clean on dev (main untouched)
-CI Green across all 8 jobs (Run 43029134603); Full local battery verified (657 passed pytest, 0 skipped, 105 redteam, 30 vitest, ruff clean, mypy clean, bandit clean, tsc clean, build clean).
-Completed: Neon agent skills untracked (.gitignore updated), render.yaml configured with dashboard PUBLIC_BASE_URL (sync: false) and GEMINI_DAILY_CALL_CAP ("300"), 10-minute age guard strictly enforced on all NOT_FOUND release sites (resolve_needs_review and webhook included, test-first), scripts/neon_check.sql added with read-only validation queries.
+CI Green across all 8 jobs (Run 43039692929); Full local battery verified:
+- Backend: 665 passed, 0 skipped, 0 failed in pytest (test_boot_and_migration_hardening.py 8/8 pass)
+- Red team: 105 passed, 560 deselected in 6.03s
+- Frontend: Vitest passed (30/30 passed), ESLint clean, TypeScript clean, Vite build clean
+- Static: ruff check clean, ruff format clean (113 files), mypy app clean (42 files)
+Completed: Alembic startup failure diagnosed and resolved:
+1. alembic/env.py fileConfig modified with disable_existing_loggers=False so phalanx.boot logger is never silenced.
+2. scripts/boot.py hardened: all failure exit paths flush explicit error messages to sys.stderr, with full traceback formatting on unhandled exceptions.
+3. tests/integration/test_boot_and_migration_hardening.py added covering logger preservation, fresh DB migration & boot, repeated boot idempotency, revision mismatch fail-closed, missing table fail-closed, missing unique constraint fail-closed, trigger immutability, and stderr traceback emission.
 
 ---
 

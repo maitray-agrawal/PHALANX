@@ -70,12 +70,13 @@ def test_upgrade_from_001_and_002_to_head_on_empty_postgres():
         tables_002 = set(inspector.get_table_names())
         assert "mandates" in tables_002
 
-        # 4. Upgrade to head (003_unique_event_seq)
+        # 4. Upgrade to head (004_daily_quotas)
         command.upgrade(alembic_cfg, "head")
         inspector = inspect(engine)
         tables_head = set(inspector.get_table_names())
         assert "mandates" in tables_head
         assert "ledger_events" in tables_head
+        assert "daily_quotas" in tables_head
 
         # Verify unique constraint uq_ledger_events_event_seq exists
         constraints = inspector.get_unique_constraints("ledger_events")
