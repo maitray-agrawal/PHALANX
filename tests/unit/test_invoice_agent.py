@@ -187,6 +187,7 @@ def test_gemini_client_fallback_when_unconfigured(monkeypatch: pytest.MonkeyPatc
 def test_gemini_client_daily_budget_cap(monkeypatch: pytest.MonkeyPatch) -> None:
     """Enforce daily call cap with 'demo budget reached' response."""
     monkeypatch.setenv("GEMINI_API_KEY", "test-key-mock-123")
+    monkeypatch.setattr("app.infrastructure.database.get_session_factory", lambda: None)
     client = GeminiLLMClient(api_key="test-key-mock-123", daily_call_cap=2)
 
     with patch("httpx.post") as mock_post:
