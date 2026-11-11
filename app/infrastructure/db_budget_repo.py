@@ -371,7 +371,6 @@ class BudgetRepository:
         if res.status in (ReservationStatus.CONFIRMED.value, ReservationStatus.RELEASED.value):
             return res
         status_norm = (rail_status or "UNKNOWN").upper()
-        CONFIRMED_SUCCESS = {"SUCCESS", "COMPLETED", "CONFIRMED", "SETTLED"}
         EXPLICIT_PROVIDER_FAILURES = {
             "FAILED",
             "DENIED",
@@ -384,7 +383,9 @@ class BudgetRepository:
             "VOIDED",
         }
 
-        if status_norm in CONFIRMED_SUCCESS:
+        from app.domain.money_outcome import MoneyOutcome, money_outcome
+
+        if money_outcome("reconcile_reservation", status_norm) == MoneyOutcome.SETTLE:
             return self.confirm_reservation(reservation_id)
         elif status_norm in EXPLICIT_PROVIDER_FAILURES:
             return self.release_reservation(reservation_id, confirmed_failure=True)

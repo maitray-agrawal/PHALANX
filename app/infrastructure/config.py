@@ -100,6 +100,14 @@ class Settings(BaseSettings):
     gemini_model: str = Field(
         default="gemini-2.5-flash", description="Google Gemini model identifier"
     )
+    gemini_daily_call_cap: int = Field(
+        default=100,
+        description="Daily Gemini API call cap per deployment (set ~300 for judging)",
+    )
+    public_base_url: str = Field(
+        default="",
+        description="Public base URL for web and redirect callbacks (never localhost)",
+    )
 
     # LLM & AI Guardrails (Manual 41-44)
     llm_model_name: str = Field(default="gpt-4o-mini")

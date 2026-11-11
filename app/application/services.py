@@ -38,6 +38,7 @@ from app.domain.models import (
     PolicyEvaluationResult,
     TransactionIntent,
 )
+from app.domain.money_outcome import MoneyOutcome, money_outcome
 from app.domain.policy import (
     PolicyDecision,
     PolicyReasonCode,
@@ -1151,7 +1152,10 @@ class AuthorizationService:
                         or rail_res.details.get("http_status", 0) in (408, 429)
                     )
 
-                    if rail_res.success and rail_res.status in ("COMPLETED", "SUCCESS"):
+                    if (
+                        rail_res.success
+                        and money_outcome("authorize", rail_res.status) == MoneyOutcome.SETTLE
+                    ):
                         current_req_state = transition_request_state(
                             current_req_state, RequestState.SETTLED
                         )
@@ -1510,7 +1514,12 @@ class AuthorizationService:
                             or rail_res.details.get("http_status", 0) in (408, 429)
                         )
 
-                        if rail_res.success and rail_res.status in ("COMPLETED", "SUCCESS"):
+                        is_settle = (
+                            rail_res.success
+                            and money_outcome("resolve_step_up", rail_res.status)
+                            == MoneyOutcome.SETTLE
+                        )
+                        if is_settle:
                             current_req_state = transition_request_state(
                                 current_req_state, RequestState.SETTLED
                             )
@@ -1739,28 +1748,80 @@ class AuthorizationService:
                 or (held.get("order_id") if held else None)
             )
 
-            # Reconcile always performs the provider lookup
-            lookup_res: Any | None = None
-            if payout_id:
-                try:
-                    lookup_res = self._payment_rail.lookup(payout_id)
-                    rail_status = lookup_res.status
-                except Exception as exc:
-                    logger.warning("Payment rail lookup exception for '%s': %s", payout_id, exc)
-                    rail_status = "LOOKUP_FAILED"
-            else:
-                rail_status = "LOOKUP_FAILED"
+            now_utc = self._clock.now_utc()
+            created_at = held.get("created_at_utc", now_utc) if held else now_utc
+            age_seconds = (now_utc - created_at).total_seconds() if created_at else 0
 
-            details = (lookup_res.details or {}) if lookup_res else {}
-            details_str = str(details).lower()
-            if (
-                details.get("http_status") == 404
-                or details.get("name") in ("RESOURCE_NOT_FOUND", "INVALID_RESOURCE_ID")
-                or "not found" in details_str
-            ):
-                status_norm = "FAILED"
+            # Reconcile always performs the provider lookup if rail_status is None
+            lookup_res: Any | None = None
+            if rail_status is None:
+                if payout_id:
+                    try:
+                        lookup_res = self._payment_rail.lookup(payout_id)
+                        rail_status = lookup_res.status
+                    except Exception as exc:
+                        logger.warning("Payment rail lookup exception for '%s': %s", payout_id, exc)
+                        rail_status = "LOOKUP_FAILED"
+                else:
+                    rail_status = "LOOKUP_FAILED"
+
+                details = (lookup_res.details or {}) if lookup_res else {}
+                details_str = str(details).lower()
+                is_404_not_found = (
+                    details.get("http_status") == 404
+                    or details.get("name") in ("RESOURCE_NOT_FOUND", "INVALID_RESOURCE_ID")
+                    or "not found" in details_str
+                )
+                # Minimum age (10 minutes / 600s) required before NOT_FOUND counts as failure
+                # to protect against replication lag immediately after order creation.
+                if is_404_not_found:
+                    if age_seconds >= 600:
+                        status_norm = "FAILED"
+                        if lookup_res is not None:
+                            new_details = dict(lookup_res.details) if lookup_res.details else {}
+                            new_details["age_seconds"] = age_seconds
+                            lookup_res = PaymentResult(
+                                success=False,
+                                transaction_id=lookup_res.transaction_id,
+                                status="FAILED",
+                                details=new_details,
+                                business_rejection=True,
+                            )
+                    else:
+                        status_norm = "RECONCILE"
+                        if lookup_res is not None:
+                            new_details = dict(lookup_res.details) if lookup_res.details else {}
+                            new_details["age_seconds"] = age_seconds
+                            lookup_res = PaymentResult(
+                                success=False,
+                                transaction_id=lookup_res.transaction_id,
+                                status="RECONCILE",
+                                details=new_details,
+                                business_rejection=False,
+                            )
+                else:
+                    status_norm = (rail_status or "UNKNOWN").upper()
             else:
-                status_norm = (rail_status or "UNKNOWN").upper()
+                status_norm = rail_status.upper()
+                lookup_res = PaymentResult(
+                    success=(status_norm in ("SUCCESS", "COMPLETED")),
+                    transaction_id=payout_id or "",
+                    status=status_norm,
+                    details={},
+                    business_rejection=(
+                        status_norm
+                        in (
+                            "FAILED",
+                            "DENIED",
+                            "REJECTED",
+                            "EXPIRED",
+                            "VOIDED",
+                            "CANCELED",
+                            "CANCELLED",
+                            "NOT_FOUND",
+                        )
+                    ),
+                )
 
             CONFIRMED_SUCCESS = {"SUCCESS", "COMPLETED", "CONFIRMED", "SETTLED"}
             CONFIRMED_FAILURE = {
@@ -1784,9 +1845,6 @@ class AuthorizationService:
                 "ERROR",
             }
 
-            now_utc = self._clock.now_utc()
-            created_at = held.get("created_at_utc", now_utc) if held else now_utc
-            age_seconds = (now_utc - created_at).total_seconds() if created_at else 0
             is_ambiguous_error = status_norm in AMBIGUOUS_ERRORS
 
             if (
@@ -1797,7 +1855,7 @@ class AuthorizationService:
 
                 def _do_db_reconcile(s: Any) -> RequestState:
                     repo = BudgetRepository(s)
-                    if status_norm in CONFIRMED_SUCCESS:
+                    if money_outcome("reconcile", status_norm) == MoneyOutcome.SETTLE:
                         repo.confirm_reservation(held["reservation_id"])
                         new_st = transition_request_state(current_state, RequestState.SETTLED)
                         self._held_reservations.pop(request_id, None)
@@ -1906,8 +1964,8 @@ class AuthorizationService:
                 new_state = transition_request_state(current_state, RequestState.FAILED)
                 self._request_states[request_id] = new_state
                 if held:
-                    agent_id = held["agent_id"]
-                    amount = held["amount_minor"]
+                    agent_id = held.get("agent_id", "")
+                    amount = held.get("amount_minor", 0)
                     self._lifetime_spent[agent_id] = max(
                         0, self._lifetime_spent.get(agent_id, 0) - amount
                     )
@@ -2034,7 +2092,10 @@ class AuthorizationService:
                 held = self._held_reservations[target_req_id]
                 res_id = held.get("reservation_id")
                 intent = held.get("intent")
-                if result.success and result.status == "COMPLETED":
+                if (
+                    result.success
+                    and money_outcome("capture_order", result.status) == MoneyOutcome.SETTLE
+                ):
                     self._request_states[target_req_id] = RequestState.SETTLED
                     if self._db_session_factory is not None and res_id:
                         with self._db_session_factory() as session, session.begin():
@@ -2300,7 +2361,7 @@ class AuthorizationService:
                             )
                     return new_state
                 elif may_release(lookup_res) and provider_status in CONFIRMED_FAILURE:
-                    new_state = self.reconcile(request_id)
+                    new_state = self.reconcile(request_id, rail_status="FAILED")
                     intent = held.get("intent")
                     if intent:
                         dom_res = PolicyEvaluationResult(
@@ -2354,7 +2415,7 @@ class AuthorizationService:
                         "which is not a confirmed business rejection; "
                         "not a confirmed failure or not-found."
                     )
-                new_state = self.reconcile(request_id)
+                new_state = self.reconcile(request_id, rail_status="FAILED")
                 intent = held.get("intent")
                 if intent:
                     dom_res = PolicyEvaluationResult(
