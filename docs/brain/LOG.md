@@ -69,3 +69,13 @@ Changed: app/infrastructure/crypto.py, tests/unit/test_keys.py, STATE.md, LOG.md
 Commands: uv run pytest tests/unit/test_keys.py (12 passed); uv run pytest tests/integration/test_boot_and_migration_hardening.py (13 passed); uv run pytest -q -m redteam (105 passed); ruff check & format clean; mypy app clean; bandit clean (10,020 lines).
 Findings closed: Strict 64-hex-char Ed25519 seed validation implemented; position 65 fromhex error resolved with safe diagnostic without leaking secret material; 8 regression tests passing.
 Next: Git commit and push dev to origin; reconcile with main via PR.
+2026-11-11 | PR #34 merged into main (e831506); CI run 43055335547 green across all 9 jobs.
+Changed: PR #34 merged into main; dev and main synchronized to e831506; STATE.md, LOG.md.
+Commands: PR #34 created and merged; GitHub Actions CI run 43055335547 on main passed all 9 jobs including Render deploy hook; local dev pulled and synchronized.
+Findings closed: Release branch main contains validated Ed25519 signing key logic, unbuffered output, transparent step logging, and redacted tracebacks.
+Next: Render deployment handoff and operator dashboard verification.
+2026-11-12 | M2: Fail-fast MANDATE_SIGNING_KEY_HEX validation in boot step 1 before DB connection.
+Changed: scripts/boot.py, tests/integration/test_boot_and_migration_hardening.py, .gitignore, FINDINGS.md, STATE.md, LOG.md.
+Commands: uv run pytest tests/integration/test_boot_and_migration_hardening.py (14 passed in 4.38s); uv run ruff check . (clean); uv run ruff format --check . (clean); uv run mypy app (clean across 42 source files).
+Findings closed: M2 (Malformed MANDATE_SIGNING_KEY_HEX fails fast during Step 1 key validation before database connection and migrations; exact remediation instructions documented).
+Next: Git commit and push dev; provide operator runbook for Render environment variable update and deployment verification.

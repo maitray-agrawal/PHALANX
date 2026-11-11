@@ -427,3 +427,28 @@ def test_redact_message_masks_secrets_and_passwords():
     assert "xyz987654321" not in redacted_param
     assert "password=[REDACTED]" in redacted_param
     assert "api_key=[REDACTED]" in redacted_param
+
+
+def test_boot_fails_fast_in_key_validation_on_invalid_mandate_signing_key_hex(monkeypatch):
+    """Verify that malformed MANDATE_SIGNING_KEY_HEX fails in step: key validation before DB."""
+    from app.infrastructure.config import settings
+    from scripts.boot import main
+
+    monkeypatch.setattr(settings, "secret_key", TEST_SECRET_KEY)
+    monkeypatch.setattr(settings, "mandate_signing_key_hex", "a" * 65)
+
+    captured_stdout = io.StringIO()
+    captured_stderr = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", captured_stdout)
+    monkeypatch.setattr(sys, "stderr", captured_stderr)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+
+    assert exc_info.value.code == 1
+    out = captured_stdout.getvalue()
+    err = captured_stderr.getvalue()
+
+    assert "[boot] step: key validation" in out
+    assert "[boot] step: migrations" not in out, "Must fail fast before running migrations"
+    assert "MANDATE_SIGNING_KEY_HEX must contain exactly 64 hexadecimal characters." in err

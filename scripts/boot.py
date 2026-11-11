@@ -78,6 +78,8 @@ def run_boot(raise_on_error: bool = False) -> bool:
     # Step 1: Key validation
     print("[boot] step: key validation", flush=True)
     sys.stdout.flush()
+    from app.infrastructure.config import settings
+    from app.infrastructure.crypto import validate_mandate_signing_key_hex
     from app.infrastructure.tokens import validate_secret_key
 
     is_key_valid, key_error = validate_secret_key()
@@ -89,6 +91,18 @@ def run_boot(raise_on_error: bool = False) -> bool:
         if raise_on_error:
             raise BootError(msg)
         return False
+
+    if settings.mandate_signing_key_hex:
+        try:
+            validate_mandate_signing_key_hex(settings.mandate_signing_key_hex)
+        except ValueError as exc:
+            msg = f"Key validation failed: {exc}"
+            sys.stderr.write(f"Boot aborted: {msg}\n")
+            sys.stderr.flush()
+            logger.error("Boot aborted: %s", msg)
+            if raise_on_error:
+                raise BootError(msg) from exc
+            return False
 
     engine = get_engine()
 
