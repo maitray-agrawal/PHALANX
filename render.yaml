@@ -36,8 +36,9 @@ services:
         sync: false
       - key: PAYPAL_WEBHOOK_ID
         sync: false
-      - key: MANDATE_SIGNING_KEY_HEX
-        sync: false
+      # MANDATE_SIGNING_KEY_HEX: omitted intentionally. When unset, the Ed25519
+      # mandate key is derived from SECRET_KEY via HKDF; set it only if it is
+      # exactly 64 hex characters with no quotes, spaces or 0x prefix.
       - key: GEMINI_API_KEY
         sync: false
       - key: RECONCILE_SECRET
