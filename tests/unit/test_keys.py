@@ -57,3 +57,20 @@ def test_ephemeral_fallback_prohibited_outside_test():
         pytest.raises(ValueError, match="ephemeral key fallback is prohibited"),
     ):
         load_or_generate_keypair()
+
+
+def test_mandate_signing_key_optional_with_secret_key():
+    """Verify that when MANDATE_SIGNING_KEY_HEX is unset, keypair derives deterministically from SECRET_KEY."""
+    test_settings = Settings(
+        secret_key="master-secret-key-at-least-32-chars-long!",
+        mandate_signing_key_hex="",
+        environment="production",
+    )
+    with (
+        patch("app.infrastructure.crypto.settings", test_settings),
+        patch.dict(os.environ, {"ENVIRONMENT": "production"}),
+    ):
+        priv, pub, key_id = load_or_generate_keypair()
+        assert len(priv) == 32
+        assert len(pub) == 32
+        assert key_id.startswith("key_")

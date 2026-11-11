@@ -39,17 +39,24 @@ Store the output securely in a password manager.
    - Plan: `free`
    - Health Check Path: `/healthz`
    - Auto-deploy: `false` (coordinated with CI deployment hook)
-5. Fill in the required secrets (`sync: false`) in Render Dashboard:
-   - `SECRET_KEY`: generated 64-char hex key
-   - `ADMIN_TOKEN`: generated 64-char hex token
-   - `MANDATE_SIGNING_KEY_HEX`: generated 64-char Ed25519 signing key
-   - `RECONCILE_SECRET`: generated 64-char secret
-   - `DATABASE_URL`: Neon direct PostgreSQL connection URI
-   - `PAYPAL_CLIENT_ID`: PayPal Sandbox App Client ID
-   - `PAYPAL_CLIENT_SECRET`: PayPal Sandbox App Secret
-   - `PAYPAL_WEBHOOK_ID`: PayPal Webhook ID
-   - `GEMINI_API_KEY`: Google Gemini API Key
+5. Fill in secrets (`sync: false`) in Render Dashboard according to the Environment Secrets Matrix below.
 6. Click **Apply**. Render will build the Docker container and start the service.
+
+### Environment Secrets & Boot Invariants Matrix
+
+| Secret / Env Var | Status | Boot Fails If Empty? | Fail-Closed Invariant & Unset Behavior |
+| :--- | :---: | :---: | :--- |
+| `DATABASE_URL` | **Required** | **YES** | Boot aborts immediately. PostgreSQL connection, Alembic schema migrations (`alembic upgrade head`), and `/readyz` fail closed. Requires `sslmode=require` for Neon. |
+| `SECRET_KEY` | **Required** | **YES** | Boot aborts immediately (`validate_secret_key()`). Outside test, requires >= 32 bytes for HKDF master secret derivation. |
+| `ADMIN_TOKEN` | Optional | No | Boot succeeds. Admin diagnostic (`GET /v1/admin/client-ip`) and reset (`POST /v1/admin/reset`) reject calls with `503 Service Unavailable` ("ADMIN_TOKEN unconfigured"). |
+| `PAYPAL_CLIENT_ID` | Optional* | No | Boot succeeds. If `PAYMENT_RAIL=paypal`, payment dispatch aborts before any reservation with `503 Service Unavailable` ("PayPal credentials unconfigured"). |
+| `PAYPAL_CLIENT_SECRET` | Optional* | No | Boot succeeds. Same as `PAYPAL_CLIENT_ID` — fail-closed before reservation. |
+| `PAYPAL_WEBHOOK_ID` | Optional | No | Boot succeeds. Inbound webhook endpoint (`POST /v1/webhooks/paypal`) fails closed with `503 Service Unavailable` ("PAYPAL_WEBHOOK_ID unconfigured"). |
+| `MANDATE_SIGNING_KEY_HEX` | Optional | No | Boot succeeds. If unset, HKDF-SHA256 deterministically derives a 32-byte Ed25519 signing seed from `SECRET_KEY` using label `phalanx-mandate-ed25519`. |
+| `GEMINI_API_KEY` | Optional | No | Boot succeeds. Invoice Agent extraction cleanly falls back to certified recorded baseline runs (`is_live: false`, status `RECORDED RUN (GEMINI_API_KEY Unconfigured)`). |
+| `RECONCILE_SECRET` | Optional | No | Boot succeeds. External cron endpoints (`POST /v1/admin/reconcile-scheduled`, `POST /v1/admin/daily-reset`) reject calls with `503` when unset. |
+
+*\*Note: Required only for active PayPal sandbox payment execution; when unconfigured, the application boots normally and refuses payment dispatches fail-closed.*
 
 ---
 

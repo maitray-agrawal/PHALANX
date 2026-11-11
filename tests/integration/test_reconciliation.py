@@ -916,6 +916,24 @@ def test_webhook_always_looks_up_before_release_or_settle(session_factory):
         app.dependency_overrides.clear()
 
 
+def test_webhook_unconfigured_id_fails_closed_with_503(monkeypatch):
+    """When PAYPAL_WEBHOOK_ID is empty/unset, webhook endpoint fails closed with 503."""
+    from fastapi import status
+    from app.infrastructure.config import settings
+
+    client = TestClient(app)
+    monkeypatch.setattr(settings, "paypal_webhook_id", "")
+    monkeypatch.delenv("PAYPAL_WEBHOOK_ID", raising=False)
+
+    resp = client.post(
+        "/v1/webhooks/paypal",
+        json={"event_type": "PAYMENT.CAPTURE.COMPLETED"},
+        headers={"paypal-auth-algo": "SHA256withRSA"},
+    )
+    assert resp.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    assert "PAYPAL_WEBHOOK_ID unconfigured" in resp.json()["detail"]
+
+
 def test_lookup_failed_never_releases_budget_and_stays_held(db_engine):
     """Critical Invariant 3: LOOKUP_FAILED, network hiccups or unknown states
 
