@@ -2339,6 +2339,19 @@ class AuthorizationService:
                 except Exception:
                     provider_status = "LOOKUP_FAILED"
 
+                created_at = held.get("created_at_utc", now_utc) if held else now_utc
+                age_seconds = (now_utc - created_at).total_seconds() if created_at else 0
+                if lookup_res is not None:
+                    new_details = dict(lookup_res.details) if lookup_res.details else {}
+                    new_details["age_seconds"] = age_seconds
+                    lookup_res = PaymentResult(
+                        success=lookup_res.success,
+                        transaction_id=lookup_res.transaction_id,
+                        status=lookup_res.status,
+                        details=new_details,
+                        business_rejection=getattr(lookup_res, "business_rejection", False),
+                    )
+
                 if provider_status in CONFIRMED_SUCCESS:
                     new_state = self.reconcile(request_id, rail_status="COMPLETED")
                     intent = held.get("intent")
@@ -2405,6 +2418,35 @@ class AuthorizationService:
                     raise ValueError(
                         f"Cannot mark transaction '{request_id}' as failed: "
                         "provider lookup returned LOOKUP_FAILED; cannot confirm failure."
+                    )
+
+                created_at = held.get("created_at_utc", now_utc) if held else now_utc
+                age_seconds = (now_utc - created_at).total_seconds() if created_at else 0
+                if lookup_res is not None:
+                    new_details = dict(lookup_res.details) if lookup_res.details else {}
+                    new_details["age_seconds"] = age_seconds
+                    lookup_res = PaymentResult(
+                        success=lookup_res.success,
+                        transaction_id=lookup_res.transaction_id,
+                        status=lookup_res.status,
+                        details=new_details,
+                        business_rejection=getattr(lookup_res, "business_rejection", False),
+                    )
+
+                details = (lookup_res.details or {}) if lookup_res else {}
+                details_str = str(details).lower()
+                is_not_found = (
+                    details.get("http_status") == 404
+                    or details.get("name") in ("RESOURCE_NOT_FOUND", "INVALID_RESOURCE_ID")
+                    or "not found" in details_str
+                    or provider_status == "NOT_FOUND"
+                )
+                if is_not_found and age_seconds < 600:
+                    raise ValueError(
+                        f"Cannot mark transaction '{request_id}' as failed: "
+                        f"provider reported NOT_FOUND within 10 minutes of creation "
+                        f"({int(age_seconds)}s < 600s); potential replication lag, "
+                        "cannot confirm failure."
                     )
 
                 is_confirmed_fail = may_release(lookup_res)

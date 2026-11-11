@@ -549,3 +549,64 @@ def test_404_lookup_before_10_minutes_holds_and_after_releases() -> None:
     st_over = auth_svc.reconcile(req_id)
     assert st_over == RequestState.FAILED
     assert auth_svc.get_request_state(req_id) == RequestState.FAILED
+
+
+def test_resolve_needs_review_mark_failed_404_age_guard() -> None:
+    """resolve_needs_review MARK_FAILED refuses on 404 if age < 10m, releases if age >= 10m."""
+    from app.application.services import AuthorizationService, MandateService
+    from app.domain.state_machine import RequestState
+    from app.infrastructure.ledger import InMemoryLedgerAdapter
+
+    class SimpleClock(ClockPort):
+        def __init__(self, t: datetime):
+            self._t = t
+
+        def now_utc(self) -> datetime:
+            return self._t
+
+        def advance(self, seconds: int) -> None:
+            self._t += timedelta(seconds=seconds)
+
+    clock = SimpleClock(datetime(2026, 11, 1, 12, 0, 0, tzinfo=UTC))
+    rail = FakePaymentRail(should_succeed=True, status="RECONCILE")
+    auth_svc = AuthorizationService(
+        clock=clock,
+        ledger=InMemoryLedgerAdapter(),
+        mandate_service=MandateService(clock=clock),
+        payment_rail=rail,
+    )
+
+    req_id = "req_rnr_404_test"
+    auth_svc._request_states[req_id] = RequestState.NEEDS_REVIEW
+    auth_svc._held_reservations[req_id] = {
+        "state": RequestState.NEEDS_REVIEW.value,
+        "payout_id": "tx_rnr_404",
+        "agent_id": "agent-auto-1",
+        "amount_minor": 5000,
+        "created_at_utc": clock.now_utc(),
+    }
+
+    rail.set_lookup_result(
+        "tx_rnr_404",
+        PaymentResult(
+            success=False,
+            transaction_id="tx_rnr_404",
+            status="NOT_FOUND",
+            details={
+                "http_status": 404,
+                "name": "RESOURCE_NOT_FOUND",
+            },
+            business_rejection=True,
+        ),
+    )
+
+    # 1. Under 10 minutes (age = 60s): MARK_FAILED must be refused due to potential replication lag
+    clock.advance(seconds=60)
+    with pytest.raises(ValueError, match="10 minutes|replication lag|cannot confirm failure"):
+        auth_svc.resolve_needs_review(req_id, action="MARK_FAILED")
+
+    # 2. Over 10 minutes (age = 660s): MARK_FAILED succeeds and releases
+    clock.advance(seconds=600)
+    st = auth_svc.resolve_needs_review(req_id, action="MARK_FAILED")
+    assert st == RequestState.FAILED
+    assert auth_svc.get_request_state(req_id) == RequestState.FAILED
