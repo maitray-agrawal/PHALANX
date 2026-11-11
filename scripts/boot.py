@@ -10,6 +10,7 @@ Actions:
 import json
 import logging
 import os
+import re
 import sys
 from datetime import UTC, datetime, timedelta
 
@@ -31,23 +32,69 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("phalanx.boot")
 
 
-def run_boot() -> bool:
-    """Run idempotent migrations and seed data."""
+class BootError(RuntimeError):
+    """Raised when any step of the boot sequence fails."""
+
+
+def redact_message(text: str) -> str:
+    """Redact passwords, secrets, tokens, and sensitive strings from logs and tracebacks."""
+    if not text:
+        return ""
+    s = str(text)
+    # Redact URI passwords, e.g. postgresql://user:pass@host:port/db
+    s = re.sub(r"(://[^:@\s]+):[^@\s]+@", r"\1:[REDACTED]@", s)
+    # Redact key/secret/password/token assignments
+    s = re.sub(
+        r"(?i)\b(password|secret|token|api_key|client_secret|signing_key|private_key)\b\s*[:=]\s*['\"]?[^'\"\s,;&]+['\"]?",
+        r"\1=[REDACTED]",
+        s,
+    )
+    # Redact actual known secret values from environment if populated
+    sensitive_keys = (
+        "SECRET_KEY",
+        "ADMIN_TOKEN",
+        "PAYPAL_CLIENT_SECRET",
+        "MANDATE_SIGNING_KEY_HEX",
+        "GEMINI_API_KEY",
+        "RECONCILE_SECRET",
+        "POSTGRES_PASSWORD",
+        "PHALANX_APP_DB_PASSWORD",
+    )
+    for env_var in sensitive_keys:
+        val = os.getenv(env_var)
+        if val and len(val) >= 8:
+            s = s.replace(val, "[REDACTED]")
+    return s
+
+
+def run_boot(raise_on_error: bool = False) -> bool:
+    """Run idempotent migrations and seed data.
+
+    Args:
+        raise_on_error: If True, raise BootError on failure. If False, log error and return False.
+    """
     logger.info("Starting PHALANX idempotent boot sequence...")
 
-    # Step 0: Validate runtime secret configuration outside test environment
+    # Step 1: Key validation
+    print("[boot] step: key validation", flush=True)
+    sys.stdout.flush()
     from app.infrastructure.tokens import validate_secret_key
 
     is_key_valid, key_error = validate_secret_key()
     if not is_key_valid:
-        sys.stderr.write(f"Boot aborted: {key_error}\n")
+        msg = f"Key validation failed: {key_error}"
+        sys.stderr.write(f"Boot aborted: {msg}\n")
         sys.stderr.flush()
         logger.error("Boot aborted: %s", key_error)
+        if raise_on_error:
+            raise BootError(msg)
         return False
 
     engine = get_engine()
 
-    # Step 1: Database connectivity verification & schema migrations via Alembic
+    # Step 2: Migrations
+    print("[boot] step: migrations", flush=True)
+    sys.stdout.flush()
     import time
 
     from sqlalchemy import text
@@ -60,14 +107,18 @@ def run_boot() -> bool:
             connected = True
             break
         except Exception as db_err:
-            logger.warning("Database connection attempt %d/5 failed: %s", attempt, db_err)
+            redacted_err = redact_message(str(db_err))
+            logger.warning("Database connection attempt %d/5 failed: %s", attempt, redacted_err)
             if attempt < 5:
                 time.sleep(2)
 
     if not connected:
-        sys.stderr.write("Boot aborted: database connection failure (fail closed).\n")
+        msg = "Database connection failure (retry limit exceeded)"
+        sys.stderr.write(f"Boot aborted: {msg}\n")
         sys.stderr.flush()
-        logger.error("Boot aborted: database connection failure (fail closed).")
+        logger.error("Boot aborted: %s", msg)
+        if raise_on_error:
+            raise BootError(msg)
         return False
 
     try:
@@ -77,7 +128,6 @@ def run_boot() -> bool:
         from alembic.config import Config
         from alembic.migration import MigrationContext
         from alembic.script import ScriptDirectory
-        from app.infrastructure.db_schema import install_ledger_triggers
 
         ini_candidates = [
             Path("alembic.ini"),
@@ -86,9 +136,12 @@ def run_boot() -> bool:
         ]
         ini_path = next((p for p in ini_candidates if p.exists()), None)
         if not ini_path:
-            sys.stderr.write("Boot aborted: alembic.ini configuration file not found\n")
+            msg = "alembic.ini configuration file not found"
+            sys.stderr.write(f"Boot aborted: {msg}\n")
             sys.stderr.flush()
-            logger.error("Boot aborted: alembic.ini configuration file not found")
+            logger.error("Boot aborted: %s", msg)
+            if raise_on_error:
+                raise BootError(msg)
             return False
 
         logger.info("Applying database migrations via Alembic (%s)...", ini_path)
@@ -109,13 +162,12 @@ def run_boot() -> bool:
             current_rev = m_context.get_current_revision()
 
         if current_rev != head_rev:
-            err_msg = (
-                f"Boot aborted: Alembic revision mismatch "
-                f"(current db: {current_rev}, head: {head_rev})\n"
-            )
-            sys.stderr.write(err_msg)
+            msg = f"Alembic revision mismatch (current db: {current_rev}, head: {head_rev})"
+            sys.stderr.write(f"Boot aborted: {msg}\n")
             sys.stderr.flush()
-            logger.error(err_msg.strip())
+            logger.error(msg)
+            if raise_on_error:
+                raise BootError(msg)
             return False
         logger.info("Verified database revision '%s' matches migration head.", current_rev)
 
@@ -134,37 +186,63 @@ def run_boot() -> bool:
         }
         missing_tables = required_tables - existing_tables
         if missing_tables:
-            err_msg = f"Boot aborted: missing required database tables: {missing_tables}\n"
-            sys.stderr.write(err_msg)
+            msg = f"missing required database tables: {missing_tables}"
+            sys.stderr.write(f"Boot aborted: {msg}\n")
             sys.stderr.flush()
-            logger.error(err_msg.strip())
+            logger.error(msg)
+            if raise_on_error:
+                raise BootError(msg)
             return False
 
         ledger_constraints = inspector.get_unique_constraints("ledger_events")
         u_names = {c.get("name") for c in ledger_constraints}
         u_cols = [set(c.get("column_names") or []) for c in ledger_constraints]
         if "uq_ledger_events_event_seq" not in u_names and {"event_seq"} not in u_cols:
-            err_msg = (
-                "Boot aborted: constraint 'uq_ledger_events_event_seq' missing on ledger_events\n"
-            )
-            sys.stderr.write(err_msg)
+            msg = "constraint 'uq_ledger_events_event_seq' missing on ledger_events"
+            sys.stderr.write(f"Boot aborted: {msg}\n")
             sys.stderr.flush()
-            logger.error(err_msg.strip())
+            logger.error(msg)
+            if raise_on_error:
+                raise BootError(msg)
             return False
         logger.info("Verified schema tables and unique constraints exist.")
+    except Exception as exc:
+        if raise_on_error and isinstance(exc, BootError):
+            raise
+        import traceback
+
+        tb = redact_message(traceback.format_exc())
+        redacted_exc = redact_message(str(exc))
+        sys.stderr.write(f"Boot migration/schema error: {redacted_exc}\n{tb}\n")
+        sys.stderr.flush()
+        logger.error("Boot aborted: migration or schema initialization failure: %s", redacted_exc)
+        if raise_on_error:
+            raise BootError(f"Migration error: {redacted_exc}") from exc
+        return False
+
+    # Step 3: Trigger install
+    print("[boot] step: trigger install", flush=True)
+    sys.stdout.flush()
+    try:
+        from app.infrastructure.db_schema import install_ledger_triggers
 
         install_ledger_triggers(engine)
         logger.info("Database schema and append-only triggers successfully verified/created.")
     except Exception as exc:
         import traceback
 
-        tb = traceback.format_exc()
-        sys.stderr.write(f"Boot migration/schema error: {exc}\n{tb}\n")
+        tb = redact_message(traceback.format_exc())
+        redacted_exc = redact_message(str(exc))
+        sys.stderr.write(f"Boot trigger install error: {redacted_exc}\n{tb}\n")
         sys.stderr.flush()
-        logger.error("Boot aborted: migration or schema initialization failure: %s", exc)
+        logger.error("Boot aborted: trigger installation failure: %s", redacted_exc)
+        if raise_on_error:
+            raise BootError(f"Trigger install error: {redacted_exc}") from exc
         return False
 
-    # Step 1.5: Seed demo mandate if missing with fixed temporal window (2026-11-01 to 2027-03-31)
+    # Step 4: Seeding
+    print("[boot] step: seeding", flush=True)
+    sys.stdout.flush()
     fixed_valid_from = datetime(2026, 11, 1, 0, 0, 0, tzinfo=UTC)
     fixed_valid_until = datetime(2027, 3, 31, 23, 59, 59, tzinfo=UTC)
     try:
@@ -236,13 +314,15 @@ def run_boot() -> bool:
     except Exception as exc:
         import traceback
 
-        tb = traceback.format_exc()
-        sys.stderr.write(f"Boot mandate seeding error: {exc}\n{tb}\n")
+        tb = redact_message(traceback.format_exc())
+        redacted_exc = redact_message(str(exc))
+        sys.stderr.write(f"Boot mandate seeding error: {redacted_exc}\n{tb}\n")
         sys.stderr.flush()
-        logger.error("Boot aborted: error during mandate seeding: %s", exc)
+        logger.error("Boot aborted: error during mandate seeding: %s", redacted_exc)
+        if raise_on_error:
+            raise BootError(f"Mandate seeding error: {redacted_exc}") from exc
         return False
 
-    # Step 2: Seed initial AgentBudget if missing
     now_utc = datetime.now(UTC)
     valid_until_mar_2027 = max(
         now_utc + timedelta(days=365),
@@ -275,7 +355,7 @@ def run_boot() -> bool:
             else:
                 logger.info("Demo budget for agent-auto-1 already exists (idempotent skip).")
 
-            # Step 3: Seed Genesis ledger block if missing
+            # Seed Genesis ledger block if missing
             existing_event = session.scalar(select(LedgerEventModel).limit(1))
             if not existing_event:
                 logger.info("Seeding Genesis ledger block...")
@@ -310,7 +390,7 @@ def run_boot() -> bool:
             else:
                 logger.info("Ledger already initialized (idempotent skip).")
 
-            # Step 4: Seed pending step-up request for Scene 2 demo if DEMO_SEED=true
+            # Seed pending step-up request for Scene 2 demo if DEMO_SEED=true
             demo_seed_enabled = os.getenv("DEMO_SEED", "").strip().lower() in ("true", "1")
             if demo_seed_enabled:
                 existing_stepup = session.scalar(
@@ -358,16 +438,37 @@ def run_boot() -> bool:
     except Exception as exc:
         import traceback
 
-        tb = traceback.format_exc()
-        sys.stderr.write(f"Boot seeding error: {exc}\n{tb}\n")
+        tb = redact_message(traceback.format_exc())
+        redacted_exc = redact_message(str(exc))
+        sys.stderr.write(f"Boot seeding error: {redacted_exc}\n{tb}\n")
         sys.stderr.flush()
-        logger.error("Boot aborted: error during data seeding: %s", exc)
+        logger.error("Boot aborted: error during data seeding: %s", redacted_exc)
+        if raise_on_error:
+            raise BootError(f"Data seeding error: {redacted_exc}") from exc
         return False
 
     logger.info("PHALANX boot sequence complete. Ready to serve traffic.")
+    sys.stdout.flush()
     return True
 
 
+def main() -> None:
+    """Main entrypoint for boot script with transparent error reporting."""
+    try:
+        run_boot(raise_on_error=True)
+        sys.stdout.flush()
+    except Exception as exc:
+        import traceback
+
+        exc_type = type(exc).__name__
+        redacted_msg = redact_message(str(exc))
+        raw_tb = traceback.format_exc()
+        redacted_tb = redact_message(raw_tb)
+        sys.stderr.write(f"[boot] ERROR: {exc_type}: {redacted_msg}\n")
+        sys.stderr.write(f"[boot] Traceback:\n{redacted_tb}\n")
+        sys.stderr.flush()
+        sys.exit(1)
+
+
 if __name__ == "__main__":
-    success = run_boot()
-    sys.exit(0 if success else 1)
+    main()

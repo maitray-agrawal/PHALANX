@@ -1,15 +1,13 @@
 # STATE (update after every task)
-Date: 11 Nov 2026 | Branch: dev | Last pushed commit on dev: 6c0e7ea | CI: PASSING (Run ID 43039692929)
-Working tree: clean on dev (main untouched)
-CI Green across all 8 jobs (Run 43039692929); Full local battery verified:
-- Backend: 665 passed, 0 skipped, 0 failed in pytest (test_boot_and_migration_hardening.py 8/8 pass)
-- Red team: 105 passed, 560 deselected in 6.03s
-- Frontend: Vitest passed (30/30 passed), ESLint clean, TypeScript clean, Vite build clean
-- Static: ruff check clean, ruff format clean (113 files), mypy app clean (42 files)
-Completed: Alembic startup failure diagnosed and resolved:
-1. alembic/env.py fileConfig modified with disable_existing_loggers=False so phalanx.boot logger is never silenced.
-2. scripts/boot.py hardened: all failure exit paths flush explicit error messages to sys.stderr, with full traceback formatting on unhandled exceptions.
-3. tests/integration/test_boot_and_migration_hardening.py added covering logger preservation, fresh DB migration & boot, repeated boot idempotency, revision mismatch fail-closed, missing table fail-closed, missing unique constraint fail-closed, trigger immutability, and stderr traceback emission.
+Date: 11 Nov 2026 | Branch: dev | Release Commit: b8a44b2 on main | CI: PASSING (Run ID 43051830870)
+Working tree: modified on dev (app/infrastructure/crypto.py, tests/unit/test_keys.py)
+CI Green across all 8 jobs (Run 43051830870 on dev)
+Full release verification battery verified locally: 12/12 unit key tests, 13/13 boot tests passed, 105 redteam passed, 30 vitest passed, ruff clean, mypy clean, bandit clean.
+Completed: Ed25519 signing key strict validation & identity preservation:
+1. Added validate_mandate_signing_key_hex() in app/infrastructure/crypto.py enforcing exactly 64 hex characters (32-byte seed) with no 0x prefix, quotes, whitespace, or newlines.
+2. Safe diagnostics emit 'MANDATE_SIGNING_KEY_HEX must contain exactly 64 hexadecimal characters.' without leaking any key material.
+3. Invalid configuration fails closed and never silently generates replacement keys.
+4. Added 8 regression tests covering valid hex, invalid chars, odd lengths, wrong lengths, missing prod config, secret masking in errors, key stability across reboots, and no silent replacement generation.
 
 ---
 

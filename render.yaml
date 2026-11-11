@@ -48,6 +48,8 @@ services:
       - key: PUBLIC_BASE_URL
         sync: false
       # ---- Non-secret configuration -----------------------------------------
+      - key: PYTHONUNBUFFERED
+        value: "1"
       - key: PORT
         value: "10000"
       - key: ENVIRONMENT
