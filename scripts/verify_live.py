@@ -206,7 +206,7 @@ def run_verification(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Verify PHALANX Live Deployment Endpoints")
     parser.add_argument(
-        "base_url", help="Base URL of deployed service (e.g. https://phalanx.onrender.com)"
+        "base_url", help="Base URL of deployed service (e.g. https://phalanx-nrxk.onrender.com)"
     )
     parser.add_argument(
         "--admin-token", default=None, help="X-Admin-Token secret for diagnostic endpoint"

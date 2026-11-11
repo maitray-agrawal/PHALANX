@@ -470,7 +470,7 @@ def test_orders_v2_return_and_cancel_urls_use_public_base_url() -> None:
 
     with (
         patch.object(adapter, "_get_access_token", return_value="mock_valid_token"),
-        patch.object(settings, "public_base_url", "https://phalanx-demo.onrender.com"),
+        patch.object(settings, "public_base_url", "https://phalanx-nrxk.onrender.com"),
         patch("httpx.post", side_effect=capture_post),
     ):
         adapter._orders_v2_fallback(intent, "mock_valid_token", "req_test_urls")
@@ -479,8 +479,8 @@ def test_orders_v2_return_and_cancel_urls_use_public_base_url() -> None:
         return_url = app_ctx.get("return_url", "")
         cancel_url = app_ctx.get("cancel_url", "")
 
-        assert "https://phalanx-demo.onrender.com" in return_url
-        assert "https://phalanx-demo.onrender.com" in cancel_url
+        assert "https://phalanx-nrxk.onrender.com" in return_url
+        assert "https://phalanx-nrxk.onrender.com" in cancel_url
         assert "localhost" not in return_url
         assert "localhost" not in cancel_url
         assert "127.0.0.1" not in return_url

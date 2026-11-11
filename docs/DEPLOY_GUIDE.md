@@ -88,7 +88,7 @@ Follow this checklist before the initial deployment on Render:
 
 Once Render reports the service live, run the verification suite:
 ```bash
-python scripts/verify_live.py https://phalanx.onrender.com --admin-token "$ADMIN_TOKEN"
+python scripts/verify_live.py https://phalanx-nrxk.onrender.com --admin-token "$ADMIN_TOKEN"
 ```
 The script will probe:
 - `/healthz` (liveness probe)

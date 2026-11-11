@@ -16,7 +16,7 @@ An autonomous agent receives a PDF supplier invoice for server hosting. Hidden i
 ## 30-Second Judge Quick Start
 
 ### Option A: Hosted Demo (No Login Required)
-- **Hosted Application:** `https://phalanx-demo.onrender.com` *(Render free tier; 50-70s cold start if asleep)*
+- **Hosted Application:** `https://phalanx-nrxk.onrender.com` *(Render free tier; 50-70s cold start if asleep)*
 - **Demo Mode:** Interactive role switcher in the top bar allows immediate evaluation across `AGENT`, `APPROVER`, `ADMIN`, and `AUDITOR` personas without sign-up.
 
 ### Option B: Local Execution

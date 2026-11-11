@@ -443,7 +443,7 @@ class PayPalPaymentRailAdapter(PaymentRail):
 
         base_url = (
             getattr(settings, "public_base_url", "").rstrip("/")
-            or "https://phalanx-demo.onrender.com"
+            or "https://phalanx-nrxk.onrender.com"
         )
         return_url = f"{base_url}/v1/paypal/return"
         cancel_url = f"{base_url}/v1/paypal/cancel"
